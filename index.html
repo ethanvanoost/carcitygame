@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Velocity City 4</title>
+<link rel="stylesheet" href="style.css?v=16">
+<style>
+/* critical touch-UI styles inlined so the buttons ALWAYS show,
+   even if a host (InfinityFree) serves an old cached style.css */
+#touchUI{display:none}
+#hud.tablet #touchUI{display:block}
+#quickBtns{position:absolute;right:12px;top:208px;display:grid;grid-template-columns:48px 48px;gap:8px;pointer-events:auto;z-index:25}
+.qbtn{width:48px;height:48px;border-radius:50%;border:2px solid #232b3d;background:rgba(13,17,26,.88);color:#e8edf7;font-weight:800;font-size:16px;touch-action:none;user-select:none;-webkit-user-select:none}
+.qbtn.honk{border-color:#3fd0ff;color:#3fd0ff}
+.qbtn.camQ{border-color:#9b5de5;color:#9b5de5}
+#miniWrap{position:absolute;left:12px;bottom:12px;width:150px;height:150px;border-radius:50%;border:2px solid #232b3d;overflow:hidden;pointer-events:none;background:#183020;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+#miniWrap canvas{width:100%;height:100%;display:block}
+#hud.tablet #miniWrap{left:14px;bottom:270px;width:110px;height:110px}
+#navDist{position:absolute;left:12px;bottom:170px;background:rgba(13,17,26,.88);border:1px solid #2e8bff;color:#7db8ff;border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700;pointer-events:none}
+#hud.tablet #navDist{left:14px;bottom:388px}
+.qbtn.eatR{border-color:#4ade80;color:#4ade80}
+.qbtn.callT{border-color:#ffb02e;color:#ffb02e}
+.qbtn.enterF{border-color:#3fd0ff;color:#3fd0ff;background:rgba(63,208,255,.14)}
+#pedals{position:absolute;right:16px;bottom:64px;display:flex;gap:14px;align-items:flex-end;pointer-events:auto;z-index:25}
+#wheelCv{position:absolute;left:20px;bottom:78px;width:180px;height:180px;pointer-events:auto;touch-action:none;opacity:.88}
+@media (max-width:900px), (max-height:500px){
+  #wheelCv{width:120px;height:120px;left:10px;bottom:56px}
+  #pedals{right:10px;bottom:12px;gap:8px}
+  #quickBtns{top:150px;right:10px;grid-template-columns:40px 40px;gap:6px}
+  .qbtn{width:40px;height:40px;font-size:13px}
+  #miniWrap{width:96px;height:96px}
+  #hud.tablet #miniWrap{left:10px;bottom:186px;width:88px;height:88px}
+  #navDist{bottom:114px;font-size:11px}
+  #hud.tablet #navDist{left:10px;bottom:282px}
+}
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+
+<div id="menu">
+  <header>
+    <h1>VELOCITY <b>CITY</b> 4</h1>
+    <span class="tag">infinite living world &middot; day &amp; night &middot; buses, trains &amp; planes everywhere</span>
+    <span class="spacer"></span>
+    <button class="btn warn" id="mUpdate">&#128220; Update</button>
+    <button class="btn" id="mSettings">&#9881; Settings</button>
+  </header>
+  <div id="worldBar">
+    <span style="color:var(--dim);font-size:13px">&#127757; Create your own world:</span>
+    <input id="worldName" maxlength="20" placeholder="world name">
+    <button class="btn warn" id="worldCreate">&#127757; Create world</button>
+    <span id="worldLabel" style="color:var(--acc2);font-size:13px"></span>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-f="all">All 100</button>
+    <button class="tab" data-f="car">Cars</button>
+    <button class="tab" data-f="moto">Motorcycles</button>
+    <button class="tab" data-f="bike">Bikes</button>
+  </div>
+  <div id="grid"></div>
+</div>
+
+<div id="hud">
+  <div id="clockBox">
+    <div id="clockTime">08:00</div>
+    <div id="clockDay">Day 1 &middot; 5 min / real second</div>
+    <div id="odoKm">total 0.00 km</div>
+    <div id="moneyTxt">$0</div>
+    <div id="worldTxt"></div>
+    <div id="hungerRow">
+      <div id="hungerBar"><i id="hungerFill"></i></div>
+      <span id="hungerTxt">&#127828; full</span>
+    </div>
+  </div>
+  <div id="topbar">
+    <button class="btn" id="bMenu">&#9776; Garage</button>
+    <button class="btn" id="bSpawn">&#8962; Spawn</button>
+    <button class="btn" id="bMap">&#128506; Map</button>
+    <button class="btn" id="bSettings">&#9881;</button>
+    <button class="btn" id="bControls">&#127918; Controls</button>
+    <button class="btn on" id="bTraffic">&#128678; Traffic: ON</button>
+    <button class="btn" id="bTablet">&#128241; Tablet</button>
+    <button class="btn" id="bPack">&#127890; Food</button>
+    <button class="btn" id="bDump">&#129375; Dumplings</button>
+    <button class="btn" id="bMoney">&#128176; Money</button>
+    <button class="btn" id="bRooms">&#128719; Rooms</button>
+    <button class="btn warn" id="bAdmin">&#128736; Admin</button>
+  </div>
+  <div id="speedo">
+    <div id="spdVal">0</div>
+    <div id="spdUnit">KM/H</div>
+    <div id="spdAlt">alt 0 m</div>
+    <div id="spdLim">limit 0</div>
+    <div id="vehName"></div>
+    <div id="accRow">
+      <span style="font-size:11px;color:var(--dim)">Cruise</span>
+      <input id="accInput" type="number" min="0" max="2000" placeholder="km/h">
+      <button class="btn" id="accBtn">OFF</button>
+    </div>
+  </div>
+  <div id="adminPanel">
+    <h3>ADMIN &middot; MAX SPEED</h3>
+    <div class="seg mini" id="admTgt">
+      <button data-t="car" class="on">Car</button>
+      <button data-t="train">Train</button>
+      <button data-t="plane">Plane</button>
+      <button data-t="bus">Bus</button>
+      <button data-t="rocket">&#128640;</button>
+    </div>
+    <div id="limVal">0</div>
+    <div class="grid">
+      <button id="aMM">--</button><button id="aM">-</button><button id="aP">+</button><button id="aPP">++</button>
+    </div>
+    <div id="trafRow">Traffic cars <button id="tMinus">-</button><b id="tCount">24</b><button id="tPlus">+</button></div>
+    <button class="btn on" id="bArrest" style="margin-top:10px;width:100%">&#128110; Arrests: ON</button>
+    <button class="btn on" id="bHunger" style="margin-top:8px;width:100%">&#127828; Hunger: ON</button>
+    <div id="adminNote">Admin ON also lets you drive the train, plane and bus yourself (W/S, Space = brake/climb).</div>
+  </div>
+  <div id="hint">
+    <span id="hintTxt"></span>
+    <button class="keybtn" id="kT" style="display:none">T</button>
+    <button class="keybtn blue" id="kF" style="display:none">F</button>
+  </div>
+  <div id="camLabel">Camera: Chase &nbsp;<kbd>Q</kbd>/<kbd>E</kbd></div>
+  <div id="toast"></div>
+  <div id="miniWrap"><canvas id="miniCv" width="150" height="150"></canvas></div>
+  <div id="navDist" style="display:none"></div>
+  <div id="touchUI">
+    <canvas id="wheelCv" width="220" height="220"></canvas>
+    <div id="quickBtns">
+      <button class="qbtn camQ" id="pedCamQ">&#128247;</button>
+      <button class="qbtn honk" id="pedHonk">&#128226;</button>
+      <button class="qbtn eatR" id="pedEatR">R</button>
+      <button class="qbtn callT" id="pedCallT">T</button>
+      <button class="qbtn enterF" id="pedEnterF">F</button>
+    </div>
+    <div id="pedals">
+      <button class="pedal shift" id="pedShift">SHIFT<br>&#11015;</button>
+      <button class="pedal hand" id="pedHand">HAND<br>BRAKE</button>
+      <button class="pedal brake" id="pedBrake">BRAKE</button>
+      <button class="pedal gas" id="pedGas">GAS</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mapModal">
+  <div class="box" style="max-width:none;width:min(94vw,940px)">
+    <h2>World map &mdash; drag to pan, scroll to zoom, click to teleport</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="mapQuick"></div>
+    <canvas id="mapCv" style="width:100%;height:56vh;border:1px solid var(--line);border-radius:10px;cursor:crosshair;background:#183020"></canvas>
+    <button class="btn close" id="mapClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="mcdModal">
+  <div class="box" style="max-width:640px">
+    <h2>&#127828; McDrive &mdash; what would you like?</h2>
+    <div id="mcdList"></div>
+    <div id="mcdOrder">Your order: nothing yet</div>
+    <button class="btn close" id="mcdDone">&#9989; Done ordering</button>
+  </div>
+</div>
+
+<div class="modal" id="packModal">
+  <div class="box">
+    <h2>&#127890; Food backpack</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click food to select it, then press <kbd>R</kbd> to eat.</div>
+    <div id="packList"></div>
+    <button class="btn close" id="packClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="shopModal">
+  <div class="box" style="max-width:640px">
+    <h2 id="shopTitle">&#128722; Shop</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click items to buy them — they go into your &#127890; food backpack.</div>
+    <div id="shopList"></div>
+    <button class="btn close" id="shopClose">Done shopping</button>
+  </div>
+</div>
+
+<div class="modal" id="dumpModal">
+  <div class="box">
+    <h2>&#129375; Squishy Dumplings</h2>
+    <div id="dumpInfo"></div>
+    <button class="btn warn" id="dumpOpen" style="margin-top:10px;width:100%">&#129375; Open a dumpling!</button>
+    <div style="font-size:12px;color:var(--dim);margin-top:8px">Click a dumpling to hold it in your hands (click again to put it away).</div>
+    <div id="dumpList"></div>
+    <button class="btn" id="dumpDisplay" style="margin-top:10px;width:100%">&#127984; Display your dumplings at your mansion</button>
+    <button class="btn close" id="dumpClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="moneyModal">
+  <div class="box">
+    <h2>&#128176; Your money</h2>
+    <div id="mmVal" style="font-size:36px;font-weight:800">$0</div>
+    <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m — pink dots on the map).<br><br>Don't worry: EVERYTHING in the game is still 100% FREE. Money is just for bragging!<br>Psst... reach $1,000 for a surprise...</div>
+    <button class="btn close" id="moneyClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="sellModal">
+  <div class="box" style="max-width:640px">
+    <h2>&#129375; Dumpling buyer &mdash; sell your dumplings</h2>
+    <div class="seg mini" style="flex-wrap:wrap">
+      <button id="selAll">All</button>
+      <button id="selGlit">&#10024; Glitter only</button>
+      <button id="selNorm">Normal only</button>
+      <button id="selNone">None</button>
+    </div>
+    <div id="sellColors"></div>
+    <div id="sellList"></div>
+    <button class="btn warn" id="sellDo" style="margin-top:10px;width:100%">&#128181; Sell selected &mdash; $0</button>
+    <button class="btn close" id="sellClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="updModal">
+  <div class="box" style="max-width:680px;width:min(94vw,680px)">
+    <h2 id="updTitle">&#128220; Update</h2>
+    <div id="updContent"></div>
+    <div id="updPager">
+      <button class="btn" id="updPrev">&#9664; Back</button>
+      <span id="updPage">Page 1 / 6</span>
+      <button class="btn" id="updNext">Next &#9654;</button>
+    </div>
+    <button class="btn close" id="updClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="roomsModal">
+  <div class="box">
+    <h2>&#128719; Your rented rooms</h2>
+    <div id="roomsList"></div>
+    <button class="btn close" id="roomsClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="destModal">
+  <div class="box">
+    <h2 id="destTitle">Choose destination</h2>
+    <div id="destList"></div>
+  </div>
+</div>
+
+<div class="modal" id="settings">
+  <div class="box">
+    <h2>Settings</h2>
+    <div style="font-size:14px;color:var(--dim)">Speed units</div>
+    <div class="seg">
+      <button id="uKmh" class="on">km/h</button>
+      <button id="uMph">mph</button>
+    </div>
+    <div style="font-size:14px;color:var(--dim);margin-top:14px">Audio</div>
+    <div class="seg">
+      <button id="sndTgl" class="on">&#128266; Sound ON</button>
+      <button id="musTgl" class="on">&#127925; Music ON</button>
+    </div>
+    <button class="btn close" id="setClose">Done</button>
+  </div>
+</div>
+
+<div class="modal" id="controls">
+  <div class="box">
+    <h2>Controls</h2>
+    <div class="row"><span>Drive / walk / taxi</span><span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></span></div>
+    <div class="row"><span>Handbrake / Jump / Train brake</span><span><kbd>Space</kbd></span></div>
+    <div class="row"><span>Sprint / Plane descend</span><span><kbd>Shift</kbd></span></div>
+    <div class="row"><span>Plane climb</span><span><kbd>Space</kbd></span></div>
+    <div class="row"><span>Enter / leave anything</span><span><kbd>F</kbd></span></div>
+    <div class="row"><span>Call train / plane / bus at stops</span><span><kbd>T</kbd></span></div>
+    <div class="row"><span>Call a rocket at a &#128640; rocket station (every ~5 km) &mdash; it flies you to the Moon and back!</span><span><kbd>T</kbd> then <kbd>F</kbd></span></div>
+    <div class="row"><span>Honk</span><span><kbd>H</kbd> &middot; &#128226; pedal &middot; d-pad up</span></div>
+    <div class="row"><span>Cruise control on/off</span><span><kbd>V</kbd></span></div>
+    <div class="row"><span>Eat selected food from your backpack</span><span><kbd>R</kbd></span></div>
+    <div class="row"><span>Camera / free look</span><span><kbd>Q</kbd>/<kbd>E</kbd>, hold <kbd>RMB</kbd></span></div>
+    <div class="row"><span>Map / Controls</span><span><kbd>M</kbd> / <kbd>C</kbd></span></div>
+    <div class="row"><span>Tablet mode (touch steering wheel + pedals)</span><span>&#128241; Tablet button</span></div>
+    <div class="row"><span>Controllers: Xbox / PlayStation / Nintendo / wheels</span><span>Stick or wheel = steer &middot; RT/LT or pedals = gas &amp; brake &middot; A = handbrake &middot; X = enter &middot; Y = call &middot; B = camera &middot; Start = map</span></div>
+    <div class="row"><span style="color:var(--dim)">Traffic drives on the right. Shop doors open as you walk up.</span><span></span></div>
+    <button class="btn close" id="ctrClose">Got it</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/core.js?v=16"></script>
+<script src="js/world.js?v=16"></script>
+<script src="js/vehicles.js?v=16"></script>
+<script src="js/game.js?v=16"></script>
+</body>
+</html>
