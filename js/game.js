@@ -1032,9 +1032,22 @@ function chatSys(msg){
   d.className="cmsg sys";d.textContent=msg;el.appendChild(d);
   el.scrollTop=el.scrollHeight;
 }
-function chatAdd(d){
+const CHAT_TTL=5*60*1000; // messages disappear after 5 minutes
+function chatExpire(key){
+  try{firebase.database().ref("chat/"+key).remove();}catch(e){}
+  chatRemove(key);
+}
+function chatRemove(key){
+  const row=document.querySelector('#chatMsgs [data-key="'+key+'"]');
+  if(row)row.remove();
+}
+function chatAdd(d,key){
   if(!d||typeof d.m!=="string"||typeof d.n!=="string")return;
+  const age=Date.now()-(d.t||0);
+  if(age>=CHAT_TTL){chatExpire(key);return;} // already too old — clean it up
+  setTimeout(()=>chatExpire(key),CHAT_TTL-age);
   const el=$("chatMsgs"),row=document.createElement("div");
+  row.dataset.key=key;
   row.className="cmsg"+(d.n===mpName()?" me":"");
   const who=document.createElement("b");who.textContent=d.n.slice(0,16)+": ";
   const txt=document.createElement("span");txt.textContent=d.m.slice(0,200);
@@ -1051,7 +1064,9 @@ function chatStart(){
   if(CHAT.on)return;
   if(!mpInit()){chatSys("\u{1F534} Chat is offline — couldn't reach the database.");return;}
   try{
-    firebase.database().ref("chat").limitToLast(50).on("child_added",s=>chatAdd(s.val()));
+    const ref=firebase.database().ref("chat");
+    ref.limitToLast(50).on("child_added",s=>chatAdd(s.val(),s.key));
+    ref.on("child_removed",s=>chatRemove(s.key)); // vanish for everyone as soon as one client deletes it
     CHAT.on=true;
     chatSys("Welcome to the public chat — be nice! \u{1F49B}");
   }catch(e){chatSys("\u{1F534} Chat is offline right now.");}

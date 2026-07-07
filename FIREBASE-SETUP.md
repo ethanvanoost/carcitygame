@@ -62,7 +62,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
        "chat": {
          ".read": true,
          "$id": {
-           ".write": "!data.exists()",
+           ".write": "!data.exists() || (!newData.exists() && data.child('t').val() < now - 300000)",
            ".validate": "newData.hasChildren(['n','m','t'])",
            "n": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
            "m": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
@@ -80,8 +80,10 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    broadcasts their position there a few times per second. The `usernames` part makes
    usernames **unique**: the first player to claim a name owns it (each device saves a
    secret token, so nobody can take a name that's already claimed). The `chat` part is
-   the **public chat**: anyone can post (max 200 characters), nobody can edit or delete
-   other people's messages.
+   the **public chat**: anyone can post (max 200 characters), nobody can edit
+   other people's messages, and messages **auto-delete after 5 minutes** (the game
+   cleans up any message older than that; the rules only allow deleting old messages,
+   never fresh ones).
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming
