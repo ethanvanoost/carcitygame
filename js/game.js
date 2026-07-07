@@ -1148,7 +1148,7 @@ function mpApply(k,d){
     const lbl=mpMakeLabel(nm);
     lbl.position.y=kind==="foot"?2.7:3.1;g.add(lbl);
     scene.add(g);
-    o={g,kind,color:col,name:nm,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
+    o={g,kind,color:col,name:nm,k,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
     MP.others.set(k,o);
   }
   o.tx=d.x;o.tz=d.z;o.ty=typeof d.y==="number"?d.y:0;o.tyaw=typeof d.r==="number"?d.r:0;
@@ -2278,7 +2278,17 @@ function drawMap(){
   dot(player.x,player.z,"#ffb02e",7);
 }
 function choosePlayer(o){
-  chooseDest("\u{1F464} "+o.name,o.tx!==undefined?o.tx:o.x,o.tz!==undefined?o.tz:o.z,true);
+  showDest("\u{1F464} "+o.name,[
+    {label:"⚡ Teleport (instant)",value:"tp"},
+    {label:"\u{1F9ED} Follow route — keeps updating while they move",value:"route"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    switchWorld("earth");
+    if(v==="tp")teleportTo(o.tx!==undefined?o.tx:o.x,o.tz!==undefined?o.tz:o.z);
+    else followPlayer(o);
+    $("mapModal").classList.remove("open");
+  });
 }
 function toggleMap(){
   const m=$("mapModal");
@@ -2402,29 +2412,51 @@ function chooseDest(label,x,z,toEarth){
   });
 }
 /* ---------- navigation: a route along the grid roads ---------- */
-const NAV={on:false,x:0,z:0,path:[]};
-function setRoute(x,z){
+const NAV={on:false,x:0,z:0,path:[],follow:null,followName:""};
+function navPathTo(x,z){
   const snap=v=>Math.round((v-30)/120)*120+30;
   NAV.path=[{x:player.x,z:snap(player.z)},{x:snap(x),z:snap(player.z)},{x:snap(x),z},{x,z}];
-  NAV.x=x;NAV.z=z;NAV.on=true;
+  NAV.x=x;NAV.z=z;
+}
+function setRoute(x,z){
+  NAV.follow=null;
+  navPathTo(x,z);
+  NAV.on=true;
   toast("\u{1F9ED} Route set — follow the blue line on the minimap (bottom left)!");
+}
+function followPlayer(o){
+  navPathTo(o.x,o.z);
+  NAV.follow=o.k;NAV.followName=o.name;NAV.on=true;
+  toast("\u{1F9ED} Following "+o.name+" — the route updates as they move!");
+}
+function navStop(silent){
+  NAV.on=false;NAV.follow=null;NAV.path=[];
+  $("navDist").style.display="none";
+  if(!silent)toast("\u{1F9ED} Navigation stopped.");
 }
 function updateNav(){
   const el=$("navDist");
   if(!NAV.on){el.style.display="none";return;}
+  /* following a player: retarget the route whenever they move */
+  if(NAV.follow){
+    const o=MP.others.get(NAV.follow);
+    if(!o){toast("\u{1F464} "+NAV.followName+" left the world — navigation stopped.");navStop(true);return;}
+    if(Math.hypot(o.x-NAV.x,o.z-NAV.z)>20)navPathTo(o.x,o.z);
+  }
   while(NAV.path.length>1&&Math.hypot(player.x-NAV.path[0].x,player.z-NAV.path[0].z)<30)NAV.path.shift();
   if(Math.hypot(player.x-NAV.x,player.z-NAV.z)<30){
-    NAV.on=false;el.style.display="none";
-    toast("\u{1F3C1} You arrived at your destination!");
+    toast(NAV.follow?"\u{1F3C1} You reached "+NAV.followName+"!":"\u{1F3C1} You arrived at your destination!");
+    navStop(true);
     return;
   }
   /* how far is it, following the blue route line */
   let dist=Math.hypot(NAV.path[0].x-player.x,NAV.path[0].z-player.z);
   for(let i=0;i<NAV.path.length-1;i++)
     dist+=Math.hypot(NAV.path[i+1].x-NAV.path[i].x,NAV.path[i+1].z-NAV.path[i].z);
-  el.style.display="block";
-  el.textContent="\u{1F9ED} "+(dist<1000?Math.round(dist)+" m":(dist/1000).toFixed(1)+" km")+" to go";
+  el.style.display="flex";
+  $("navTxt").textContent=(NAV.follow?"\u{1F464} "+NAV.followName+" · ":"\u{1F9ED} ")+(dist<1000?Math.round(dist)+" m":(dist/1000).toFixed(1)+" km")+" to go";
 }
+$("navStopBtn").onclick=()=>navStop();
 /* ---------- minimap: a small round map bottom-left with a heading arrow ---------- */
 const miniCv=$("miniCv"),miniBg=document.createElement("canvas");
 miniBg.width=miniBg.height=212;   // bigger than the circle so rotating never shows empty corners
