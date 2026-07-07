@@ -47,6 +47,17 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "$other": { ".validate": false }
            }
          }
+       },
+       "usernames": {
+         "$name": {
+           ".read": true,
+           ".write": "!data.exists()",
+           ".validate": "newData.hasChildren(['t','name'])",
+           "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+           "name": { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 16" },
+           "created": { ".validate": "newData.isString() && newData.val().length <= 10" },
+           "$other": { ".validate": false }
+         }
        }
      }
    }
@@ -55,10 +66,13 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    These rules mean: anyone can read the server list and add a server, but **nobody can
    edit or delete existing servers**, and names are capped at 20 characters. The `players`
    part is what lets players **see each other driving around**: everyone in a world
-   broadcasts their position there a few times per second.
+   broadcasts their position there a few times per second. The `usernames` part makes
+   usernames **unique**: the first player to claim a name owns it (each device saves a
+   secret token, so nobody can take a name that's already claimed).
 
-   > Already pasted the rules before they had the `players` part? Paste this new version
-   > over the old ones and hit **Publish** again — otherwise other players stay invisible.
+   > Already pasted an older version of the rules? Paste this new version over the old
+   > ones and hit **Publish** again — otherwise multiplayer and username claiming
+   > won't work.
 
 5. Go to the **Data** tab and copy the database URL shown at the top. It looks like:
    `https://vc4-servers-default-rtdb.europe-west1.firebasedatabase.app`

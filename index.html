@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Velocity City 4</title>
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -259,6 +259,17 @@
   </div>
 </div>
 
+<div class="modal" id="nameModal">
+  <div class="box">
+    <h2>&#128100; Choose your username</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:10px">This is the name other players see in the game. Every username is unique &mdash; first come, first served!</div>
+    <input id="nameInput" maxlength="16" placeholder="3-16 letters or numbers" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 12px;font-size:15px">
+    <div id="nameStatus" style="font-size:13px;min-height:20px;margin-top:8px;color:var(--acc2)"></div>
+    <button class="btn warn" id="nameClaim" style="width:100%;margin-top:6px">&#9989; Claim username</button>
+    <button class="btn" id="nameSkip" style="width:100%;margin-top:8px">Skip for now (you'll be a random Racer)</button>
+  </div>
+</div>
+
 <div class="modal" id="settings">
   <div class="box">
     <h2>Settings</h2>
@@ -303,9 +314,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=18"></script>
-<script src="js/world.js?v=18"></script>
-<script src="js/vehicles.js?v=18"></script>
-<script src="js/game.js?v=18"></script>
+<script src="js/core.js?v=19"></script>
+<script src="js/world.js?v=19"></script>
+<script src="js/vehicles.js?v=19"></script>
+<script src="js/game.js?v=19"></script>
 </body>
 </html>

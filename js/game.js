@@ -965,11 +965,61 @@ $("serverNew").addEventListener("keydown",e=>{if(e.key==="Enter")createServer();
    every player writes their position ~5x/second to players/<world>/<id> and
    listens to everyone else's; other players appear as cars/people with name tags. */
 const MP={sdk:false,on:false,id:"p"+Math.random().toString(36).slice(2,10),ref:null,myRef:null,
-  others:new Map(),sendT:0,worldKey:null,lastSig:"",lastSendAt:0};
+  others:new Map(),sendT:0,worldKey:null,lastSig:"",lastSendAt:0,
+  fallback:"Racer"+Math.floor(100+Math.random()*900)};
 function mpName(){
-  let n=cleanServerName(localStorage.getItem("vc4pname")||"").slice(0,16);
-  if(!n){n="Racer"+Math.floor(100+Math.random()*900);localStorage.setItem("vc4pname",n);}
-  return n;
+  const n=cleanServerName(localStorage.getItem("vc4pname")||"").slice(0,16);
+  return n||MP.fallback;
+}
+/* ---------- unique usernames: claimed online, first come first served ---------- */
+function myToken(){
+  let t=localStorage.getItem("vc4ptoken");
+  if(!t){t="t"+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("vc4ptoken",t);}
+  return t;
+}
+async function claimName(raw){
+  const n=cleanServerName(raw||"").slice(0,16);
+  if(n.length<3)return{ok:false,msg:"Use at least 3 letters or numbers."};
+  if(!SERVER_READY)return{ok:true,offline:true,name:n};
+  const key=n.toLowerCase().replace(/[^a-z0-9]/g,"_");
+  const url=SERVER_API+"/usernames/"+key+".json";
+  try{
+    const r=await fetch(url,{cache:"no-store"});
+    if(!r.ok)throw 0;
+    const d=await r.json();
+    if(d&&d.t===myToken())return{ok:true,name:n};          /* already mine */
+    if(d)return{ok:false,msg:"\""+n+"\" is already taken — try another!"};
+    const w=await fetch(url,{method:"PUT",
+      body:JSON.stringify({t:myToken(),name:n,created:new Date().toISOString().slice(0,10)})});
+    if(!w.ok)return{ok:false,msg:"\""+n+"\" is already taken — try another!"}; /* lost the race */
+    return{ok:true,name:n};
+  }catch(e){return{ok:true,offline:true,name:n};}          /* offline: allow for now */
+}
+async function doClaim(){
+  const btn=$("nameClaim");
+  btn.disabled=true;
+  $("nameStatus").textContent="⏳ Checking if that name is free...";
+  const res=await claimName($("nameInput").value);
+  btn.disabled=false;
+  if(!res.ok){$("nameStatus").textContent="❌ "+res.msg;return;}
+  localStorage.setItem("vc4pname",res.name);
+  $("pName").value=res.name;
+  $("nameModal").classList.remove("open");
+  toast(res.offline
+    ?"\u{1F464} You are \""+res.name+"\" (offline — not reserved online yet)"
+    :"\u{1F464} Username \""+res.name+"\" is yours!");
+}
+$("nameClaim").onclick=doClaim;
+$("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim();});
+$("nameInput").addEventListener("input",()=>{$("nameStatus").textContent="";});
+$("nameSkip").onclick=()=>{
+  $("nameModal").classList.remove("open");
+  toast("\u{1F464} You are \""+mpName()+"\" for now — pick a real name in ⚙ Settings!");
+};
+/* first visit: pick a username before playing */
+if(!localStorage.getItem("vc4pname")){
+  $("nameModal").classList.add("open");
+  setTimeout(()=>{try{$("nameInput").focus();}catch(e){}},100);
 }
 function mpInit(){
   if(MP.sdk)return true;
@@ -1064,14 +1114,17 @@ function mpTick(dt){
   MP.lastSig=sig;MP.lastSendAt=now;
   try{MP.myRef.set(d);}catch(e){}
 }
-/* player-name field in settings */
+/* player-name field in settings: goes through the same taken-check */
 $("pName").value=mpName();
-$("pName").addEventListener("change",()=>{
-  const n=cleanServerName($("pName").value).slice(0,16);
-  if(!n){$("pName").value=mpName();return;}
-  localStorage.setItem("vc4pname",n);
-  $("pName").value=n;
-  toast("\u{1F464} You are now \""+n+"\"");
+$("pName").addEventListener("change",async()=>{
+  const res=await claimName($("pName").value);
+  if(!res.ok){toast("❌ "+res.msg);$("pName").value=mpName();return;}
+  if(res.name===mpName()){$("pName").value=res.name;return;}
+  localStorage.setItem("vc4pname",res.name);
+  $("pName").value=res.name;
+  toast(res.offline
+    ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"
+    :"\u{1F464} Username \""+res.name+"\" is yours!");
 });
 let _saveT=0;
 function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();}}
