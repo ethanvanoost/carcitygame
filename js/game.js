@@ -1173,6 +1173,10 @@ function mpTick(dt){
   MP.sendT+=dt;
   if(MP.sendT<0.2)return;
   MP.sendT=0;
+  /* keep the player dots moving while the big map is open (~1 repaint/s) */
+  if(MP.others.size&&$("mapModal").classList.contains("open")&&now-(MP.mapT||0)>1000){
+    MP.mapT=now;requestMap();
+  }
   if(S.mode!=="game"||S.world!=="earth"||player.inRocket)return;
   const src=player.drive||player;
   const d={n:mpName(),
@@ -2259,7 +2263,22 @@ function drawMap(){
     c.stroke();
     dot(NAV.x,NAV.z,"#2e8bff",6);
   }
+  /* other players: cyan dots with their names — click one to teleport / route to them */
+  if(S.world==="earth"){
+    for(const o of MP.others.values()){
+      dot(o.x,o.z,"#3fd0ff",6);
+      const px=(o.x-mapView.cx)*sc+cv.width/2,py=-(o.z-mapView.cz)*sc+cv.height/2;
+      if(px>-20&&px<cv.width+20&&py>-20&&py<cv.height+20){
+        c.font="bold 12px 'Segoe UI',sans-serif";c.textAlign="center";
+        c.strokeStyle="rgba(13,17,26,.8)";c.lineWidth=3;c.strokeText(o.name,px,py-10);
+        c.fillStyle="#fff";c.fillText(o.name,px,py-10);
+      }
+    }
+  }
   dot(player.x,player.z,"#ffb02e",7);
+}
+function choosePlayer(o){
+  chooseDest("\u{1F464} "+o.name,o.tx!==undefined?o.tx:o.x,o.tz!==undefined?o.tz:o.z,true);
 }
 function toggleMap(){
   const m=$("mapModal");
@@ -2287,6 +2306,13 @@ $("mapClose").onclick=()=>$("mapModal").classList.remove("open");
     const r=cv.getBoundingClientRect();
     const wx=(e.clientX-r.left-cv.width/2)/mapView.scale+mapView.cx;
     const wz=-((e.clientY-r.top-cv.height/2)/mapView.scale)+mapView.cz;
+    /* clicked on (or near) another player's dot? pick them instead of the ground */
+    let hit=null;
+    if(S.world==="earth")for(const o of MP.others.values()){
+      const d=Math.hypot(o.x-wx,o.z-wz)*mapView.scale;
+      if(d<14&&(!hit||d<hit.d))hit={o,d};
+    }
+    if(hit){choosePlayer(hit.o);return;}
     chooseDest("\u{1F4CD} Map point ("+Math.round(wx)+", "+Math.round(wz)+")",wx,wz,false);
   });
   cv.addEventListener("wheel",e=>{
@@ -2300,6 +2326,20 @@ $("mapClose").onclick=()=>$("mapModal").classList.remove("open");
     b.onclick=()=>chooseDest(q[0],q[1]+(q[3]?WORLD.ox:0),q[2]+(q[3]?WORLD.oz:0),true);
     $("mapQuick").appendChild(b);
   });
+  /* pick an online player: teleport to them or set a route */
+  const pb=document.createElement("button");pb.className="btn";pb.innerHTML="\u{1F465} Players";
+  pb.onclick=()=>{
+    const list=[...MP.others.values()];
+    if(!list.length){toast("\u{1F465} No other players online in this world right now.");return;}
+    showDest("\u{1F465} Pick a player",[
+      ...list.map(o=>{
+        const d=Math.hypot(o.x-player.x,o.z-player.z);
+        return {label:"\u{1F464} "+o.name+" — "+(d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km")+" away",value:o};
+      }),
+      {label:"❌ Cancel",value:null}
+    ],o=>{if(o)choosePlayer(o);});
+  };
+  $("mapQuick").appendChild(pb);
   /* nearest McDrive finder */
   const mcb=document.createElement("button");mcb.className="btn";mcb.innerHTML="\u{1F354} Nearest McDrive";
   mcb.onclick=()=>{
