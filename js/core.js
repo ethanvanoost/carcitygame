@@ -31,7 +31,11 @@ function lightPhase(){return Math.floor(CLOCK.min/40)%2;}
 
 /* ================= MENU / BASIC UI ================= */
 function renderMenu(){
-  const g=$("grid");g.innerHTML="";
+  const g=$("grid"),srv=S.filter==="servers";
+  $("serverPanel").classList.toggle("show",srv);
+  g.style.display=srv?"none":"grid";
+  if(srv){if(window.renderServers)renderServers();return;}
+  g.innerHTML="";
   VEHICLES.filter(v=>S.filter==="all"||v.type===S.filter).forEach(v=>{
     const b=document.createElement("button");
     b.className="card"+(v.top===500?" fastest":"");

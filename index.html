@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Velocity City 4</title>
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -53,14 +53,26 @@
     <input id="worldName" maxlength="20" placeholder="world name">
     <button class="btn warn" id="worldCreate">&#127757; Create world</button>
     <span id="worldLabel" style="color:var(--acc2);font-size:13px"></span>
+    <div id="worldList"></div>
   </div>
   <div class="tabs" id="tabs">
     <button class="tab on" data-f="all">All 100</button>
     <button class="tab" data-f="car">Cars</button>
     <button class="tab" data-f="moto">Motorcycles</button>
     <button class="tab" data-f="bike">Bikes</button>
+    <button class="tab" data-f="servers">&#127760; Servers</button>
   </div>
   <div id="grid"></div>
+  <div id="serverPanel">
+    <div id="serverBar">
+      <input id="serverSearch" maxlength="20" placeholder="&#128269; Search servers...">
+      <input id="serverNew" maxlength="20" placeholder="new server name">
+      <button class="btn warn" id="serverCreate">&#10133; Create server</button>
+      <button class="btn" id="serverRefresh">&#128260; Refresh</button>
+    </div>
+    <div id="serverStatus">&#9203; Loading servers...</div>
+    <div id="serverList"></div>
+  </div>
 </div>
 
 <div id="hud">
@@ -176,7 +188,7 @@
 <div class="modal" id="shopModal">
   <div class="box" style="max-width:640px">
     <h2 id="shopTitle">&#128722; Shop</h2>
-    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click items to buy them — they go into your &#127890; food backpack.</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click items to buy them â€” they go into your &#127890; food backpack.</div>
     <div id="shopList"></div>
     <button class="btn close" id="shopClose">Done shopping</button>
   </div>
@@ -198,7 +210,7 @@
   <div class="box">
     <h2>&#128176; Your money</h2>
     <div id="mmVal" style="font-size:36px;font-weight:800">$0</div>
-    <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m — pink dots on the map).<br><br>Don't worry: EVERYTHING in the game is still 100% FREE. Money is just for bragging!<br>Psst... reach $1,000 for a surprise...</div>
+    <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m â€” pink dots on the map).<br><br>Don't worry: EVERYTHING in the game is still 100% FREE. Money is just for bragging!<br>Psst... reach $1,000 for a surprise...</div>
     <button class="btn close" id="moneyClose">Close</button>
   </div>
 </div>
@@ -287,9 +299,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/core.js?v=16"></script>
-<script src="js/world.js?v=16"></script>
-<script src="js/vehicles.js?v=16"></script>
-<script src="js/game.js?v=16"></script>
+<script src="js/core.js?v=17"></script>
+<script src="js/world.js?v=17"></script>
+<script src="js/vehicles.js?v=17"></script>
+<script src="js/game.js?v=17"></script>
 </body>
 </html>

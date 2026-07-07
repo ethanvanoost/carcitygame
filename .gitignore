@@ -1,0 +1,3 @@
+# corrupted leftover folders (filesystem issue) - remove once chkdsk cleans them up
+cloudflare-worker/
+.claude/

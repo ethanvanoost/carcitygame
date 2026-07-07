@@ -816,21 +816,150 @@ function tryFurniture(){
 }
 /* ---------- your own world + saving (progress survives refresh) ---------- */
 const WORLD={name:"",ox:0,oz:0};
+function worldOffset(n){
+  let h=0;for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))>>>0;
+  /* every name lands in its own far-away region of the infinite world */
+  return{ox:(h%89)*12000,oz:(Math.floor(h/89)%83)*12000};
+}
 function applyWorldUI(){
   $("worldLabel").textContent=WORLD.name?"\u{1F30D} World: "+WORLD.name+" — pick a vehicle!":"";
   $("worldTxt").textContent=WORLD.name?"\u{1F30D} "+WORLD.name:"";
 }
+function setWorld(n){
+  if(n){const o=worldOffset(n);WORLD.name=n;WORLD.ox=o.ox;WORLD.oz=o.oz;}
+  else{WORLD.name="";WORLD.ox=0;WORLD.oz=0;}
+  applyWorldUI();renderWorldList();saveGame();
+}
+/* ---------- your world list (saved in localStorage) ---------- */
+const WORLDS={list:[]};
+function loadWorlds(){
+  try{const d=JSON.parse(localStorage.getItem("vc4worlds")||"[]");
+    if(Array.isArray(d))WORLDS.list=d.filter(n=>typeof n==="string"&&n);}catch(e){}
+}
+function saveWorlds(){try{localStorage.setItem("vc4worlds",JSON.stringify(WORLDS.list))}catch(e){}}
+function addWorld(n){
+  if(n&&!WORLDS.list.includes(n)){WORLDS.list.push(n);saveWorlds();}
+  renderWorldList();
+}
+function renderWorldList(){
+  const w=$("worldList");w.innerHTML="";
+  if(!WORLDS.list.length)return;
+  const mk=(label,on,click)=>{
+    const b=document.createElement("button");
+    b.className="wchip"+(on?" on":"");b.textContent=label;b.onclick=click;
+    w.appendChild(b);return b;
+  };
+  mk("\u{1F3D9}️ Default city",!WORLD.name,()=>{setWorld("");toast("\u{1F3D9}️ Back in the default city — pick a vehicle!");});
+  WORLDS.list.forEach(n=>{
+    const b=mk("\u{1F30D} "+n,WORLD.name===n,()=>{setWorld(n);toast("\u{1F30D} Switched to world \""+n+"\" — pick a vehicle!");});
+    const x=document.createElement("i");
+    x.textContent="✕";x.title="Forget this world";
+    x.onclick=e=>{
+      e.stopPropagation();
+      WORLDS.list=WORLDS.list.filter(m=>m!==n);saveWorlds();
+      if(WORLD.name===n)setWorld("");else renderWorldList();
+    };
+    b.appendChild(x);
+  });
+}
 $("worldCreate").onclick=()=>{
   const n=$("worldName").value.trim();
   if(!n){toast("Type a world name first!");return;}
-  let h=0;for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))>>>0;
-  WORLD.name=n;
-  /* every name lands in its own far-away region of the infinite world */
-  WORLD.ox=(h%89)*12000;WORLD.oz=(Math.floor(h/89)%83)*12000;
-  applyWorldUI();
+  setWorld(n);addWorld(n);
   toast("\u{1F30D} World \""+n+"\" created — pick a vehicle and play!");
-  saveGame();
 };
+/* ---------- servers tab: shared online list (Firebase Realtime Database) ----------
+   paste your own database URL below — see FIREBASE-SETUP.md (free, ~5 minutes) */
+const SERVER_API="https://vc4-servers-default-rtdb.europe-west1.firebasedatabase.app";
+const SERVER_READY=!SERVER_API.includes("YOUR-PROJECT");
+const SERVERS={list:[],q:"",online:false,loaded:false,fetching:false,busy:false};
+/* keep names simple: letters, numbers, spaces and a little punctuation */
+function cleanServerName(n){return n.replace(/[^\p{L}\p{N} _\-.!?]/gu,"").trim().slice(0,20).trim();}
+function cacheServers(){try{localStorage.setItem("vc4servers",JSON.stringify(SERVERS.list))}catch(e){}}
+function serverStatus(msg){$("serverStatus").textContent=msg;}
+async function refreshServers(){
+  if(SERVERS.fetching)return;
+  SERVERS.fetching=true;
+  serverStatus("⏳ Loading servers...");
+  try{
+    if(!SERVER_READY)throw 0;
+    const r=await fetch(SERVER_API+"/servers.json",{cache:"no-store"});
+    if(!r.ok)throw 0;
+    const d=await r.json();
+    SERVERS.list=d&&typeof d==="object"?Object.values(d).filter(s=>s&&typeof s.name==="string"):[];
+    SERVERS.online=true;cacheServers();
+  }catch(e){
+    SERVERS.online=false;
+    try{const c=JSON.parse(localStorage.getItem("vc4servers")||"[]");
+      SERVERS.list=Array.isArray(c)?c:[];}catch(_){SERVERS.list=[];}
+  }
+  SERVERS.fetching=false;SERVERS.loaded=true;
+  renderServers();
+}
+function renderServers(){
+  if(!SERVERS.loaded){refreshServers();return;}
+  const q=SERVERS.q.toLowerCase();
+  const list=SERVERS.list.filter(s=>s&&s.name&&(!q||s.name.toLowerCase().includes(q)));
+  serverStatus(SERVERS.online
+    ?"\u{1F7E2} Online — "+SERVERS.list.length+" server"+(SERVERS.list.length===1?"":"s")+". Everyone who joins a server plays in the same world!"
+    :(SERVER_READY
+      ?"\u{1F534} Offline — couldn't reach the server list, showing the last one saved on this device."
+      :"\u{1F534} Offline — online servers aren't set up yet: paste your Firebase database URL in js/game.js (see FIREBASE-SETUP.md). Servers save on this device only."));
+  const el=$("serverList");el.innerHTML="";
+  if(!list.length){
+    const d=document.createElement("div");d.className="srvEmpty";
+    d.textContent=q?"No servers match \""+SERVERS.q+"\".":"No servers yet — create the first one!";
+    el.appendChild(d);return;
+  }
+  list.forEach(s=>{
+    const joined=WORLD.name===s.name;
+    const row=document.createElement("div");row.className="srvRow"+(joined?" here":"");
+    const nm=document.createElement("div");nm.className="nm";nm.textContent="\u{1F310} "+s.name;
+    const inf=document.createElement("div");inf.className="inf";inf.textContent=s.created?"created "+s.created:"";
+    const b=document.createElement("button");b.className="btn"+(joined?" on":" warn");
+    b.textContent=joined?"✅ Joined":"▶ Join";
+    b.onclick=()=>joinServer(s.name);
+    row.appendChild(nm);row.appendChild(inf);row.appendChild(b);
+    el.appendChild(row);
+  });
+}
+function joinServer(n){
+  setWorld(n);addWorld(n);
+  renderServers();
+  toast("\u{1F310} Joined server \""+n+"\" — pick a vehicle and play!");
+}
+async function createServer(){
+  const n=cleanServerName($("serverNew").value);
+  if(!n){toast("Type a server name first!");return;}
+  if(SERVERS.busy)return;
+  if(SERVERS.list.some(s=>s&&s.name&&s.name.toLowerCase()===n.toLowerCase())){
+    toast("That server already exists — joining it instead!");
+    joinServer(SERVERS.list.find(s=>s.name.toLowerCase()===n.toLowerCase()).name);
+    $("serverNew").value="";
+    return;
+  }
+  SERVERS.busy=true;
+  serverStatus("⏳ Creating server...");
+  const rec={name:n,created:new Date().toISOString().slice(0,10)};
+  try{
+    if(!SERVER_READY)throw 0;
+    const r=await fetch(SERVER_API+"/servers.json",{method:"POST",body:JSON.stringify(rec)});
+    if(!r.ok)throw 0;
+    SERVERS.online=true;
+    toast("\u{1F310} Server \""+n+"\" created for everyone!");
+  }catch(e){
+    SERVERS.online=false;
+    toast("\u{1F534} Offline — server only saved on this device for now.");
+  }
+  SERVERS.list.push(rec);cacheServers();
+  SERVERS.busy=false;
+  $("serverNew").value="";
+  joinServer(n);
+}
+$("serverCreate").onclick=createServer;
+$("serverRefresh").onclick=()=>{SERVERS.loaded=false;renderServers();};
+$("serverSearch").addEventListener("input",()=>{SERVERS.q=$("serverSearch").value.trim();if(SERVERS.loaded)renderServers();});
+$("serverNew").addEventListener("keydown",e=>{if(e.key==="Enter")createServer();});
 let _saveT=0;
 function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();}}
 function saveGame(){
@@ -856,7 +985,7 @@ function loadGame(){
     S.km=d.km||0;
   }catch(e){}
 }
-loadGame();applyWorldUI();updateMoneyUI();
+loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();
 addEventListener("beforeunload",saveGame);
 /* ---------- stations / stops / calling ---------- */
 function nearStationInfo(){
