@@ -47,7 +47,19 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 #clockTime{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
 #clockDay{font-size:11px;color:var(--dim)}
 #odoKm{font-size:12px;color:var(--acc2);margin-top:2px}
-#topbar{position:absolute;top:12px;left:180px;display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;max-width:55vw}
+#topbar{position:absolute;top:12px;left:180px;pointer-events:auto}
+#actionsMenu{display:none;margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;flex-direction:column;gap:6px;max-height:72vh;overflow-y:auto;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#topbar.open #actionsMenu{display:flex}
+#actionsMenu .btn{text-align:left}
+#fpsCoord{font-size:11px;color:var(--dim);margin-top:2px;font-variant-numeric:tabular-nums}
+#mapBody{display:flex;gap:10px;align-items:stretch}
+#mapSide{width:220px;min-width:170px;display:flex;flex-direction:column;gap:8px}
+#mapSearch{background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:13px;width:100%}
+#mapList{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:52vh}
+#mapList .btn{text-align:left;font-size:12px;padding:7px 10px}
+#mapList .side-note{color:var(--dim);font-size:12px;padding:4px}
+#mapCv{flex:1;min-width:0;height:56vh;border:1px solid var(--line);border-radius:10px;cursor:crosshair;background:#183020}
+@media (max-width:700px){#mapBody{flex-direction:column}#mapSide{width:100%}#mapList{max-height:20vh}#mapCv{height:36vh}}
 #speedo{position:absolute;top:12px;right:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 20px;text-align:right;min-width:190px;pointer-events:auto}
 #spdVal{font-size:40px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
 #spdUnit{color:var(--acc2);font-size:13px;letter-spacing:2px}

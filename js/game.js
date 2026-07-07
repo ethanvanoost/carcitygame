@@ -1173,9 +1173,10 @@ function mpTick(dt){
   MP.sendT+=dt;
   if(MP.sendT<0.2)return;
   MP.sendT=0;
-  /* keep the player dots moving while the big map is open (~1 repaint/s) */
+  /* keep the player dots and sidebar list fresh while the big map is open (~1x/s) */
   if(MP.others.size&&$("mapModal").classList.contains("open")&&now-(MP.mapT||0)>1000){
     MP.mapT=now;requestMap();
+    if(document.activeElement!==$("mapSearch"))renderMapList();
   }
   if(S.mode!=="game"||S.world!=="earth"||player.inRocket)return;
   const src=player.drive||player;
@@ -2066,6 +2067,7 @@ function updateTraffic(dt){
   }
 }
 /* ================= CAMERA / HUD / MAP / LOOP ================= */
+const FPS={frames:0,t:0,val:0};
 function camTargetInfo(){
   if(player.inRocket)return{x:rocket.x,y:rocket.y+9,z:rocket.z,yaw:rocket.yaw||0,d:46,h:16};
   if(player.inTrain){const t=player.train;return{x:t.g.position.x,y:t.g.position.y+3,z:t.z,yaw:t.g.rotation.y+(t.speed<0?Math.PI:0),d:26,h:10};}
@@ -2294,9 +2296,18 @@ function toggleMap(){
   const m=$("mapModal");
   if(m.classList.contains("open")){m.classList.remove("open");return;}
   mapView.cx=player.x;mapView.cz=player.z;
-  m.classList.add("open");drawMap();
+  $("mapSearch").value="";
+  m.classList.add("open");drawMap();renderMapList();
 }
 $("bMap").onclick=toggleMap;
+/* the topbar is now one "Actions" button that unfolds all the others */
+$("bActions").onclick=()=>$("topbar").classList.toggle("open");
+$("actionsMenu").addEventListener("click",e=>{
+  if(e.target.closest("button"))$("topbar").classList.remove("open");
+});
+addEventListener("mousedown",e=>{
+  if(!e.target.closest("#topbar"))$("topbar").classList.remove("open");
+});
 $("mapClose").onclick=()=>$("mapModal").classList.remove("open");
 {
   const cv=$("mapCv");
@@ -2330,73 +2341,79 @@ $("mapClose").onclick=()=>$("mapModal").classList.remove("open");
     mapView.scale=Math.max(0.06,Math.min(4,mapView.scale*(e.deltaY<0?1.25:0.8)));
     requestMap();
   },{passive:false});
-  const quick=[["\u{1F3E0} Spawn",6,6,1],["\u{1F686} Central Station",-140,50],["\u2708\uFE0F Airport Central",330,-70],["\u2708\uFE0F Airport East",1530,-70],["\u2708\uFE0F Airport South",330,1130],["\u{1F981} Zoo",-340,250],["\u{1F6DD} Playground",60,60],["\u{1F680} Rocket Station",2400,2400]];
-  quick.forEach(q=>{
-    const b=document.createElement("button");b.className="btn";b.innerHTML=q[0];
-    b.onclick=()=>chooseDest(q[0],q[1]+(q[3]?WORLD.ox:0),q[2]+(q[3]?WORLD.oz:0),true);
-    $("mapQuick").appendChild(b);
-  });
-  /* pick an online player: teleport to them or set a route */
-  const pb=document.createElement("button");pb.className="btn";pb.innerHTML="\u{1F465} Players";
-  pb.onclick=()=>{
-    const list=[...MP.others.values()];
-    if(!list.length){toast("\u{1F465} No other players online in this world right now.");return;}
-    showDest("\u{1F465} Pick a player",[
-      ...list.map(o=>{
-        const d=Math.hypot(o.x-player.x,o.z-player.z);
-        return {label:"\u{1F464} "+o.name+" — "+(d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km")+" away",value:o};
-      }),
-      {label:"❌ Cancel",value:null}
-    ],o=>{if(o)choosePlayer(o);});
-  };
-  $("mapQuick").appendChild(pb);
-  /* nearest McDrive finder */
-  const mcb=document.createElement("button");mcb.className="btn";mcb.innerHTML="\u{1F354} Nearest McDrive";
-  mcb.onclick=()=>{
-    switchWorld("earth");
-    const ci=Math.round((player.x-46)/MCSP),cj=Math.round((player.z-90)/MCSP);
-    let best=null;
-    for(let i=ci-6;i<=ci+6;i++)for(let j=cj-6;j<=cj+6;j++){
-      const sp=mcdSpot(i,j);
-      if(!sp)continue;
-      const d=Math.hypot(sp.x-player.x,sp.z-player.z);
-      if(!best||d<best.d){best={sp,d};}
-    }
-    if(best)chooseDest("\u{1F354} Nearest McDrive \u2014 "+Math.round(best.d)+" m",best.sp.x,best.sp.z-16,true);
-    else toast("No McDrive nearby (too much water or mountains)!");
-  };
-  $("mapQuick").appendChild(mcb);
-  /* nearest stunt park */
-  const stb=document.createElement("button");stb.className="btn";stb.innerHTML="\u{1F3A2} Stunt Park";
-  stb.onclick=()=>{
-    const p=stuntPos(Math.round((player.x-1800)/3600),Math.round((player.z-600)/3600));
-    chooseDest("\u{1F3A2} Nearest Stunt Park",p.x,p.z+20,true);
-  };
-  $("mapQuick").appendChild(stb);
-  /* nearest point on the 8-lane MEGA HIGHWAY */
-  const mhb=document.createElement("button");mhb.className="btn";mhb.innerHTML="\u{1F6E3}\ufe0f Mega Highway";
-  mhb.onclick=()=>{
-    if(Math.abs(player.x-MHX)<Math.abs(player.z-MHZ))chooseDest("\u{1F6E3}\ufe0f Mega Highway",MHX,player.z,true);
-    else chooseDest("\u{1F6E3}\ufe0f Mega Highway",player.x,MHZ,true);
-  };
-  $("mapQuick").appendChild(mhb);
-  /* travel between worlds from the map \u2014 your car stays on Earth */
-  const mb=document.createElement("button");mb.className="btn warn";mb.innerHTML="\u{1F319} Go to the MOON";
-  mb.onclick=()=>{
-    switchWorld("moon");
-    teleportTo(2400,2400);   // land right at a moon rocket station
-    $("mapModal").classList.remove("open");
-    toast("\u{1F319} You're on the Moon! Low gravity \u2014 try jumping!");
-  };
-  $("mapQuick").appendChild(mb);
-  const eb=document.createElement("button");eb.className="btn warn";eb.innerHTML="\u{1F30D} Back to EARTH";
-  eb.onclick=()=>{
-    switchWorld("earth");
-    teleportTo(6,6);
-    $("mapModal").classList.remove("open");
-  };
-  $("mapQuick").appendChild(eb);
 }
+/* ---------- map sidebar: searchable list of places, players and coordinates ---------- */
+const MAP_PLACES=[["\u{1F3E0} Spawn",6,6,1],["\u{1F686} Central Station",-140,50],["✈️ Airport Central",330,-70],["✈️ Airport East",1530,-70],["✈️ Airport South",330,1130],["\u{1F981} Zoo",-340,250],["\u{1F6DD} Playground",60,60],["\u{1F680} Rocket Station",2400,2400]];
+function fmtDist(d){return d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km";}
+function mapEntries(q){
+  q=(q||"").trim().toLowerCase();
+  const out=[];
+  /* typed coordinates like "1200 -300" or "1200, -300"? offer to go there */
+  const m=q.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+  if(m)out.push({label:"\u{1F4CD} Go to ("+m[1]+", "+m[2]+")",cls:"warn",
+    go:()=>chooseDest("\u{1F4CD} ("+m[1]+", "+m[2]+")",parseFloat(m[1]),parseFloat(m[2]),false)});
+  /* online players, nearest first */
+  [...MP.others.values()]
+    .filter(o=>!q||o.name.toLowerCase().includes(q))
+    .map(o=>({o,d:Math.hypot(o.x-player.x,o.z-player.z)}))
+    .sort((a,b)=>a.d-b.d)
+    .forEach(({o,d})=>out.push({label:"\u{1F464} "+o.name+" — "+fmtDist(d),go:()=>choosePlayer(o)}));
+  /* fixed places */
+  MAP_PLACES.filter(p=>!q||p[0].toLowerCase().includes(q)).forEach(p=>
+    out.push({label:p[0],go:()=>chooseDest(p[0],p[1]+(p[3]?WORLD.ox:0),p[2]+(p[3]?WORLD.oz:0),true)}));
+  /* nearest-X finders and world travel */
+  const specials=[
+    ["\u{1F354} Nearest McDrive",()=>{
+      switchWorld("earth");
+      const ci=Math.round((player.x-46)/MCSP),cj=Math.round((player.z-90)/MCSP);
+      let best=null;
+      for(let i=ci-6;i<=ci+6;i++)for(let j=cj-6;j<=cj+6;j++){
+        const sp=mcdSpot(i,j);
+        if(!sp)continue;
+        const d=Math.hypot(sp.x-player.x,sp.z-player.z);
+        if(!best||d<best.d){best={sp,d};}
+      }
+      if(best)chooseDest("\u{1F354} Nearest McDrive — "+Math.round(best.d)+" m",best.sp.x,best.sp.z-16,true);
+      else toast("No McDrive nearby (too much water or mountains)!");
+    }],
+    ["\u{1F3A2} Stunt Park",()=>{
+      const p=stuntPos(Math.round((player.x-1800)/3600),Math.round((player.z-600)/3600));
+      chooseDest("\u{1F3A2} Nearest Stunt Park",p.x,p.z+20,true);
+    }],
+    ["\u{1F6E3}️ Mega Highway",()=>{
+      if(Math.abs(player.x-MHX)<Math.abs(player.z-MHZ))chooseDest("\u{1F6E3}️ Mega Highway",MHX,player.z,true);
+      else chooseDest("\u{1F6E3}️ Mega Highway",player.x,MHZ,true);
+    }],
+    ["\u{1F319} Go to the MOON",()=>{
+      switchWorld("moon");
+      teleportTo(2400,2400);   // land right at a moon rocket station
+      $("mapModal").classList.remove("open");
+      toast("\u{1F319} You're on the Moon! Low gravity — try jumping!");
+    },"warn"],
+    ["\u{1F30D} Back to EARTH",()=>{
+      switchWorld("earth");
+      teleportTo(6,6);
+      $("mapModal").classList.remove("open");
+    },"warn"]
+  ];
+  specials.filter(s=>!q||s[0].toLowerCase().includes(q)).forEach(s=>out.push({label:s[0],go:s[1],cls:s[2]}));
+  return out;
+}
+function renderMapList(){
+  const list=$("mapList");list.innerHTML="";
+  const es=mapEntries($("mapSearch").value);
+  if(!es.length){
+    const d=document.createElement("div");d.className="side-note";
+    d.textContent="Nothing found — try a place name, a player name or coordinates like \"1200 -300\".";
+    list.appendChild(d);return;
+  }
+  es.forEach(e=>{
+    const b=document.createElement("button");b.className="btn"+(e.cls?" "+e.cls:"");
+    b.innerHTML=e.label;b.onclick=e.go;
+    list.appendChild(b);
+  });
+}
+$("mapSearch").addEventListener("input",renderMapList);
 /* ---------- destination chooser: teleport instantly, or set a route ---------- */
 function chooseDest(label,x,z,toEarth){
   showDest(label,[
@@ -2947,6 +2964,9 @@ function frame(now){
   if(player.inPlane){$("spdAlt").style.display="block";$("spdAlt").textContent="alt "+Math.round(player.planeRef.y)+" m";}
   else if(player.inRocket){$("spdAlt").style.display="block";$("spdAlt").textContent="alt "+Math.round(rocket.y)+" m";}
   else $("spdAlt").style.display="none";
+  FPS.frames++;FPS.t+=dt;
+  if(FPS.t>=0.5){FPS.val=Math.round(FPS.frames/FPS.t);FPS.frames=0;FPS.t=0;}
+  $("fpsCoord").textContent=(FPS.val?FPS.val:"–")+" fps · \u{1F4CD} "+Math.round(player.x)+", "+Math.round(player.z);
   updateHint();
   updateNav();updateRace(dt);updateMini(dt);updateHeld();
   mpTick(dt);

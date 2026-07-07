@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Velocity City 4</title>
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -83,12 +83,15 @@
     <div id="odoKm">total 0.00 km</div>
     <div id="moneyTxt">$0</div>
     <div id="worldTxt"></div>
+    <div id="fpsCoord"></div>
     <div id="hungerRow">
       <div id="hungerBar"><i id="hungerFill"></i></div>
       <span id="hungerTxt">&#127828; full</span>
     </div>
   </div>
   <div id="topbar">
+    <button class="btn warn" id="bActions">&#9889; Actions &#9662;</button>
+    <div id="actionsMenu">
     <button class="btn" id="bMenu">&#9776; Garage</button>
     <button class="btn" id="bSpawn">&#8962; Spawn</button>
     <button class="btn" id="bMap">&#128506; Map</button>
@@ -102,6 +105,7 @@
     <button class="btn" id="bRooms">&#128719; Rooms</button>
     <button class="btn" id="bChat">&#128172; Chat</button>
     <button class="btn warn" id="bAdmin">&#128736; Admin</button>
+    </div>
   </div>
   <div id="chatPanel">
     <div id="chatHead"><span>&#128172; Public chat</span><button id="chatClose">&#10005;</button></div>
@@ -171,8 +175,13 @@
 <div class="modal" id="mapModal">
   <div class="box" style="max-width:none;width:min(94vw,940px)">
     <h2>World map &mdash; drag to pan, scroll to zoom, click to teleport</h2>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="mapQuick"></div>
-    <canvas id="mapCv" style="width:100%;height:56vh;border:1px solid var(--line);border-radius:10px;cursor:crosshair;background:#183020"></canvas>
+    <div id="mapBody">
+      <div id="mapSide">
+        <input id="mapSearch" maxlength="40" placeholder="&#128269; Place, player or &quot;x z&quot;...">
+        <div id="mapList"></div>
+      </div>
+      <canvas id="mapCv"></canvas>
+    </div>
     <button class="btn close" id="mapClose">Close</button>
   </div>
 </div>
@@ -327,6 +336,6 @@
 <script src="js/core.js?v=20"></script>
 <script src="js/world.js?v=20"></script>
 <script src="js/vehicles.js?v=20"></script>
-<script src="js/game.js?v=20"></script>
+<script src="js/game.js?v=21"></script>
 </body>
 </html>
