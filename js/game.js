@@ -1118,10 +1118,61 @@ function mpJoin(){
 }
 function mpLeave(){
   if(!MP.on)return;
+  botsClear(true);
   try{MP.ref.off();MP.myRef.onDisconnect().cancel();MP.myRef.remove();}catch(e){}
   [...MP.others.keys()].forEach(mpDrop);
   MP.on=false;MP.ref=MP.myRef=null;MP.lastSig="";
 }
+/* ---------- bots: fake players everyone in the world can see ----------
+   Your game drives them and broadcasts them like normal players, so they
+   exist as long as you stay in the world (onDisconnect cleans them up). */
+const BOTS={list:[],t:0};
+function botsSpawn(n){
+  mpJoin();
+  if(!MP.on){toast("\u{1F916} Bots need the online database — it's offline right now.");return;}
+  botsClear(true);
+  for(let i=1;i<=n;i++){
+    const ref=MP.ref.child(MP.id+"_bot"+i);
+    try{ref.onDisconnect().remove();}catch(e){}
+    const a=Math.random()*Math.PI*2;
+    BOTS.list.push({ref,name:"Bot "+i,
+      x:player.x+Math.cos(a)*(30+Math.random()*80),
+      z:player.z+Math.sin(a)*(30+Math.random()*80),
+      yaw:Math.random()*Math.PI*2,tYaw:0,
+      spd:7+Math.random()*9,
+      turnT:1+Math.random()*3,
+      c:(Math.random()*0xffffff)|0});
+  }
+  toast("\u{1F916} Spawned "+n+" bots — everyone in this world can see them!");
+}
+function botsClear(silent){
+  BOTS.list.forEach(b=>{try{b.ref.onDisconnect().cancel();b.ref.remove();}catch(e){}});
+  BOTS.list=[];
+  const btn=document.getElementById("bBots");
+  if(btn)btn.innerHTML="\u{1F916} Spawn 10 bots";
+  if(!silent)toast("\u{1F916} Bots removed.");
+}
+function botsTick(dt){
+  if(!BOTS.list.length)return;
+  BOTS.list.forEach(b=>{
+    b.turnT-=dt;
+    if(b.turnT<=0){b.turnT=1+Math.random()*3;b.tYaw=b.yaw+(Math.random()-0.5)*2.4;}
+    b.yaw+=(b.tYaw-b.yaw)*Math.min(1,dt*2);
+    b.x+=Math.sin(b.yaw)*b.spd*dt;
+    b.z+=Math.cos(b.yaw)*b.spd*dt;
+  });
+  BOTS.t+=dt;
+  if(BOTS.t<0.5)return;   /* broadcast 2x per second */
+  BOTS.t=0;
+  BOTS.list.forEach(b=>{
+    try{b.ref.set({n:b.name,x:Math.round(b.x*10)/10,z:Math.round(b.z*10)/10,y:0,
+      r:Math.round(b.yaw*100)/100,f:0,v:"car",c:b.c,t:Date.now()});}catch(e){}
+  });
+}
+$("bBots").onclick=()=>{
+  if(BOTS.list.length)botsClear();
+  else{botsSpawn(10);if(BOTS.list.length)$("bBots").innerHTML="\u{1F916} Remove bots";}
+};
 function mpMakeLabel(name){
   const cv=document.createElement("canvas");cv.width=256;cv.height=64;
   const c=cv.getContext("2d");
@@ -2969,7 +3020,7 @@ function frame(now){
   $("fpsCoord").textContent=(FPS.val?FPS.val:"–")+" fps · \u{1F4CD} "+Math.round(player.x)+", "+Math.round(player.z);
   updateHint();
   updateNav();updateRace(dt);updateMini(dt);updateHeld();
-  mpTick(dt);
+  mpTick(dt);botsTick(dt);
   autoSave(dt);
   renderer.render(scene,camera);
 }
