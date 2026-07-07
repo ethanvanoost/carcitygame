@@ -285,6 +285,7 @@ function startGame(v){
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   player.mesh.visible=false;
   updateLimitUI();updateChunks(sx,sz,true);updateLandmarks(sx,sz);
+  mpJoin();
 }
 /* ---------- destination modal ---------- */
 let destCb=null;
@@ -960,6 +961,118 @@ $("serverCreate").onclick=createServer;
 $("serverRefresh").onclick=()=>{SERVERS.loaded=false;renderServers();};
 $("serverSearch").addEventListener("input",()=>{SERVERS.q=$("serverSearch").value.trim();if(SERVERS.loaded)renderServers();});
 $("serverNew").addEventListener("keydown",e=>{if(e.key==="Enter")createServer();});
+/* ---------- multiplayer presence: see other players in your world (Firebase) ----------
+   every player writes their position ~5x/second to players/<world>/<id> and
+   listens to everyone else's; other players appear as cars/people with name tags. */
+const MP={sdk:false,on:false,id:"p"+Math.random().toString(36).slice(2,10),ref:null,myRef:null,
+  others:new Map(),sendT:0,worldKey:null,lastSig:"",lastSendAt:0};
+function mpName(){
+  let n=cleanServerName(localStorage.getItem("vc4pname")||"").slice(0,16);
+  if(!n){n="Racer"+Math.floor(100+Math.random()*900);localStorage.setItem("vc4pname",n);}
+  return n;
+}
+function mpInit(){
+  if(MP.sdk)return true;
+  if(!SERVER_READY||typeof firebase==="undefined"||!firebase.database)return false;
+  try{firebase.initializeApp({databaseURL:SERVER_API});MP.sdk=true;}catch(e){}
+  return MP.sdk;
+}
+function mpWorldKey(){return (WORLD.name||"default-city").toLowerCase().replace(/[.#$\[\]\/]/g,"_");}
+function mpJoin(){
+  if(!mpInit())return;
+  const key=mpWorldKey();
+  if(MP.on&&key===MP.worldKey)return;
+  mpLeave();
+  MP.worldKey=key;
+  MP.ref=firebase.database().ref("players/"+key);
+  MP.myRef=MP.ref.child(MP.id);
+  try{MP.myRef.onDisconnect().remove();}catch(e){}
+  const upd=s=>{if(s.key!==MP.id)mpApply(s.key,s.val());};
+  MP.ref.on("child_added",upd);
+  MP.ref.on("child_changed",upd);
+  MP.ref.on("child_removed",s=>mpDrop(s.key));
+  MP.on=true;
+}
+function mpLeave(){
+  if(!MP.on)return;
+  try{MP.ref.off();MP.myRef.onDisconnect().cancel();MP.myRef.remove();}catch(e){}
+  [...MP.others.keys()].forEach(mpDrop);
+  MP.on=false;MP.ref=MP.myRef=null;MP.lastSig="";
+}
+function mpMakeLabel(name){
+  const cv=document.createElement("canvas");cv.width=256;cv.height=64;
+  const c=cv.getContext("2d");
+  c.font="bold 34px 'Segoe UI',sans-serif";c.textAlign="center";
+  const w=Math.min(244,c.measureText(name).width+30);
+  c.fillStyle="rgba(13,17,26,.78)";c.fillRect(128-w/2,6,w,46);
+  c.fillStyle="#3fd0ff";c.fillText(name,128,40);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  s.scale.set(5.4,1.35,1);
+  return s;
+}
+function mpApply(k,d){
+  if(!d||typeof d.x!=="number"||typeof d.z!=="number")return;
+  const kind=d.f?"foot":(d.v==="moto"||d.v==="bike"?d.v:"car");
+  const col=typeof d.c==="number"?(d.c&0xffffff):0x3fd0ff;
+  const nm=typeof d.n==="string"?d.n.slice(0,16):"player";
+  let o=MP.others.get(k);
+  if(o&&(o.kind!==kind||o.color!==col||o.name!==nm)){mpDrop(k);o=null;}
+  if(!o){
+    const g=new THREE.Group();
+    const body=kind==="foot"?makePerson(1,col):buildVehicleMesh(kind,col);
+    if(body.userData&&body.userData.riderMesh)body.userData.riderMesh.visible=true;
+    g.add(body);
+    const lbl=mpMakeLabel(nm);
+    lbl.position.y=kind==="foot"?2.7:3.1;g.add(lbl);
+    scene.add(g);
+    o={g,kind,color:col,name:nm,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
+    MP.others.set(k,o);
+  }
+  o.tx=d.x;o.tz=d.z;o.ty=typeof d.y==="number"?d.y:0;o.tyaw=typeof d.r==="number"?d.r:0;
+  o.seen=performance.now();
+}
+function mpDrop(k){const o=MP.others.get(k);if(o){scene.remove(o.g);MP.others.delete(k);}}
+function mpTick(dt){
+  if(!MP.on)return;
+  /* glide the other players toward their latest reported spot */
+  const now=performance.now();
+  for(const[k,o]of[...MP.others]){
+    if(o.seen&&now-o.seen>15000){mpDrop(k);continue;}
+    const a=Math.min(1,dt*8);
+    o.x+=(o.tx-o.x)*a;o.z+=(o.tz-o.z)*a;o.y+=(o.ty-o.y)*a;
+    let dy=o.tyaw-o.yaw;while(dy>Math.PI)dy-=2*Math.PI;while(dy<-Math.PI)dy+=2*Math.PI;
+    o.yaw+=dy*a;
+    o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.yaw;
+    o.g.visible=S.world==="earth";
+  }
+  if(S.mode==="game")$("worldTxt").textContent="\u{1F30D} "+(WORLD.name||"Default city")+" · \u{1F465} "+(MP.others.size+1);
+  /* broadcast my own position ~5x per second (only when it changed) */
+  MP.sendT+=dt;
+  if(MP.sendT<0.2)return;
+  MP.sendT=0;
+  if(S.mode!=="game"||S.world!=="earth"||player.inRocket)return;
+  const src=player.drive||player;
+  const d={n:mpName(),
+    x:Math.round(src.x*10)/10,z:Math.round(src.z*10)/10,y:Math.round((src.y||0)*10)/10,
+    r:Math.round((src.yaw||0)*100)/100,
+    f:player.onFoot?1:0,
+    v:player.drive?player.drive.type:"car",
+    c:S.selected?S.selected.color:0x3fd0ff,
+    t:Date.now()};
+  const sig=[d.x,d.z,d.y,d.r,d.f,d.v,d.n].join("|");
+  if(sig===MP.lastSig&&now-MP.lastSendAt<5000)return;  /* parked: just a heartbeat every 5 s */
+  MP.lastSig=sig;MP.lastSendAt=now;
+  try{MP.myRef.set(d);}catch(e){}
+}
+/* player-name field in settings */
+$("pName").value=mpName();
+$("pName").addEventListener("change",()=>{
+  const n=cleanServerName($("pName").value).slice(0,16);
+  if(!n){$("pName").value=mpName();return;}
+  localStorage.setItem("vc4pname",n);
+  $("pName").value=n;
+  toast("\u{1F464} You are now \""+n+"\"");
+});
 let _saveT=0;
 function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();}}
 function saveGame(){
@@ -2637,6 +2750,7 @@ function frame(now){
   else $("spdAlt").style.display="none";
   updateHint();
   updateNav();updateRace(dt);updateMini(dt);updateHeld();
+  mpTick(dt);
   autoSave(dt);
   renderer.render(scene,camera);
 }

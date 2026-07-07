@@ -28,13 +28,37 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            "created": { ".validate": "newData.isString() && newData.val().length <= 10" },
            "$other": { ".validate": false }
          }
+       },
+       "players": {
+         "$world": {
+           ".read": true,
+           "$id": {
+             ".write": true,
+             ".validate": "newData.hasChildren(['x','z','n'])",
+             "n": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
+             "x": { ".validate": "newData.isNumber()" },
+             "y": { ".validate": "newData.isNumber()" },
+             "z": { ".validate": "newData.isNumber()" },
+             "r": { ".validate": "newData.isNumber()" },
+             "f": { ".validate": "newData.isNumber()" },
+             "v": { ".validate": "newData.isString() && newData.val().length <= 8" },
+             "c": { ".validate": "newData.isNumber()" },
+             "t": { ".validate": "newData.isNumber()" },
+             "$other": { ".validate": false }
+           }
+         }
        }
      }
    }
    ```
 
    These rules mean: anyone can read the server list and add a server, but **nobody can
-   edit or delete existing servers**, and names are capped at 20 characters.
+   edit or delete existing servers**, and names are capped at 20 characters. The `players`
+   part is what lets players **see each other driving around**: everyone in a world
+   broadcasts their position there a few times per second.
+
+   > Already pasted the rules before they had the `players` part? Paste this new version
+   > over the old ones and hit **Publish** again — otherwise other players stay invisible.
 
 5. Go to the **Data** tab and copy the database URL shown at the top. It looks like:
    `https://vc4-servers-default-rtdb.europe-west1.firebasedatabase.app`

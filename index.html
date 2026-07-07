@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Velocity City 4</title>
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -188,7 +188,7 @@
 <div class="modal" id="shopModal">
   <div class="box" style="max-width:640px">
     <h2 id="shopTitle">&#128722; Shop</h2>
-    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click items to buy them â€” they go into your &#127890; food backpack.</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click items to buy them &mdash; they go into your &#127890; food backpack.</div>
     <div id="shopList"></div>
     <button class="btn close" id="shopClose">Done shopping</button>
   </div>
@@ -210,7 +210,7 @@
   <div class="box">
     <h2>&#128176; Your money</h2>
     <div id="mmVal" style="font-size:36px;font-weight:800">$0</div>
-    <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m â€” pink dots on the map).<br><br>Don't worry: EVERYTHING in the game is still 100% FREE. Money is just for bragging!<br>Psst... reach $1,000 for a surprise...</div>
+    <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m &mdash; pink dots on the map).<br><br>Don't worry: EVERYTHING in the game is still 100% FREE. Money is just for bragging!<br>Psst... reach $1,000 for a surprise...</div>
     <button class="btn close" id="moneyClose">Close</button>
   </div>
 </div>
@@ -272,6 +272,8 @@
       <button id="sndTgl" class="on">&#128266; Sound ON</button>
       <button id="musTgl" class="on">&#127925; Music ON</button>
     </div>
+    <div style="font-size:14px;color:var(--dim);margin-top:14px">Player name (other players see this)</div>
+    <input id="pName" maxlength="16" placeholder="your name" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:6px">
     <button class="btn close" id="setClose">Done</button>
   </div>
 </div>
@@ -299,9 +301,11 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/core.js?v=17"></script>
-<script src="js/world.js?v=17"></script>
-<script src="js/vehicles.js?v=17"></script>
-<script src="js/game.js?v=17"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="js/core.js?v=18"></script>
+<script src="js/world.js?v=18"></script>
+<script src="js/vehicles.js?v=18"></script>
+<script src="js/game.js?v=18"></script>
 </body>
 </html>
