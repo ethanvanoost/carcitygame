@@ -58,6 +58,17 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            "created": { ".validate": "newData.isString() && newData.val().length <= 10" },
            "$other": { ".validate": false }
          }
+       },
+       "chat": {
+         ".read": true,
+         "$id": {
+           ".write": "!data.exists()",
+           ".validate": "newData.hasChildren(['n','m','t'])",
+           "n": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
+           "m": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200" },
+           "t": { ".validate": "newData.isNumber()" },
+           "$other": { ".validate": false }
+         }
        }
      }
    }
@@ -68,7 +79,9 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    part is what lets players **see each other driving around**: everyone in a world
    broadcasts their position there a few times per second. The `usernames` part makes
    usernames **unique**: the first player to claim a name owns it (each device saves a
-   secret token, so nobody can take a name that's already claimed).
+   secret token, so nobody can take a name that's already claimed). The `chat` part is
+   the **public chat**: anyone can post (max 200 characters), nobody can edit or delete
+   other people's messages.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming

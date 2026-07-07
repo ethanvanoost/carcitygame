@@ -285,7 +285,7 @@ function startGame(v){
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   player.mesh.visible=false;
   updateLimitUI();updateChunks(sx,sz,true);updateLandmarks(sx,sz);
-  mpJoin();
+  mpJoin();chatStart();
 }
 /* ---------- destination modal ---------- */
 let destCb=null;
@@ -1003,6 +1003,7 @@ async function doClaim(){
   btn.disabled=false;
   if(!res.ok){$("nameStatus").textContent="❌ "+res.msg;return;}
   localStorage.setItem("vc4pname",res.name);
+  localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
   $("nameModal").classList.remove("open");
   toast(res.offline
@@ -1013,14 +1014,71 @@ $("nameClaim").onclick=doClaim;
 $("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim();});
 $("nameInput").addEventListener("input",()=>{$("nameStatus").textContent="";});
 $("nameSkip").onclick=()=>{
+  localStorage.setItem("vc4nameok","1");
   $("nameModal").classList.remove("open");
   toast("\u{1F464} You are \""+mpName()+"\" for now — pick a real name in ⚙ Settings!");
 };
-/* first visit: pick a username before playing */
-if(!localStorage.getItem("vc4pname")){
+/* pick a username before playing — also shows once for players from before
+   this update (their old auto-saved Racer name was never really chosen) */
+if(!localStorage.getItem("vc4nameok")){
+  $("nameInput").value=localStorage.getItem("vc4pname")||"";
   $("nameModal").classList.add("open");
   setTimeout(()=>{try{$("nameInput").focus();}catch(e){}},100);
 }
+/* ---------- public chat: one chat room for all players (Firebase) ---------- */
+const CHAT={on:false,open:false,unread:0,lastSend:0};
+function chatSys(msg){
+  const el=$("chatMsgs"),d=document.createElement("div");
+  d.className="cmsg sys";d.textContent=msg;el.appendChild(d);
+  el.scrollTop=el.scrollHeight;
+}
+function chatAdd(d){
+  if(!d||typeof d.m!=="string"||typeof d.n!=="string")return;
+  const el=$("chatMsgs"),row=document.createElement("div");
+  row.className="cmsg"+(d.n===mpName()?" me":"");
+  const who=document.createElement("b");who.textContent=d.n.slice(0,16)+": ";
+  const txt=document.createElement("span");txt.textContent=d.m.slice(0,200);
+  row.appendChild(who);row.appendChild(txt);
+  el.appendChild(row);
+  while(el.children.length>100)el.removeChild(el.firstChild);
+  el.scrollTop=el.scrollHeight;
+  if(!CHAT.open){CHAT.unread++;chatBtnUI();}
+}
+function chatBtnUI(){
+  $("bChat").innerHTML="\u{1F4AC} Chat"+(CHAT.unread?" <b style='color:var(--acc)'>"+(CHAT.unread>9?"9+":CHAT.unread)+"</b>":"");
+}
+function chatStart(){
+  if(CHAT.on)return;
+  if(!mpInit()){chatSys("\u{1F534} Chat is offline — couldn't reach the database.");return;}
+  try{
+    firebase.database().ref("chat").limitToLast(50).on("child_added",s=>chatAdd(s.val()));
+    CHAT.on=true;
+    chatSys("Welcome to the public chat — be nice! \u{1F49B}");
+  }catch(e){chatSys("\u{1F534} Chat is offline right now.");}
+}
+function chatToggle(open){
+  CHAT.open=open===undefined?!CHAT.open:open;
+  $("chatPanel").classList.toggle("show",CHAT.open);
+  if(CHAT.open){
+    chatStart();
+    CHAT.unread=0;chatBtnUI();
+    setTimeout(()=>{try{$("chatInput").focus();}catch(e){}},50);
+  }
+}
+function chatSend(){
+  const m=$("chatInput").value.trim().slice(0,200);
+  if(!m)return;
+  const now=Date.now();
+  if(now-CHAT.lastSend<1500){toast("⏳ Slow down a little between messages!");return;}
+  if(!CHAT.on){toast("\u{1F534} Chat is offline right now.");return;}
+  CHAT.lastSend=now;
+  $("chatInput").value="";
+  try{firebase.database().ref("chat").push({n:mpName(),m,t:Date.now()});}catch(e){}
+}
+$("bChat").onclick=()=>chatToggle();
+$("chatClose").onclick=()=>chatToggle(false);
+$("chatSendBtn").onclick=chatSend;
+$("chatInput").addEventListener("keydown",e=>{if(e.key==="Enter")chatSend();});
 function mpInit(){
   if(MP.sdk)return true;
   if(!SERVER_READY||typeof firebase==="undefined"||!firebase.database)return false;
@@ -1121,6 +1179,7 @@ $("pName").addEventListener("change",async()=>{
   if(!res.ok){toast("❌ "+res.msg);$("pName").value=mpName();return;}
   if(res.name===mpName()){$("pName").value=res.name;return;}
   localStorage.setItem("vc4pname",res.name);
+  localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
   toast(res.offline
     ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"

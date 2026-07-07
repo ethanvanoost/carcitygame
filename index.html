@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Velocity City 4</title>
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -99,7 +99,16 @@
     <button class="btn" id="bDump">&#129375; Dumplings</button>
     <button class="btn" id="bMoney">&#128176; Money</button>
     <button class="btn" id="bRooms">&#128719; Rooms</button>
+    <button class="btn" id="bChat">&#128172; Chat</button>
     <button class="btn warn" id="bAdmin">&#128736; Admin</button>
+  </div>
+  <div id="chatPanel">
+    <div id="chatHead"><span>&#128172; Public chat</span><button id="chatClose">&#10005;</button></div>
+    <div id="chatMsgs"></div>
+    <div id="chatRow">
+      <input id="chatInput" maxlength="200" placeholder="Type a message...">
+      <button id="chatSendBtn">&#10148;</button>
+    </div>
   </div>
   <div id="speedo">
     <div id="spdVal">0</div>
@@ -314,9 +323,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=19"></script>
-<script src="js/world.js?v=19"></script>
-<script src="js/vehicles.js?v=19"></script>
-<script src="js/game.js?v=19"></script>
+<script src="js/core.js?v=20"></script>
+<script src="js/world.js?v=20"></script>
+<script src="js/vehicles.js?v=20"></script>
+<script src="js/game.js?v=20"></script>
 </body>
 </html>
