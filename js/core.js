@@ -16,8 +16,14 @@ const TYPE_LABEL={car:"Car",moto:"Motorcycle",bike:"Bicycle"};
 const DEFAULT_OWNED=["Mazda MX-5","KTM 390 Duke","Gazelle CityGo"];
 const OWN=new Set(DEFAULT_OWNED);
 const PAINT={};   // vehicle name -> the paint color you chose in the garage
+/* car prices scale with top speed: slowest car $20K ... fastest car $300K */
+const CAR_TOP_MIN=Math.min(...CARS.map(c=>c[1])),CAR_TOP_MAX=Math.max(...CARS.map(c=>c[1]));
 function vehPrice(v){
-  const d=v.type==="car"?60:(v.type==="moto"?40:8);
+  if(v.type==="car"){
+    const f=(v.top-CAR_TOP_MIN)/(CAR_TOP_MAX-CAR_TOP_MIN);
+    return Math.round((20000+f*280000)/100)*100;
+  }
+  const d=v.type==="moto"?40:8;
   return Math.max(50,Math.round(v.top*v.top/d/10)*10);
 }
 function paintOf(v){return v&&PAINT[v.name]!==undefined?PAINT[v.name]:(v?v.color:0x3fd0ff);}
