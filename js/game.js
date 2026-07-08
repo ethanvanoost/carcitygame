@@ -2603,6 +2603,46 @@ function drawMap(){
         if(s)dot(s.x,s.z,"#ff5d8f",4);
       }
     }
+    /* gas stations (zoom in a bit) */
+    if(sc>=0.14){
+      const gi0=Math.floor((mapView.cx-halfW-300)/GSP),gi1=Math.ceil((mapView.cx+halfW-270)/GSP);
+      const gj0=Math.floor((mapView.cz-halfH-170)/GSP),gj1=Math.ceil((mapView.cz+halfH-130)/GSP);
+      for(let i=gi0;i<=gi1;i++)for(let j=gj0;j<=gj1;j++){
+        const s=gasSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#0f7a3d",5);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#7dffb5";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("⛽",px,py-8);
+        }
+      }
+    }
+    /* cave openings in the mountains */
+    {
+      const vi0=Math.floor((mapView.cx-halfW-760)/CVSP),vi1=Math.ceil((mapView.cx+halfW-720)/CVSP);
+      const vj0=Math.floor((mapView.cz-halfH-400)/CVSP),vj1=Math.ceil((mapView.cz+halfH-360)/CVSP);
+      for(let i=vi0;i<=vi1;i++)for(let j=vj0;j<=vj1;j++){
+        const s=caveSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#57534e",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#d6d3d1";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F573}",px,py-9);
+        }
+      }
+    }
+    /* live random events: construction, accidents & festivals */
+    for(const e of EVENTS.list){
+      const col=e.type==="construction"?"#ffb02e":(e.type==="accident"?"#ff5c5c":"#f472b6");
+      dot(e.x,e.z,col,6);
+      const px=(e.x-mapView.cx)*sc+cv.width/2,py=-(e.z-mapView.cz)*sc+cv.height/2;
+      if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+        c.fillStyle=col;c.font="bold 11px Segoe UI";c.textAlign="center";
+        c.fillText(e.type==="construction"?"\u{1F6A7}":(e.type==="accident"?"\u{1F6A8}":"\u{1F389}"),px,py-9);
+      }
+    }
   }
   if(S.world==="earth"){
     dot(-340,260,"#27ae60",6);
@@ -2714,23 +2754,89 @@ function mapEntries(q){
     .map(o=>({o,d:Math.hypot(o.x-player.x,o.z-player.z)}))
     .sort((a,b)=>a.d-b.d)
     .forEach(({o,d})=>out.push({label:"\u{1F464} "+o.name+" — "+fmtDist(d),go:()=>choosePlayer(o)}));
+  /* live random events, nearest first */
+  EVENTS.list
+    .map(e=>({e,d:Math.hypot(e.x-player.x,e.z-player.z),
+      label:e.type==="construction"?"\u{1F6A7} Road construction":(e.type==="accident"?"\u{1F6A8} Accident":"\u{1F389} Festival ($50!)")}))
+    .filter(x=>!q||x.label.toLowerCase().includes(q))
+    .sort((a,b)=>a.d-b.d)
+    .forEach(({e,d,label})=>out.push({label:label+" — "+fmtDist(d),go:()=>chooseDest(label,e.x,e.z+12,true)}));
   /* fixed places */
   MAP_PLACES.filter(p=>!q||p[0].toLowerCase().includes(q)).forEach(p=>
     out.push({label:p[0],go:()=>chooseDest(p[0],p[1]+(p[3]?WORLD.ox:0),p[2]+(p[3]?WORLD.oz:0),true)}));
   /* nearest-X finders and world travel */
+  /* generic nearest-spot search over a deterministic world grid */
+  function nearestSpot(spotFn,cell,ox,oz,range){
+    const ci=Math.round((player.x-ox)/cell),cj=Math.round((player.z-oz)/cell);
+    let best=null;
+    for(let i=ci-range;i<=ci+range;i++)for(let j=cj-range;j<=cj+range;j++){
+      const sp=spotFn(i,j);
+      if(!sp)continue;
+      const d=Math.hypot(sp.x-player.x,sp.z-player.z);
+      if(!best||d<best.d)best={sp,d};
+    }
+    return best;
+  }
+  function goNearest(label,best,dx,dz){
+    if(best)chooseDest(label+" — "+fmtDist(best.d),best.sp.x+(dx||0),best.sp.z+(dz||0),true);
+    else toast("None found nearby (too much water or mountains)!");
+  }
   const specials=[
     ["\u{1F354} Nearest McDrive",()=>{
       switchWorld("earth");
-      const ci=Math.round((player.x-46)/MCSP),cj=Math.round((player.z-90)/MCSP);
+      goNearest("\u{1F354} Nearest McDrive",nearestSpot(mcdSpot,MCSP,46,90,6),0,-16);
+    }],
+    ["\u{1F6D2} Nearest MEGA MART",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F6D2} Nearest MEGA MART",nearestSpot(hugeShopSpot,HSP,750,390,3),0,58);
+    }],
+    ["\u{1F3F0} Nearest MEGA MANSION",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3F0} Nearest MEGA MANSION",nearestSpot(mansionSpot,MSP,1230,870,3),0,40);
+    }],
+    ["\u{1F95F} Nearest dumpling buyer",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F95F} Nearest dumpling buyer",nearestSpot(buyerSpot,DBSP,270,330,7),0,4);
+    }],
+    ["⛽ Nearest gas station",()=>{
+      switchWorld("earth");
+      goNearest("⛽ Nearest gas station",nearestSpot(gasSpot,GSP,286,150,5),0,0);
+    }],
+    ["\u{1F573}️ Nearest cave",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F573}️ Nearest cave",nearestSpot(caveSpot,CVSP,740,380,5),0,8);
+    }],
+    ["\u{1F68F} Nearest bus stop",()=>{
+      switchWorld("earth");
+      const lx0=Math.round((player.x-30)/120),lz0=Math.round((player.z-30)/120);
       let best=null;
-      for(let i=ci-6;i<=ci+6;i++)for(let j=cj-6;j<=cj+6;j++){
-        const sp=mcdSpot(i,j);
-        if(!sp)continue;
-        const d=Math.hypot(sp.x-player.x,sp.z-player.z);
-        if(!best||d<best.d){best={sp,d};}
+      for(let i=lx0-4;i<=lx0+4;i++)for(let j=lz0-4;j<=lz0+4;j++){
+        if(((i+j)%3+3)%3!==0)continue;
+        const x=i*120+30+11,z=j*120+30+11;
+        const d=Math.hypot(x-player.x,z-player.z);
+        if(!best||d<best.d)best={sp:{x,z},d};
       }
-      if(best)chooseDest("\u{1F354} Nearest McDrive — "+Math.round(best.d)+" m",best.sp.x,best.sp.z-16,true);
-      else toast("No McDrive nearby (too much water or mountains)!");
+      goNearest("\u{1F68F} Nearest bus stop",best);
+    }],
+    ["\u{1F686} Nearest train station",()=>{
+      switchWorld("earth");
+      const rk=railKNear(player.x),sj=Math.round((player.z-STZ)/SCELL);
+      let best=null;
+      for(let k=rk-1;k<=rk+1;k++)for(let j=sj-1;j<=sj+1;j++){
+        const sz=j*SCELL+STZ,x=railC(k,sz)+7;
+        const d=Math.hypot(x-player.x,sz-player.z);
+        if(!best||d<best.d)best={sp:{x,z:sz},d};
+      }
+      goNearest("\u{1F686} Nearest train station",best);
+    }],
+    ["✈️ Nearest airport",()=>{
+      switchWorld("earth");
+      const a=nearestAirports(player.x,player.z,1)[0];
+      chooseDest("✈️ Nearest airport — "+fmtDist(a.dist),a.term.x,a.term.z,true);
+    }],
+    ["\u{1F680} Nearest rocket station",()=>{
+      const rp=nearestRocketPad(player.x,player.z);
+      chooseDest("\u{1F680} Nearest rocket station — "+fmtDist(rp.d),rp.x+8,rp.z,false);
     }],
     ["\u{1F3A2} Stunt Park",()=>{
       const p=stuntPos(Math.round((player.x-1800)/3600),Math.round((player.z-600)/3600));
