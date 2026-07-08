@@ -11,7 +11,7 @@ function addWheel(g,x,z,r,w,front){
   g.add(pivot);
   (g.userData.wheels=g.userData.wheels||[]).push({pivot,spin,r,front:!!front});
 }
-function buildVehicleMesh(type,color){
+function buildVehicleMesh(type,color,top){
   const g=new THREE.Group();g.userData.wheels=[];
   const mat=new THREE.MeshLambertMaterial({color});
   if(type==="car"){
@@ -26,6 +26,19 @@ function buildVehicleMesh(type,color){
     [[-0.72],[0.72]].forEach(p=>{const h=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.16,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));h.position.set(p[0],0.82,2.33);g.add(h);
       const t=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0xd7263d}));t.position.set(p[0],0.82,-2.33);g.add(t);});
     [[-1.02],[1.02]].forEach(p=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,0.24),mat);m.position.set(p[0],1.22,0.75);g.add(m);});
+    /* wheel arches + side skirts */
+    [[-1.06,1.5],[1.06,1.5],[-1.06,-1.5],[1.06,-1.5]].forEach(p=>{
+      const a=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.24,1.18),darkTrim);a.position.set(p[0],0.72,p[1]);g.add(a);});
+    [[-1.07],[1.07]].forEach(p=>{const sk=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.14,2.6),darkTrim);sk.position.set(p[0],0.36,-0.1);g.add(sk);});
+    /* front splitter + twin exhausts */
+    const spl=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.08,0.3),darkTrim);spl.position.set(0,0.32,2.28);g.add(spl);
+    [[-0.5],[0.5]].forEach(p=>{const ex=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.24,8),hubMat);
+      ex.rotation.x=Math.PI/2;ex.position.set(p[0],0.42,-2.34);g.add(ex);});
+    /* supercars get a rear wing */
+    if((top||0)>=340){
+      [[-0.7],[0.7]].forEach(p=>{const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.3,0.1),darkTrim);st.position.set(p[0],1.22,-2.05);g.add(st);});
+      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),mat));wing.position.set(0,1.4,-2.1);g.add(wing);
+    }
     addWheel(g,-0.95,1.5,0.42,0.3,true);addWheel(g,0.95,1.5,0.42,0.3,true);
     addWheel(g,-0.95,-1.5,0.42,0.3,false);addWheel(g,0.95,-1.5,0.42,0.3,false);
     g.userData.camD=13;g.userData.camH=5;
@@ -36,6 +49,12 @@ function buildVehicleMesh(type,color){
     const bar=new THREE.Mesh(new THREE.BoxGeometry(0.86,0.07,0.07),darkTrim);bar.position.set(0,1.4,0.85);g.add(bar);
     const fork=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1),hubMat);fork.rotation.x=0.35;fork.position.set(0,0.85,0.95);g.add(fork);
     const exh=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,1),hubMat);exh.rotation.x=Math.PI/2;exh.position.set(0.26,0.55,-0.7);g.add(exh);
+    /* fairing nose, windscreen, front fender, headlight & tail light */
+    const fair=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.46,0.36,0.5),mat));fair.position.set(0,1.28,0.78);fair.rotation.x=-0.25;g.add(fair);
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(0.4,0.3),glassMat);scr.position.set(0,1.52,0.86);scr.rotation.x=-0.6;g.add(scr);
+    const fen=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.1,0.7),mat);fen.position.set(0,1.02,1);g.add(fen);
+    const hl=new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8),new THREE.MeshBasicMaterial({color:0xfff2b0}));hl.position.set(0,1.3,1.05);g.add(hl);
+    const tl=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.08,0.06),new THREE.MeshBasicMaterial({color:0xd7263d}));tl.position.set(0,1.16,-0.94);g.add(tl);
     addWheel(g,0,1,0.42,0.16,true);addWheel(g,0,-1,0.42,0.2,false);
     g.userData.camD=11;g.userData.camH=4.4;g.userData.rider=true;
   }else{
@@ -43,6 +62,12 @@ function buildVehicleMesh(type,color){
     const st=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.5),mat);st.position.set(0,1.05,-0.55);g.add(st);
     const seat=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.09,0.42),darkTrim);seat.position.set(0,1.3,-0.55);g.add(seat);
     const bar=new THREE.Mesh(new THREE.BoxGeometry(0.66,0.05,0.05),darkTrim);bar.position.set(0,1.35,0.7);g.add(bar);
+    /* real frame tubes, pedals and fenders */
+    const t1=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,1),mat);t1.position.set(0,0.85,0.1);t1.rotation.x=1.0;g.add(t1);
+    const t2=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.85),mat);t2.position.set(0,0.75,-0.3);t2.rotation.x=-0.9;g.add(t2);
+    const crank=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,0.16,10),darkTrim);crank.rotation.z=Math.PI/2;crank.position.set(0,0.5,-0.05);g.add(crank);
+    [[0.12,0.32],[-0.12,-0.32]].forEach(p=>{const pd=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.03,0.1),darkTrim);pd.position.set(p[0],0.5+p[1]*0.3,-0.05+p[1]*0.2);g.add(pd);});
+    [[0.75],[-0.75]].forEach(p=>{const f=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.05,0.5),darkTrim);f.position.set(0,1.28,p[0]);g.add(f);});
     addWheel(g,0,0.75,0.38,0.08,true);addWheel(g,0,-0.75,0.38,0.08,false);
     g.userData.camD=9;g.userData.camH=3.8;g.userData.rider=true;
   }
@@ -84,6 +109,11 @@ function buildBusMesh(color){
   c.fillStyle="#ffd75e";c.font="bold 20px Segoe UI";c.textAlign="center";c.fillText("CITY BUS",64,23);
   const sg=new THREE.Mesh(new THREE.PlaneGeometry(1.8,0.45),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)}));
   sg.position.set(0,3.05,5.28);g.add(sg);
+  /* roof AC unit, side stripe, mirrors & tail lights */
+  const ac=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.35,3),darkTrim);ac.position.set(0,3.4,-1);g.add(ac);
+  [[1.33],[-1.33]].forEach(p=>{const st=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.3,9.6),new THREE.MeshLambertMaterial({color:0xf4f7fb}));st.position.set(p[0],1.15,0);g.add(st);});
+  [[1.5],[-1.5]].forEach(p=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.3,0.16),darkTrim);m.position.set(p[0],2.9,5.1);g.add(m);});
+  [[-0.9],[0.9]].forEach(p=>{const t=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.08),new THREE.MeshBasicMaterial({color:0xd7263d}));t.position.set(p[0],0.9,-5.28);g.add(t);});
   g.userData.camD=18;g.userData.camH=7;
   return g;
 }
@@ -106,6 +136,12 @@ function buildTrainMesh(color){
     return u;
   }
   const loco=unit(12,body,true);loco.position.z=10;G.add(loco);
+  { /* pantograph on the locomotive + a yellow warning nose stripe */
+    const a1=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2.4),dark);a1.position.set(0,4.9,2);a1.rotation.z=0.5;loco.add(a1);
+    const a2=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,2.4),dark);a2.position.set(0,5.9,2);a2.rotation.z=-0.5;loco.add(a2);
+    const cb=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.08,0.3),dark);cb.position.set(0,6.7,2);loco.add(cb);
+    const stripe=new THREE.Mesh(new THREE.BoxGeometry(3.02,0.5,1.42),new THREE.MeshLambertMaterial({color:0xf4d35e}));stripe.position.set(0,1.1,6.6);loco.add(stripe);
+  }
   const c1=unit(11,grey,false);c1.position.z=-3;G.add(c1);
   const c2=unit(11,body,false);c2.position.z=-15.5;G.add(c2);
   return G;
@@ -124,6 +160,10 @@ function buildPlaneMesh(color){
   [-4.6,4.6].forEach(o=>{const eng=new THREE.Mesh(new THREE.CylinderGeometry(0.65,0.65,2.2,10),dark);eng.rotation.x=Math.PI/2;eng.position.set(o,1.6,1.4);G.add(eng);});
   [[-2.2,0.9],[2.2,0.9],[0,6.4]].forEach(p=>{const gl=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,1.4),dark);gl.position.set(p[0],0.9,p[1]);G.add(gl);
     const w=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.3,12),tireMat);w.rotation.z=Math.PI/2;w.position.set(p[0],0.35,p[1]);G.add(w);});
+  /* winglets, cabin window band and a tail beacon */
+  [[-9.4],[9.4]].forEach(p=>{const wl=new THREE.Mesh(new THREE.BoxGeometry(0.15,1.1,1.2),blue);wl.position.set(p[0],2.8,0.5);G.add(wl);});
+  [[1.36],[-1.36]].forEach(p=>{const band=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.5,11),dark);band.position.set(p[0],2.9,0);G.add(band);});
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),new THREE.MeshBasicMaterial({color:0xff4444}));beacon.position.set(0,5.9,-7);G.add(beacon);
   return G;
 }
 /* ================= FLEETS: player, trains, planes, buses, traffic ================= */
@@ -169,6 +209,14 @@ function buildRocketMesh(){
   for(let i=0;i<3;i++){
     const w=new THREE.Mesh(new THREE.SphereGeometry(0.42,8,8),glassMat);
     w.position.set(0,12.5-i*2.6,2.1);G.add(w);
+  }
+  /* landing legs + grid fins, like a real booster */
+  for(let i=0;i<4;i++){
+    const a=i*Math.PI/2+Math.PI/4;
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,4.6),new THREE.MeshLambertMaterial({color:0x2f3542}));
+    leg.position.set(Math.sin(a)*2.9,1.6,Math.cos(a)*2.9);leg.rotation.z=Math.cos(a)*0.5;leg.rotation.x=-Math.sin(a)*0.5;G.add(leg);
+    const fin=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.9,0.08),new THREE.MeshLambertMaterial({color:0x9aa0a8}));
+    fin.position.set(Math.sin(a)*2.35,16.4,Math.cos(a)*2.35);fin.rotation.y=a;G.add(fin);
   }
   const flame=new THREE.Mesh(new THREE.ConeGeometry(1.7,7,10),new THREE.MeshBasicMaterial({color:0xff9c33,transparent:true,opacity:0.9}));
   flame.rotation.x=Math.PI;flame.position.y=-3;flame.visible=false;G.add(flame);

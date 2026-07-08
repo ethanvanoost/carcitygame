@@ -59,6 +59,18 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            "$other": { ".validate": false }
          }
        },
+       "profiles": {
+         "$name": {
+           ".read": true,
+           ".write": "!data.exists() || data.child('t').val() === newData.child('t').val()",
+           ".validate": "newData.hasChildren(['t','v'])",
+           "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+           "name": { ".validate": "newData.isString() && newData.val().length <= 16" },
+           "v": { ".validate": "newData.isNumber()" },
+           "own": { ".validate": "newData.isString() && newData.val().length <= 4000" },
+           "$other": { ".validate": false }
+         }
+       },
        "chat": {
          ".read": true,
          "$id": {
@@ -79,7 +91,11 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    part is what lets players **see each other driving around**: everyone in a world
    broadcasts their position there a few times per second. The `usernames` part makes
    usernames **unique**: the first player to claim a name owns it (each device saves a
-   secret token, so nobody can take a name that's already claimed). The `chat` part is
+   secret token, so nobody can take a name that's already claimed). The `profiles` part
+   stores each player's **money and bought vehicles on their username**, so your progress
+   follows you to any device where you claim your name: only the device that owns the
+   username's secret token can update its profile (everyone may read it, nobody else can
+   write it). The `chat` part is
    the **public chat**: anyone can post (max 200 characters), nobody can edit
    other people's messages, and messages **auto-delete after 5 minutes** (the game
    cleans up any message older than that; the rules only allow deleting old messages,

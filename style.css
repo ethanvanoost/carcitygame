@@ -220,3 +220,25 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 }
 #destList button{text-align:left;padding:11px 14px;border-radius:9px;border:1px solid var(--line);background:#141b2a}
 #destList button:hover{border-color:var(--acc2)}
+
+/* ---- Round 11: ownership, garage showcase, fuel gauge ---- */
+.card .pr{margin-top:6px;font-size:12px;font-weight:700}
+.card .pr.own{color:#4ade80}
+.card .pr.buy{color:#ffb02e}
+.card.locked{opacity:.72}
+.card.locked:hover{opacity:1}
+#garagePanel{position:fixed;inset:0;display:none;flex-direction:column;justify-content:space-between;pointer-events:none;z-index:40;padding:22px}
+#garagePanel.open{display:flex}
+#garTop{pointer-events:auto;background:rgba(13,17,26,.86);border:1px solid var(--line);border-radius:14px;padding:14px 20px;align-self:flex-start;max-width:min(94vw,520px)}
+#garTop h2{margin:0 0 4px;font-size:22px}
+#garInfo{color:var(--dim);font-size:13px}
+#garBottom{pointer-events:auto;background:rgba(13,17,26,.86);border:1px solid var(--line);border-radius:14px;padding:14px 18px;align-self:center;display:flex;flex-direction:column;gap:12px;max-width:min(94vw,560px)}
+#garColors{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.gcol{width:34px;height:34px;border-radius:50%;border:2px solid #232b3d;cursor:pointer}
+.gcol.on{border-color:#fff;box-shadow:0 0 0 3px var(--acc2)}
+#garBtns{display:flex;gap:10px;justify-content:center}
+#garDrive{font-size:18px;padding:12px 34px}
+#fuelWrap{display:flex;align-items:center;gap:8px;margin-top:6px}
+#fuelBar{flex:1;height:8px;border-radius:5px;background:#1a2233;border:1px solid var(--line);overflow:hidden}
+#fuelFill{display:block;height:100%;width:100%;background:#4ade80;border-radius:4px}
+#fuelTxt{font-size:11px;color:var(--dim);white-space:nowrap}

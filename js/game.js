@@ -260,6 +260,7 @@ function goSpawn(){
   switchWorld("earth");
   const sx=WORLD.ox+6,sz=WORLD.oz+6;
   player.inRocket=false;
+  if(CAVE.in)exitCave(true);
   player.x=sx;player.z=sz;player.vy=0;
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   if(player.drive){player.drive=null;}
@@ -270,15 +271,96 @@ function goSpawn(){
   updateChunks(sx,sz,true);updateLandmarks(sx,sz);
   toast("Teleported to spawn"+(WORLD.name?" of world \""+WORLD.name+"\"":""));
 }
+/* pick a vehicle in the menu: owned ones open your garage, the rest cost money */
+function selectVehicle(v){
+  if(OWN.has(v.name)){openGarage(v);return;}
+  const p=vehPrice(v);
+  if(MONEY.v<p){
+    toast("\u{1F4B0} The "+v.name+" costs $"+fmtMoney(p)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings & win races!");
+    return;
+  }
+  MONEY.v-=p;OWN.add(v.name);
+  updateMoneyUI();saveGame();profileSave(true);
+  toast("\u{1F389} You bought the "+v.name+" for $"+fmtMoney(p)+"!");
+  renderMenu();
+  openGarage(v);
+}
+/* ---------- the garage: a showcase room where you paint your car, then DRIVE ---------- */
+const GAR={v:null,color:0,mesh:null,room:null,ang:0,cy:-620};
+const GAR_COLORS=[0xd7263d,0xff7f11,0xf4d35e,0x8ac926,0x2ec4b6,0x1b98e0,0x0f4c81,0x9b5de5,0xff5d8f,0xefefef,0x3a3a3a,0x111111,0xffb02e,0xb56576,0x6d28d9,0x14532d];
+function buildGarageRoom(){
+  if(GAR.room)return;
+  const g=new THREE.Group(),y=GAR.cy;
+  const wall=new THREE.MeshLambertMaterial({color:0x232b3d,side:THREE.BackSide});
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(14,14,9,24,1,false),wall);
+  shell.position.set(0,y+4.5,0);g.add(shell);
+  const floor=new THREE.Mesh(new THREE.CylinderGeometry(14,14,0.4,24),new THREE.MeshLambertMaterial({color:0x323a4d}));
+  floor.position.set(0,y-0.2,0);g.add(floor);
+  const disc=new THREE.Mesh(new THREE.CylinderGeometry(4.6,5,0.35,28),new THREE.MeshLambertMaterial({color:0x4a5670}));
+  disc.position.set(0,y+0.18,0);g.add(disc);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(5,0.1,8,40),new THREE.MeshBasicMaterial({color:0x3fd0ff}));
+  ring.rotation.x=Math.PI/2;ring.position.set(0,y+0.42,0);g.add(ring);
+  for(let i=0;i<6;i++){
+    const a=i*Math.PI/3;
+    const strip=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.06,6),new THREE.MeshBasicMaterial({color:0xf4f7fb}));
+    strip.position.set(Math.sin(a)*6,y+8.6,Math.cos(a)*6);strip.rotation.y=a;g.add(strip);
+  }
+  const lamp=new THREE.PointLight(0xffffff,1.4,60);lamp.position.set(0,y+7,0);g.add(lamp);
+  const lamp2=new THREE.PointLight(0x9fd8ff,0.5,40);lamp2.position.set(6,y+3,6);g.add(lamp2);
+  scene.add(g);
+  GAR.room=g;
+}
+function garageSetMesh(){
+  if(GAR.mesh){GAR.room.remove(GAR.mesh);disposeGroup(GAR.mesh);}
+  const m=buildVehicleMesh(GAR.v.type,GAR.color,GAR.v.top);
+  if(m.userData.riderMesh)m.userData.riderMesh.visible=false;
+  m.position.set(0,GAR.cy+0.38,0);
+  GAR.room.add(m);GAR.mesh=m;
+}
+function renderGarageColors(){
+  const w=$("garColors");w.innerHTML="";
+  GAR_COLORS.forEach(c=>{
+    const b=document.createElement("button");
+    b.className="gcol"+(c===GAR.color?" on":"");
+    b.style.background="#"+c.toString(16).padStart(6,"0");
+    b.title="Paint";
+    b.onclick=()=>{GAR.color=c;PAINT[GAR.v.name]=c;garageSetMesh();renderGarageColors();saveGame();};
+    w.appendChild(b);
+  });
+}
+function openGarage(v){
+  GAR.v=v;GAR.color=paintOf(v);GAR.ang=0;
+  buildGarageRoom();garageSetMesh();renderGarageColors();
+  $("garName").textContent=EMOJI[v.type]+" "+v.name;
+  $("garInfo").textContent=TYPE_LABEL[v.type]+" · top speed "+Math.round(uConv(v.top))+" "+uLabel()+" · pick a paint color, then hit DRIVE!";
+  S.mode="garage";
+  $("menu").style.display="none";
+  $("hud").classList.remove("show");
+  $("garagePanel").classList.add("open");
+}
+function closeGarage(back){
+  $("garagePanel").classList.remove("open");
+  if(GAR.mesh){GAR.room.remove(GAR.mesh);disposeGroup(GAR.mesh);GAR.mesh=null;}
+  if(back){S.mode="menu";$("menu").style.display="flex";}
+}
+function updateGarage(dt){
+  GAR.ang+=dt*0.5;
+  const cy=GAR.cy;
+  camera.position.set(Math.sin(GAR.ang)*8.6,cy+3.4,Math.cos(GAR.ang)*8.6);
+  camera.lookAt(0,cy+1.1,0);
+}
+$("garBack").onclick=()=>closeGarage(true);
+$("garDrive").onclick=()=>{const v=GAR.v;closeGarage(false);startGame(v);};
 function startGame(v){
   switchWorld("earth");
   player.inRocket=false;
+  if(CAVE.in)exitCave(true);
   S.selected=v;S.mode="game";
   $("menu").style.display="none";$("hud").classList.add("show");
   $("vehName").textContent=v.name;
   if(myVehicle)scene.remove(myVehicle.mesh);
   const sx=WORLD.ox+6,sz=WORLD.oz+6;
-  const mesh=buildVehicleMesh(v.type,v.color);scene.add(mesh);
+  const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);scene.add(mesh);
   myVehicle={mesh,type:v.type,top:v.top,x:sx,z:sz,yaw:Math.PI,speed:0,vy:0,y:0,grounded:true,roll:0};
   if(mesh.userData.riderMesh)mesh.userData.riderMesh.visible=true;
   player.drive=myVehicle;player.onFoot=false;
@@ -573,10 +655,259 @@ function addMoney(n){
     MONEY.rainbow=true;
     toast("\u{1F308} $1,000! Your money text is RAINBOW forever!!");
   }
-  updateMoneyUI();saveGame();
+  updateMoneyUI();saveGame();profileSave();
 }
 $("bMoney").onclick=()=>{updateMoneyUI();$("moneyModal").classList.toggle("open");};
 $("moneyClose").onclick=()=>$("moneyModal").classList.remove("open");
+/* ---------- fuel: cars & motorcycles run dry after 699 km — fill up at ⛽ gas stations ---------- */
+const FUEL={cap:699,km:699,warned:false};
+function fuelVehicle(){return myVehicle&&myVehicle.type!=="bike";}
+function nearGasSt(){
+  for(let i=gasStations.length-1;i>=0;i--){
+    const s=gasStations[i];
+    if(offScene(s.g)){gasStations.splice(i,1);continue;}
+    if(Math.hypot(player.x-s.x,player.z-s.z)<18)return s;
+  }
+  return null;
+}
+function updateFuel(dt,speedMS){
+  if(player.drive!==myVehicle||!fuelVehicle()||S.world!=="earth")return;
+  const before=FUEL.km;
+  FUEL.km=Math.max(0,FUEL.km-speedMS*dt/1000);
+  if(FUEL.km===0&&before>0)toast("⛽ OUT OF GAS! Your engine died — get to a gas station and press T.");
+  else if(FUEL.km<50&&!FUEL.warned){FUEL.warned=true;toast("⛽ Low fuel — less than 50 km left! Find a GAS station (one every ~840 m).");}
+  if(FUEL.km>50)FUEL.warned=false;
+}
+function tryRefuel(){
+  const gs=nearGasSt();
+  if(!gs||!fuelVehicle())return false;
+  if(Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)>25){toast("⛽ Bring your car to the pumps first!");return true;}
+  if(FUEL.km>=FUEL.cap-1){toast("⛽ Your tank is already full ("+FUEL.cap+" km)!");return true;}
+  const missing=FUEL.cap-FUEL.km;
+  const cost=Math.min(MONEY.v,Math.ceil(missing*0.05));
+  FUEL.km=FUEL.cap;
+  if(cost>0){MONEY.v-=cost;updateMoneyUI();profileSave();}
+  saveGame();
+  toast("⛽ Filled up +"+Math.round(missing)+" km"+(cost>0?" — paid $"+cost:" — on the house!"));
+  return true;
+}
+/* ---------- caves: walk up to a mountain cave mouth and press T to go inside ---------- */
+const CAVE={in:false,rx:0,rz:0,cx:0,cz:0,fy:-648,room:null,crystals:[]};
+function nearCaveEntrance(){
+  for(let i=caves.length-1;i>=0;i--){
+    const c=caves[i];
+    if(offScene(c.g)){caves.splice(i,1);continue;}
+    if(Math.hypot(player.x-c.x,player.z-c.z)<10)return c;
+  }
+  return null;
+}
+function buildCaveRoom(){
+  const g=new THREE.Group(),y=CAVE.fy,cx=CAVE.cx,cz=CAVE.cz;
+  const rock=new THREE.MeshLambertMaterial({color:0x3f3a35});
+  const rock2=new THREE.MeshLambertMaterial({color:0x55504a});
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(46,1,34),rock2);floor.position.set(cx,y-0.5,cz);g.add(floor);
+  const ceil=new THREE.Mesh(new THREE.BoxGeometry(46,1,34),rock);ceil.position.set(cx,y+7.5,cz);g.add(ceil);
+  [[0,-17.5,46,1],[0,17.5,46,1],[-23.5,0,1,36],[23.5,0,1,36]].forEach(p=>{
+    const w=new THREE.Mesh(new THREE.BoxGeometry(p[2],9,p[3]),rock);
+    w.position.set(cx+p[0],y+3.5,cz+p[1]);g.add(w);});
+  /* stalagmites & stalactites */
+  const sr=rng(Math.round(cx*13+cz*7));
+  for(let i=0;i<14;i++){
+    const sx=cx+(sr()-0.5)*38,sz2=cz+(sr()-0.5)*26;
+    if(Math.hypot(sx-cx,sz2-cz)<4)continue;
+    const up=sr()<0.5;
+    const cone=new THREE.Mesh(new THREE.ConeGeometry(0.4+sr()*0.5,1.4+sr()*2.4,7),rock2);
+    if(up)cone.position.set(sx,y+0.7,sz2);
+    else{cone.rotation.x=Math.PI;cone.position.set(sx,y+6.4,sz2);}
+    g.add(cone);
+  }
+  /* glowing crystals — walk into them to collect ($25 each) */
+  CAVE.crystals=[];
+  const cols=[0x7df9ff,0xb388ff,0x7cff9e];
+  for(let i=0;i<3;i++){
+    const a=i*2.1+0.6,d=8+i*3;
+    const px=cx+Math.sin(a)*d,pz=cz+Math.cos(a)*d*0.6;
+    const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.7),new THREE.MeshBasicMaterial({color:cols[i]}));
+    cr.position.set(px,y+0.9,pz);g.add(cr);
+    const lt=new THREE.PointLight(cols[i],0.8,14);lt.position.set(px,y+2,pz);g.add(lt);
+    CAVE.crystals.push({mesh:cr,x:px,z:pz,got:false});
+  }
+  const lamp=new THREE.PointLight(0xffc38a,0.9,44);lamp.position.set(cx,y+5,cz);g.add(lamp);
+  /* glowing exit mat */
+  const mat=new THREE.Mesh(new THREE.PlaneGeometry(3,3),new THREE.MeshBasicMaterial({color:0x4ade80}));
+  mat.rotation.x=-Math.PI/2;mat.position.set(cx,y+0.06,cz+14);g.add(mat);
+  scene.add(g);
+  CAVE.room=g;
+}
+function enterCave(c){
+  if(player.drive){
+    if(player.drive===myVehicle&&Math.abs(myVehicle.speed)>3){toast("Slow down before entering the cave!");return;}
+    player.drive=null;
+  }
+  CAVE.rx=c.x;CAVE.rz=c.z+7;
+  CAVE.cx=Math.round(c.x);CAVE.cz=Math.round(c.z);
+  if(CAVE.room){scene.remove(CAVE.room);disposeGroup(CAVE.room);CAVE.room=null;}
+  buildCaveRoom();
+  CAVE.in=true;
+  player.onFoot=true;player.mesh.visible=true;player.vy=0;player.grounded=true;
+  player.x=CAVE.cx;player.z=CAVE.cz+10;player.y=CAVE.fy;
+  toast("\u{1F573}️ You entered the cave — grab the glowing crystals! Press T to go back outside.");
+}
+function exitCave(silent){
+  CAVE.in=false;
+  if(CAVE.room){scene.remove(CAVE.room);disposeGroup(CAVE.room);CAVE.room=null;}
+  player.x=CAVE.rx;player.z=CAVE.rz;
+  player.y=terrainH(player.x,player.z);player.vy=0;player.grounded=true;
+  if(!silent)toast("\u{1F31E} Back outside — the cave stays right here.");
+}
+function updateCave(){
+  if(!CAVE.in)return;
+  for(const cr of CAVE.crystals){
+    if(cr.got)continue;
+    cr.mesh.rotation.y+=0.03;
+    if(Math.hypot(player.x-cr.x,player.z-cr.z)<2){
+      cr.got=true;cr.mesh.visible=false;
+      addMoney(25);
+      toast("\u{1F48E} Crystal collected — +$25!");
+    }
+  }
+}
+/* ---------- random events: road construction, accidents & festivals ---------- */
+const EVENTS={list:[],timer:25};
+function eventSpeedCap(x,z){
+  let cap=Infinity;
+  for(const e of EVENTS.list)if(e.cap&&Math.hypot(x-e.x,z-e.z)<e.zone)cap=Math.min(cap,e.cap);
+  return cap;
+}
+function eventRoadPoint(){
+  const axis=Math.random()<0.5?"z":"x";
+  const p=axis==="z"?player.x:player.z;
+  const line=Math.round((p-30)/120)*120+30+120*(Math.floor(Math.random()*3)-1);
+  const along=(axis==="z"?player.z:player.x)+(Math.random()<0.5?-1:1)*(180+Math.random()*180);
+  const off=Math.random()<0.5?3.5:-3.5;
+  return axis==="z"?{x:line+off,z:along,axis}:{x:along,z:line+off,axis};
+}
+function spawnEvent(){
+  const type=["construction","accident","festival"][Math.floor(Math.random()*3)];
+  const g=new THREE.Group();
+  const e={type,g,life:150,x:0,z:0};
+  if(type==="construction"){
+    const p=eventRoadPoint();e.x=p.x;e.z=p.z;e.zone=22;e.cap=8;
+    const y=terrainH(p.x,p.z);
+    const coneM=new THREE.MeshLambertMaterial({color:0xff7f11});
+    for(let i=0;i<6;i++){
+      const c=new THREE.Mesh(new THREE.ConeGeometry(0.3,0.85,8),coneM);
+      c.position.set(p.x+(p.axis==="z"?((i%2)*3-1.5):i*2.2-5.5),y+0.42,p.z+(p.axis==="z"?i*2.2-5.5:((i%2)*3-1.5)));
+      g.add(c);
+    }
+    const bar=new THREE.Mesh(new THREE.BoxGeometry(4.4,0.5,0.2),new THREE.MeshBasicMaterial({color:0xffd75e}));
+    bar.position.set(p.x,y+1.1,p.z);if(p.axis==="x")bar.rotation.y=Math.PI/2;g.add(bar);
+    [[-2],[2]].forEach(q=>{const leg=new THREE.Mesh(new THREE.BoxGeometry(0.14,1.1,0.14),darkTrim);
+      leg.position.set(p.x+(p.axis==="z"?q[0]:0),y+0.55,p.z+(p.axis==="z"?0:q[0]));g.add(leg);});
+    const digger=new THREE.Mesh(new THREE.BoxGeometry(2.4,1.6,3),new THREE.MeshLambertMaterial({color:0xf4d35e}));
+    digger.position.set(p.x+(p.axis==="z"?4.5:0),y+0.8,p.z+(p.axis==="z"?0:4.5));g.add(digger);
+    toast("\u{1F6A7} ROAD CONSTRUCTION near ("+Math.round(e.x)+", "+Math.round(e.z)+") — slow down to pass!");
+  }else if(type==="accident"){
+    const p=eventRoadPoint();e.x=p.x;e.z=p.z;e.zone=20;e.cap=6;
+    const y=terrainH(p.x,p.z);
+    const c1=buildVehicleMesh("car",COLORS[Math.floor(Math.random()*COLORS.length)]);
+    c1.position.set(p.x-1.5,y,p.z-2);c1.rotation.y=Math.random()*6.3;c1.rotation.z=0.14;g.add(c1);
+    const c2=buildVehicleMesh("car",COLORS[Math.floor(Math.random()*COLORS.length)]);
+    c2.position.set(p.x+1.5,y,p.z+2.4);c2.rotation.y=Math.random()*6.3;g.add(c2);
+    const pol=buildEmergencyMesh("police");
+    pol.position.set(p.x+(p.axis==="z"?0:8),y,p.z+(p.axis==="z"?8:0));g.add(pol);
+    e.lights=pol.userData.lights;
+    toast("\u{1F6A8} ACCIDENT on the road near ("+Math.round(e.x)+", "+Math.round(e.z)+") — police on site, drive slowly!");
+  }else{
+    /* festival: an off-road party — visit it on foot for +$50 */
+    let fx=0,fz=0,ok=false;
+    for(let i=0;i<10;i++){
+      const a=Math.random()*Math.PI*2,d=150+Math.random()*120;
+      fx=player.x+Math.sin(a)*d;fz=player.z+Math.cos(a)*d;
+      if(!keepClear(fx,fz)&&rawH(fx,fz)<14){ok=true;break;}
+    }
+    if(!ok){disposeGroup(g);return;}
+    e.x=fx;e.z=fz;
+    const y=terrainH(fx,fz);
+    const stage=new THREE.Mesh(new THREE.BoxGeometry(8,1,5),new THREE.MeshLambertMaterial({color:0x6d28d9}));
+    stage.position.set(fx,y+0.5,fz);g.add(stage);
+    const back=new THREE.Mesh(new THREE.BoxGeometry(8,4,0.4),new THREE.MeshLambertMaterial({color:0x9b5de5}));
+    back.position.set(fx,y+3,fz-2.3);g.add(back);
+    const bn=new THREE.Mesh(new THREE.BoxGeometry(6,0.7,0.1),new THREE.MeshBasicMaterial({color:0xffd75e}));
+    bn.position.set(fx,y+4.6,fz-2.3);g.add(bn);
+    e.balloons=[];
+    for(let i=0;i<6;i++){
+      const bx=fx-6+i*2.4,bz=fz+4;
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,2.6),darkTrim);st.position.set(bx,y+1.3,bz);g.add(st);
+      const bl=new THREE.Mesh(new THREE.SphereGeometry(0.45,10,10),new THREE.MeshLambertMaterial({color:COLORS[i%COLORS.length]}));
+      bl.position.set(bx,y+2.9,bz);bl.userData.y0=y+2.9;g.add(bl);
+      e.balloons.push(bl);
+    }
+    for(let i=0;i<4;i++)spawnPed(fx-5+Math.random()*10,fz+2+Math.random()*5,"wander");
+    toast("\u{1F389} A FESTIVAL started near ("+Math.round(fx)+", "+Math.round(fz)+") — visit it on foot for $50!");
+  }
+  scene.add(g);
+  EVENTS.list.push(e);
+}
+function updateEvents(dt){
+  if(S.world!=="earth")return;
+  EVENTS.timer-=dt;
+  if(EVENTS.timer<=0){
+    EVENTS.timer=50+Math.random()*70;
+    if(EVENTS.list.length<4)spawnEvent();
+  }
+  const now=performance.now();
+  for(let i=EVENTS.list.length-1;i>=0;i--){
+    const e=EVENTS.list[i];
+    e.life-=dt;
+    if(e.lights){const on=Math.floor(now/250)%2===0;e.lights[0].visible=on;e.lights[1].visible=!on;}
+    if(e.balloons){
+      e.balloons.forEach((b,bi)=>{b.position.y=b.userData.y0+Math.sin(now/700+bi)*0.5;});
+      if(!e.done&&player.onFoot&&Math.hypot(player.x-e.x,player.z-e.z)<10){
+        e.done=true;addMoney(50);
+        toast("\u{1F389} You made it to the festival — +$50!");
+      }
+    }
+    if(e.life<=0||Math.hypot(player.x-e.x,player.z-e.z)>900){
+      scene.remove(e.g);disposeGroup(e.g);
+      EVENTS.list.splice(i,1);
+    }
+  }
+}
+/* ---------- your money & cars follow your USERNAME (saved online in Firebase) ---------- */
+const PROF={t:0,dirty:false};
+function profileKey(){
+  const n=cleanServerName(localStorage.getItem("vc4pname")||"");
+  return n?n.toLowerCase().replace(/[^a-z0-9]/g,"_"):null;
+}
+async function profileLoad(){
+  if(!SERVER_READY)return;
+  const k=profileKey();if(!k)return;
+  try{
+    const r=await fetch(SERVER_API+"/profiles/"+k+".json",{cache:"no-store"});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d&&d.t===myToken()){
+      if(typeof d.v==="number"&&d.v>MONEY.v)MONEY.v=d.v;
+      if(MONEY.v>=1000)MONEY.rainbow=true;
+      (typeof d.own==="string"?d.own.split("|"):[]).forEach(n=>{if(n)OWN.add(n);});
+      updateMoneyUI();renderMenu();saveGame();
+    }
+    profileSave(true);
+  }catch(e){}
+}
+function profileSave(force){
+  if(!SERVER_READY)return;
+  const k=profileKey();if(!k)return;
+  const now=Date.now();
+  if(!force&&now-PROF.t<10000){PROF.dirty=true;return;}
+  PROF.t=now;PROF.dirty=false;
+  try{
+    fetch(SERVER_API+"/profiles/"+k+".json",{method:"PUT",
+      body:JSON.stringify({t:myToken(),name:localStorage.getItem("vc4pname")||"",v:MONEY.v,own:[...OWN].join("|")})
+    }).catch(()=>{});
+  }catch(e){}
+}
 /* ---------- dumpling buyers: sell your dumplings for money ---------- */
 const SELL={sel:new Set()};
 function nearBuyer(){
@@ -1006,6 +1337,7 @@ async function doClaim(){
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
   $("nameModal").classList.remove("open");
+  profileLoad();
   toast(res.offline
     ?"\u{1F464} You are \""+res.name+"\" (offline — not reserved online yet)"
     :"\u{1F464} Username \""+res.name+"\" is yours!");
@@ -1185,7 +1517,7 @@ function mpTick(dt){
     r:Math.round((src.yaw||0)*100)/100,
     f:player.onFoot?1:0,
     v:player.drive?player.drive.type:"car",
-    c:S.selected?S.selected.color:0x3fd0ff,
+    c:paintOf(S.selected),
     t:Date.now()};
   const sig=[d.x,d.z,d.y,d.r,d.f,d.v,d.n].join("|");
   if(sig===MP.lastSig&&now-MP.lastSendAt<5000)return;  /* parked: just a heartbeat every 5 s */
@@ -1201,12 +1533,13 @@ $("pName").addEventListener("change",async()=>{
   localStorage.setItem("vc4pname",res.name);
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
+  profileLoad();
   toast(res.offline
     ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"
     :"\u{1F464} Username \""+res.name+"\" is yours!");
 });
 let _saveT=0;
-function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();}}
+function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();if(PROF.dirty)profileSave(true);}}
 function saveGame(){
   try{
     localStorage.setItem("vc4save",JSON.stringify({
@@ -1214,7 +1547,8 @@ function saveGame(){
       unopened:DUMP.unopened,owned:DUMP.owned,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
-      world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km
+      world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
+      own:[...OWN],paint:PAINT,fuel:FUEL.km
     }));
   }catch(e){}
 }
@@ -1228,9 +1562,12 @@ function loadGame(){
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
     if(d.world&&d.world.name){WORLD.name=d.world.name;WORLD.ox=d.world.ox||0;WORLD.oz=d.world.oz||0;}
     S.km=d.km||0;
+    (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(n);});
+    if(d.paint&&typeof d.paint==="object")for(const k in d.paint)if(typeof d.paint[k]==="number")PAINT[k]=d.paint[k];
+    if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
   }catch(e){}
 }
-loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();
+loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();profileLoad();
 addEventListener("beforeunload",saveGame);
 /* ---------- stations / stops / calling ---------- */
 function nearStationInfo(){
@@ -1260,8 +1597,17 @@ function nearTerminal(){
 }
 function tryCall(){
   if(!player.onFoot&&!player.drive)return;
+  /* inside a cave: T brings you back outside */
+  if(CAVE.in){exitCave();return;}
   /* indoor stuff first: reception, beds, chairs */
   if(tryFurniture())return;
+  /* cave mouths in the mountains */
+  if(S.world==="earth"){
+    const cv=nearCaveEntrance();
+    if(cv){enterCave(cv);return;}
+    /* gas stations: fill the tank */
+    if(nearGasSt()&&fuelVehicle()){tryRefuel();return;}
+  }
   /* race start flag (works on foot or in your car) */
   if(S.world==="earth"&&nearRaceFlag()){
     if(RACE.on)endRace(false);else startRace();
@@ -1490,6 +1836,8 @@ function driveVehicle(v,dt){
   const accF=isBike?6:(isMoto?16:14+v.top/25);
   const st=steerInput();
   let thr=thrInput();
+  /* out of gas: the engine is dead (bicycles never need fuel) */
+  if(v===myVehicle&&v.type!=="bike"&&FUEL.km<=0&&thr>0)thr=0;
   /* braking switches the cruise control off */
   if(ACC.on&&(thr<0||spaceInput())){
     ACC.on=false;
@@ -1507,6 +1855,9 @@ function driveVehicle(v,dt){
     if(thr===0)v.speed*=Math.pow(0.985,dt*60);
     if(spaceInput())v.speed*=Math.pow(0.94,dt*60);
     v.speed=Math.max(-limit*0.3,Math.min(limit,v.speed));
+    /* construction & accident zones force you to crawl past */
+    const evc=eventSpeedCap(v.x,v.z);
+    if(isFinite(evc)&&v.speed>evc)v.speed+=(evc-v.speed)*Math.min(1,6*dt);
     const grip=1/(1+Math.abs(v.speed)/45);
     const agility=isBike?2.8:(isMoto?2.5:2.1);
     v.yaw+=st*agility*grip*(spaceInput()?1.5:1)*Math.max(-1,Math.min(1,v.speed/9))*dt;
@@ -1583,7 +1934,7 @@ function walkPlayer(dt){
   const moving=mx||mz;
   const nx=player.x+mx*sp*dt,nz=player.z+mz*sp*dt;
   let blocked=false;
-  if(S.world==="earth")for(const b of buildings){
+  if(S.world==="earth"&&!CAVE.in)for(const b of buildings){
     if(!b.alive||b.walkThru)continue;
     if(Math.abs(nx-b.x)<b.w/2+0.4&&Math.abs(nz-b.z)<b.d/2+0.4){
       if(!(Math.abs(player.x-b.x)<b.w/2+0.4&&Math.abs(player.z-b.z)<b.d/2+0.4))blocked=true;
@@ -1599,7 +1950,12 @@ function walkPlayer(dt){
       player.z=Math.max(rm.z-rm.hd,Math.min(rm.z+rm.hd,player.z));
     }
   }
-  let gh=terrainH(player.x,player.z);
+  /* inside a cave: flat rock floor, and the walls keep you in */
+  if(CAVE.in){
+    player.x=Math.max(CAVE.cx-21,Math.min(CAVE.cx+21,player.x));
+    player.z=Math.max(CAVE.cz-15,Math.min(CAVE.cz+15,player.z));
+  }
+  let gh=CAVE.in?CAVE.fy:terrainH(player.x,player.z);
   const py=platformYAt(player.x,player.z);   // stand on station platforms & stairs
   if(py>gh)gh=py;
   const dk=deckYAt(player.x,player.z,player.y);   // parking-garage floors & ramp
@@ -2673,7 +3029,8 @@ function updateHint(){
   else if(player.inPlane){const p=player.planeRef;txt=p.state==="piloted"?"Flying (admin controls)":"On the plane";showF=true;}
   else if(player.inBus){txt="On the bus — F to get off when stopped";showF=true;}
   else{
-    if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
+    if(CAVE.in){txt="\u{1F573}️ In the cave — grab the glowing crystals · press T to go back outside";showT=true;}
+    else if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2);
       if(dk){txt=dk.mansion?(rentedAt(dk.id)?"Your MEGA MANSION — press T at the reception":"\u{1F3F0} MEGA MANSION — press T to rent it (FREE!)"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T to rent a room");showT=true;}
@@ -2688,6 +3045,14 @@ function updateHint(){
         const sh=nearShop();
         if(sh){txt=(sh.huge?"\u{1F6D2} MEGA MART":"\u{1F6D2} Shop")+" — press T to buy food";showT=true;}
         else{const by=nearBuyer();if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}}
+      }
+    }
+    if(!txt&&S.world==="earth"&&!CAVE.in){
+      const cvE=nearCaveEntrance();
+      if(cvE){txt="\u{1F573}️ Cave entrance — press T to go inside!";showT=true;}
+      else if(nearGasSt()&&fuelVehicle()){
+        txt=FUEL.km>=FUEL.cap-1?"⛽ Gas station — your tank is full":"⛽ Gas station — press T to fill up ("+Math.round(FUEL.km)+" / "+FUEL.cap+" km)";
+        showT=FUEL.km<FUEL.cap-1;
       }
     }
     const rp=nearestRocketPad(player.x,player.z);
@@ -2890,7 +3255,28 @@ const UPDATE_PAGES=[
 <h4>\u{1F354} HUNGER WARNINGS</h4><ul>
 <li>Big pop-up messages when you get a little hungry, hungry, and STARVING.</li></ul>
 <h4>\u{1F698} CRUISE CONTROL</h4><ul>
-<li>Braking (S or Space) now switches the cruise control off, like in a real car.</li></ul>`}
+<li>Braking (S or Space) now switches the cruise control off, like in a real car.</li></ul>`},
+{t:"Round 11 — Buy cars, garage & paint, gas, caves & random events",h:`
+<h4>\u{1F4B0} CARS ARE LIMITED NOW — BUY THEM!</h4><ul>
+<li>You start with a <b>Mazda MX-5</b>, a <b>KTM 390 Duke</b> and a <b>Gazelle CityGo</b>.</li>
+<li>Every other car, motorcycle and bicycle has a price — earn money with dumplings, races, crystals and festivals.</li>
+<li>Your money and your bought cars are saved <b>online on your username</b> — log in anywhere, keep everything.</li></ul>
+<h4>\u{1F3ED} THE GARAGE SHOWCASE</h4><ul>
+<li>Pick a car you own and you enter a showcase room — the car spins on a lit platform.</li>
+<li>Paint it any of 16 colors, then hit <b>\u{1F697} DRIVE</b>. Your paint job is saved (other players see it too).</li></ul>
+<h4>⛽ GAS STATIONS + FUEL</h4><ul>
+<li>Cars &amp; motorcycles have a <b>699 km tank</b> — a fuel bar sits under the speedometer.</li>
+<li>Run dry and the engine dies! Gas stations (green ⛽ sign, every ~840 m): stop and press <b>T</b> to fill up.</li></ul>
+<h4>\u{1F573}️ CAVES</h4><ul>
+<li>Cave mouths on the mountains — walk up and press <b>T</b> to step inside.</li>
+<li>Stalagmites, torches and 3 glowing crystals worth $25 each. Press T to go back out.</li></ul>
+<h4>\u{1F6A7} RANDOM EVENTS</h4><ul>
+<li><b>Road construction</b>: cones, a digger and a barrier — you must slow down to pass.</li>
+<li><b>Accidents</b>: crashed cars with flashing police on site — crawl past carefully.</li>
+<li><b>Festivals</b>: a stage with balloons pops up nearby — visit on foot for <b>$50</b>!</li></ul>
+<h4>\u{1F697} REALISTIC VEHICLES</h4><ul>
+<li>Cars: wheel arches, skirts, splitters, exhausts — supercars get a rear wing.</li>
+<li>Motorcycles got fairings &amp; windscreens, bikes real frames &amp; pedals, buses AC units &amp; stripes, trains a pantograph, planes winglets and rockets landing legs + grid fins.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -2914,7 +3300,11 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.05,(now-last)/1000);last=now;
   pollGamepad();
-  if(S.mode!=="game"){setHorn(false);setRocketRumble(0);renderer.render(scene,camera);return;}
+  if(S.mode!=="game"){
+    setHorn(false);setRocketRumble(0);
+    if(S.mode==="garage")updateGarage(dt);
+    renderer.render(scene,camera);return;
+  }
   setHorn(keys.h||(TOUCH.on&&TOUCH.honk>0)||(GP.active&&GP.honk));
   clockTick(dt);
   let speedMS=0;
@@ -2931,8 +3321,11 @@ function frame(now){
   if(player.inPlane){const p=player.planeRef;player.x=p.x;player.z=p.z;player.y=p.y;}
   if(player.inBus){const b=player.bus;player.x=b.g.position.x;player.z=b.g.position.z;player.y=b.g.position.y;}
   S.km+=speedMS*dt/1000;
-  updateEngine(speedMS,!!player.drive&&player.drive.type!=="bike");
+  updateFuel(dt,speedMS);
+  updateCave();
+  updateEngine(speedMS,!!player.drive&&player.drive.type!=="bike"&&FUEL.km>0);
   if(S.world==="earth"){
+    updateEvents(dt);
     updateTrains(dt);updatePlanes(dt);updateBuses(dt);updateTraffic(dt);
     updatePeds(dt);updateAnimals(dt);updateDoors(dt);updateCollapses(dt);
     updateTrafficLights();updateGates(dt);
@@ -2961,6 +3354,14 @@ function frame(now){
   $("spdVal").textContent=Math.round(uConv(speedMS*3.6));
   const limT=player.inRocket?"rocket":(player.inTrain?"train":(player.inPlane?"plane":(player.inBus?"bus":"car")));
   $("spdLim").textContent="limit "+Math.round(uConv(limitFor(limT)))+" "+uLabel();
+  /* fuel gauge (cars & motorcycles only) */
+  if(fuelVehicle()){
+    $("fuelWrap").style.display="flex";
+    const f=FUEL.km/FUEL.cap;
+    $("fuelFill").style.width=Math.round(f*100)+"%";
+    $("fuelFill").style.background=f<0.1?"#ff5d5d":(f<0.3?"#ffb02e":"#4ade80");
+    $("fuelTxt").textContent="⛽ "+Math.round(FUEL.km)+" km";
+  }else $("fuelWrap").style.display="none";
   if(player.inPlane){$("spdAlt").style.display="block";$("spdAlt").textContent="alt "+Math.round(player.planeRef.y)+" m";}
   else if(player.inRocket){$("spdAlt").style.display="block";$("spdAlt").textContent="alt "+Math.round(rocket.y)+" m";}
   else $("spdAlt").style.display="none";

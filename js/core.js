@@ -12,6 +12,15 @@ const VEHICLES=[];
  MOTOS.forEach(c=>VEHICLES.push({type:"moto",name:c[0],top:c[1],color:COLORS[Math.floor(r()*COLORS.length)]}));
  BIKES.forEach(c=>VEHICLES.push({type:"bike",name:c[0],top:c[1],color:COLORS[Math.floor(r()*COLORS.length)]}));}
 const TYPE_LABEL={car:"Car",moto:"Motorcycle",bike:"Bicycle"};
+/* ---- vehicle ownership: you start with one of each, the rest cost money ---- */
+const DEFAULT_OWNED=["Mazda MX-5","KTM 390 Duke","Gazelle CityGo"];
+const OWN=new Set(DEFAULT_OWNED);
+const PAINT={};   // vehicle name -> the paint color you chose in the garage
+function vehPrice(v){
+  const d=v.type==="car"?60:(v.type==="moto"?40:8);
+  return Math.max(50,Math.round(v.top*v.top/d/10)*10);
+}
+function paintOf(v){return v&&PAINT[v.name]!==undefined?PAINT[v.name]:(v?v.color:0x3fd0ff);}
 const S={unit:"kmh",mode:"menu",filter:"all",traffic:true,admin:false,arrest:true,camMode:0,selected:null,km:0,world:"earth"};
 const BONUS={car:0,train:0,plane:0,bus:0,rocket:0};
 const ACC={on:false,target:100}; // cruise control (km/h)
@@ -38,12 +47,14 @@ function renderMenu(){
   g.innerHTML="";
   VEHICLES.filter(v=>S.filter==="all"||v.type===S.filter).forEach(v=>{
     const b=document.createElement("button");
-    b.className="card"+(v.top===500?" fastest":"");
+    const owned=OWN.has(v.name);
+    b.className="card"+(v.top===500?" fastest":"")+(owned?"":" locked");
     b.innerHTML=`<div class="icon">${EMOJI[v.type]}</div>
-      <div class="nm"><span class="swatch" style="background:#${v.color.toString(16).padStart(6,"0")}"></span>${v.name}</div>
+      <div class="nm"><span class="swatch" style="background:#${paintOf(v).toString(16).padStart(6,"0")}"></span>${v.name}</div>
       <div class="ty">${TYPE_LABEL[v.type]}</div>
-      <div class="sp">&#9889; ${Math.round(uConv(v.top))} ${uLabel()} top speed</div>`;
-    b.onclick=()=>startGame(v);
+      <div class="sp">&#9889; ${Math.round(uConv(v.top))} ${uLabel()} top speed</div>
+      <div class="pr ${owned?"own":"buy"}">${owned?"✅ OWNED — tap to open your garage":"\u{1F4B0} $"+fmtMoney(vehPrice(v))+" — tap to buy"}</div>`;
+    b.onclick=()=>selectVehicle(v);
     g.appendChild(b);
   });
 }

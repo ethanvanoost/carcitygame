@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -123,6 +123,7 @@
     <div id="spdAlt">alt 0 m</div>
     <div id="spdLim">limit 0</div>
     <div id="vehName"></div>
+    <div id="fuelWrap" style="display:none"><div id="fuelBar"><i id="fuelFill"></i></div><span id="fuelTxt">⛽</span></div>
     <div id="accRow">
       <span style="font-size:11px;color:var(--dim)">Cruise</span>
       <input id="accInput" type="number" min="0" max="2000" placeholder="km/h">
@@ -170,6 +171,20 @@
       <button class="pedal hand" id="pedHand">HAND<br>BRAKE</button>
       <button class="pedal brake" id="pedBrake">BRAKE</button>
       <button class="pedal gas" id="pedGas">GAS</button>
+    </div>
+  </div>
+</div>
+
+<div id="garagePanel">
+  <div id="garTop">
+    <h2 id="garName">&#127918; Garage</h2>
+    <div id="garInfo"></div>
+  </div>
+  <div id="garBottom">
+    <div id="garColors"></div>
+    <div id="garBtns">
+      <button class="btn" id="garBack">&#9664; Back</button>
+      <button class="btn warn" id="garDrive">&#128663; DRIVE</button>
     </div>
   </div>
 </div>
@@ -320,6 +335,8 @@
     <div class="row"><span>Enter / leave anything</span><span><kbd>F</kbd></span></div>
     <div class="row"><span>Call train / plane / bus at stops</span><span><kbd>T</kbd></span></div>
     <div class="row"><span>Call a rocket at a &#128640; rocket station (every ~5 km) &mdash; it flies you to the Moon and back!</span><span><kbd>T</kbd> then <kbd>F</kbd></span></div>
+    <div class="row"><span>Enter / leave a &#128371;&#65039; cave (openings on the mountains)</span><span><kbd>T</kbd></span></div>
+    <div class="row"><span>Fill up at a &#9981; gas station (tank = 699 km, cars &amp; motorcycles)</span><span><kbd>T</kbd></span></div>
     <div class="row"><span>Honk</span><span><kbd>H</kbd> &middot; &#128226; pedal &middot; d-pad up</span></div>
     <div class="row"><span>Cruise control on/off</span><span><kbd>V</kbd></span></div>
     <div class="row"><span>Eat selected food from your backpack</span><span><kbd>R</kbd></span></div>
@@ -335,9 +352,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=20"></script>
-<script src="js/world.js?v=20"></script>
-<script src="js/vehicles.js?v=20"></script>
-<script src="js/game.js?v=21"></script>
+<script src="js/core.js?v=22"></script>
+<script src="js/world.js?v=22"></script>
+<script src="js/vehicles.js?v=22"></script>
+<script src="js/game.js?v=22"></script>
 </body>
 </html>

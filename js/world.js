@@ -1092,6 +1092,86 @@ function buildMcd(ax,az,g){
   g.userData.recs.push(rec);
   mcds.push({g,board:{x:ax+16,z:az-8},window:{x:ax+16,z:az+4},out:{x:ax+16,z:az+19}});
 }
+/* ---------- gas stations: fill your tank (cars run dry after 699 km) ---------- */
+const gasStations=[];
+let _gasSign=null;
+function gasSignMat(){
+  if(_gasSign)return _gasSign;
+  const cv=document.createElement("canvas");cv.width=256;cv.height=128;
+  const c=cv.getContext("2d");c.fillStyle="#0f7a3d";c.fillRect(0,0,256,128);
+  c.fillStyle="#fff";c.font="bold 58px Segoe UI";c.textAlign="center";c.fillText("⛽ GAS",128,62);
+  c.font="bold 26px Segoe UI";c.fillText("stop & press T",128,104);
+  _gasSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _gasSign;
+}
+const GSP=840;   // a gas station candidate every ~840 m (offset from the McDrive grid)
+function gasSpot(i,j){
+  const ax=i*GSP+270,az=j*GSP+150;
+  if(Math.abs(ax)<200&&Math.abs(az)<200)return null;
+  if(inAirport(ax+16,az)||inAirport(ax+30,az))return null;
+  if(baseH(ax+16,az)<-1||baseH(ax+30,az)<-1)return null;
+  if(gradeAt(ax+16,az)>14)return null;
+  if(nearestRail(ax+16,az).d<14)return null;
+  if(Math.abs(ax+16-curveXC(ax+16,az))<14||Math.abs(az-curveZC(ax+16,az))<14)return null;
+  if(rocketPadDist(ax+16,az)<60)return null;
+  return{ax,az,x:ax+16,z:az};
+}
+function buildGas(ax,az,g){
+  const fx=ax+16,fy=terrainH(fx,az);
+  /* forecourt beside the road */
+  g.add(ribbon("z",fx,az-14,az+14,10,0.14,asphMat));
+  /* canopy on four poles */
+  const cmat=new THREE.MeshLambertMaterial({color:0xf4f7fb});
+  const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(12,0.5,16),cmat));
+  roof.position.set(fx+3,fy+5,az);g.add(roof);
+  const band=new THREE.Mesh(new THREE.BoxGeometry(12.1,0.6,16.1),new THREE.MeshLambertMaterial({color:0x0f7a3d}));
+  band.position.set(fx+3,fy+4.6,az);g.add(band);
+  [[-4,-6],[-4,6],[9,-6],[9,6]].forEach(p=>{
+    const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.18,4.6),poleMat);
+    pl.position.set(fx+p[0]+1,fy+2.3,az+p[1]);g.add(pl);});
+  /* two pump islands */
+  [[-3.4],[3.4]].forEach(p=>{
+    const isl=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.24,4.6),new THREE.MeshLambertMaterial({color:0x9aa0a8}));
+    isl.position.set(fx+4,fy+0.12,az+p[0]);g.add(isl);
+    const pump=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.8,1.6,0.6),new THREE.MeshLambertMaterial({color:0xd7263d})));
+    pump.position.set(fx+4,fy+0.9,az+p[0]);g.add(pump);
+    const scrn=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.04),new THREE.MeshBasicMaterial({color:0xbfe8ff}));
+    scrn.position.set(fx+4,fy+1.25,az+p[0]+0.33);g.add(scrn);
+  });
+  /* little kiosk + the tall price sign */
+  const kio=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(7,3.2,6),new THREE.MeshLambertMaterial({color:0xdfe4ea})));
+  kio.position.set(ax+27,terrainH(ax+27,az)+1.6,az);g.add(kio);
+  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.24,7),poleMat);
+  sp.position.set(fx,fy+3.5,az-12);g.add(sp);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(4.4,2.2),gasSignMat());
+  sign.position.set(fx,fy+7.6,az-12);g.add(sign);
+  const rec=regBuilding(ax+27,az,7,6,[kio],terrainH(ax+27,az));
+  g.userData.recs.push(rec);
+  gasStations.push({g,x:fx+4,z:az});
+}
+/* ---------- cave openings on the mountains — press T to walk inside ---------- */
+const caves=[];
+const CVSP=1500;   // a cave candidate every ~1.5 km, only where there is a real mountain
+function caveSpot(i,j){
+  const x=i*CVSP+740,z=j*CVSP+380;
+  if(baseH(x,z)<24)return null;                 // only on proper mountains
+  if(onAnyRoad(x,z))return null;
+  if(rocketPadDist(x,z)<80)return null;
+  return{x,z};
+}
+function buildCaveMouth(x,z,g){
+  const y=terrainH(x,z);
+  const rock=new THREE.MeshLambertMaterial({color:0x6d6a66});
+  const p1=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.6,7,3.4),rock));p1.position.set(x-3.2,y+3,z);p1.rotation.z=0.12;g.add(p1);
+  const p2=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.6,7,3.4),rock));p2.position.set(x+3.2,y+3,z);p2.rotation.z=-0.12;g.add(p2);
+  const top=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(9.4,2.8,3.4),rock));top.position.set(x,y+6.6,z);g.add(top);
+  const dark=new THREE.Mesh(new THREE.PlaneGeometry(4.6,5.4),new THREE.MeshBasicMaterial({color:0x07070c,side:THREE.DoubleSide}));
+  dark.position.set(x,y+2.7,z);g.add(dark);
+  [[-2.4],[2.4]].forEach(p=>{
+    const tor=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.16),new THREE.MeshBasicMaterial({color:0xffb02e}));
+    tor.position.set(x+p[0],y+3.6,z+1.72);g.add(tor);});
+  caves.push({g,x,z});
+}
 function hitBuilding(x,z,speed){
   if(S.world!=="earth")return false;   // no invisible Earth buildings on the Moon
   if(speed<8)return false;
@@ -1502,6 +1582,22 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildMcd(sp.ax,sp.az,g);
+  }
+  /* a gas station every ~840 m */
+  for(let i=Math.floor((x0-300)/GSP);i<=Math.ceil((x1-270)/GSP);i++)
+  for(let j=Math.floor((z0-170)/GSP);j<=Math.ceil((z1-130)/GSP);j++){
+    const sp=gasSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildGas(sp.ax,sp.az,g);
+  }
+  /* cave openings in the mountains */
+  for(let i=Math.floor((x0-760)/CVSP);i<=Math.ceil((x1-720)/CVSP);i++)
+  for(let j=Math.floor((z0-400)/CVSP);j<=Math.ceil((z1-360)/CVSP);j++){
+    const sp=caveSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildCaveMouth(sp.x,sp.z,g);
   }
   /* a huge MEGA MART every ~3 km */
   for(let i=Math.floor((x0-900)/HSP);i<=Math.ceil((x1+100)/HSP);i++)
