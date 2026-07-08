@@ -352,14 +352,19 @@ function updateGarage(dt){
 $("garBack").onclick=()=>closeGarage(true);
 $("garDrive").onclick=()=>{const v=GAR.v;closeGarage(false);startGame(v);};
 function startGame(v){
-  switchWorld("earth");
   player.inRocket=false;
   if(CAVE.in)exitCave(true);
+  /* switching cars keeps you where you were — only your first start
+     (or a world change / coming back from the moon) uses the spawn */
+  const resume=S.everPlayed&&S.world==="earth"&&S.lastPlayWorld===WORLD.name;
+  const rx=player.x,rz=player.z;
+  switchWorld("earth");
   S.selected=v;S.mode="game";
   $("menu").style.display="none";$("hud").classList.add("show");
   $("vehName").textContent=v.name;
   if(myVehicle)scene.remove(myVehicle.mesh);
-  const sx=WORLD.ox+6,sz=WORLD.oz+6;
+  const sx=resume?rx:WORLD.ox+6,sz=resume?rz:WORLD.oz+6;
+  S.everPlayed=true;S.lastPlayWorld=WORLD.name;
   const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);scene.add(mesh);
   myVehicle={mesh,type:v.type,top:v.top,x:sx,z:sz,yaw:Math.PI,speed:0,vy:0,y:0,grounded:true,roll:0};
   if(mesh.userData.riderMesh)mesh.userData.riderMesh.visible=true;
