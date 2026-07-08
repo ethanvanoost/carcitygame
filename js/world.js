@@ -1,7 +1,7 @@
 /* ================= THREE / SKY ================= */
 const renderer=new THREE.WebGLRenderer({canvas:$("c3d"),antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x8ec9f0);
 scene.fog=new THREE.Fog(0x9fd0f0,200,640);
@@ -439,18 +439,38 @@ function crossingPatch(lx,lz,size){
   geo.computeVertexNormals();
   const m=new THREE.Mesh(geo,interMat);m.receiveShadow=true;return m;
 }
-/* trees / cactus / bush */
-const treeGeoT=new THREE.CylinderGeometry(0.35,0.5,2.6),treeGeoL=new THREE.ConeGeometry(1.9,4,7);
+/* trees / cactus / bush — realistic variety: leafy trees with lumpy crowns,
+   dark conifers, tapered trunks, per-tree rotation & shade variation */
+const treeGeoT=new THREE.CylinderGeometry(0.24,0.52,3.2,7),treeGeoL=new THREE.ConeGeometry(1.9,4,8);
 KEEP.add(treeGeoT);KEEP.add(treeGeoL);
 const treeMatT=keep(new THREE.MeshLambertMaterial({color:0x6f4e37}));
+const treeMatT2=keep(new THREE.MeshLambertMaterial({color:0x55402c}));
 const treeMatL=keep(new THREE.MeshLambertMaterial({color:0x2f8f46}));
+const leafMats=[0x2f8f46,0x47a34f,0x246b39,0x6aa84f,0x3c9155].map(c=>keep(new THREE.MeshLambertMaterial({color:c})));
+const conifMat=keep(new THREE.MeshLambertMaterial({color:0x1e5f33}));
+const leafGeo=new THREE.SphereGeometry(1,8,7);KEEP.add(leafGeo);
 const cactusMat=keep(new THREE.MeshLambertMaterial({color:0x3d8b4f}));
 const bushGeo=new THREE.SphereGeometry(1,7,6);KEEP.add(bushGeo);
 function makeTree(x,z,s,parent,y){
   const t=new THREE.Group();
-  const tr=new THREE.Mesh(treeGeoT,treeMatT);tr.scale.setScalar(s);tr.position.y=1.3*s;tr.castShadow=true;t.add(tr);
-  const l1=new THREE.Mesh(treeGeoL,treeMatL);l1.scale.setScalar(s);l1.position.y=4*s;l1.castShadow=true;t.add(l1);
-  const l2=new THREE.Mesh(treeGeoL,treeMatL);l2.scale.setScalar(s*0.7);l2.position.y=5.6*s;t.add(l2);
+  const h=Math.abs(Math.sin(x*0.37+z*1.71+x*z*0.001));   // deterministic per-spot variety
+  const tr=new THREE.Mesh(treeGeoT,h>0.5?treeMatT:treeMatT2);
+  tr.scale.setScalar(s);tr.position.y=1.6*s;tr.castShadow=true;t.add(tr);
+  if(h<0.32){
+    /* conifer: three stacked cones, dark green */
+    [[3.2,1.15],[4.5,0.85],[5.6,0.55]].forEach(p=>{
+      const c=new THREE.Mesh(treeGeoL,conifMat);
+      c.scale.setScalar(s*p[1]);c.position.y=p[0]*s;c.castShadow=true;t.add(c);});
+  }else{
+    /* leafy tree: a lumpy crown of 4 blobs in a per-tree shade of green */
+    const lm=leafMats[Math.floor(h*13)%leafMats.length];
+    [[0,4.4,0,1.55],[1.0,3.8,0.45,1.0],[-0.95,3.9,-0.4,0.95],[0.15,3.5,-0.95,0.85]].forEach(p=>{
+      const b=new THREE.Mesh(leafGeo,lm);
+      b.position.set(p[0]*s,p[1]*s,p[2]*s);
+      b.scale.set(p[3]*s*1.25,p[3]*s*1.05,p[3]*s*1.25);
+      b.castShadow=true;t.add(b);});
+  }
+  t.rotation.y=h*6.28;
   t.position.set(x,y!==undefined?y:terrainH(x,z),z);(parent||scene).add(t);
 }
 function makeCactus(x,z,s,parent,y){
@@ -463,24 +483,42 @@ function makeCactus(x,z,s,parent,y){
   g.position.set(x,y,z);parent.add(g);
 }
 function makeBush(x,z,s,parent,y){
-  const m=new THREE.Mesh(bushGeo,treeMatL);m.scale.set(s,s*0.7,s);m.position.set(x,y+0.4*s,z);m.castShadow=true;parent.add(m);
+  /* three overlapping blobs in two shades read as a real shrub */
+  const g=new THREE.Group();
+  const lm=leafMats[(Math.abs(Math.round(x+z))%leafMats.length)];
+  [[0,0.4,0,1],[0.55,0.3,0.25,0.7],[-0.5,0.32,-0.2,0.65]].forEach(p=>{
+    const m=new THREE.Mesh(bushGeo,p[3]===1?lm:treeMatL);
+    m.scale.set(s*p[3],s*0.7*p[3],s*p[3]);m.position.set(x+p[0]*s,y+p[1]*s,z+p[2]*s);
+    m.castShadow=true;g.add(m);});
+  parent.add(g);
 }
 /* ================= PEOPLE / ANIMALS / DOORS ================= */
+const eyeMat=keep(new THREE.MeshLambertMaterial({color:0x1c1c1e}));
+const shoeMat=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
 function makePerson(scale,shirtColor){
   const g=new THREE.Group(),s=scale||1;
   const skin=new THREE.MeshLambertMaterial({color:[0xf1c39a,0xd9a06b,0x8c5a2b][Math.floor(Math.random()*3)]});
   const shirt=new THREE.MeshLambertMaterial({color:shirtColor||COLORS[Math.floor(Math.random()*COLORS.length)]});
-  const pants=new THREE.MeshLambertMaterial({color:0x30395c});
-  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.6*s,0.72*s,0.32*s),shirt);torso.position.y=1.28*s;torso.castShadow=true;g.add(torso);
+  const pants=new THREE.MeshLambertMaterial({color:[0x30395c,0x3a3a3a,0x4a3728,0x24405e][Math.floor(Math.random()*4)]});
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.56*s,0.72*s,0.3*s),shirt);torso.position.y=1.28*s;torso.castShadow=true;g.add(torso);
+  /* shoulders round the silhouette a little */
+  [[-0.28],[0.28]].forEach(p=>{const sh=new THREE.Mesh(new THREE.SphereGeometry(0.11*s,7,7),shirt);sh.position.set(p[0]*s,1.56*s,0);g.add(sh);});
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.07*s,0.08*s,0.12*s,7),skin);neck.position.y=1.68*s;g.add(neck);
   const head=new THREE.Mesh(new THREE.SphereGeometry(0.23*s,10,10),skin);head.position.y=1.9*s;g.add(head);
-  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:[0x4a2f1d,0x1c1c1e,0xc9a35a][Math.floor(Math.random()*3)]}));
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a][Math.floor(Math.random()*4)]}));
   hair.position.y=1.95*s;g.add(hair);
+  /* a real face: two eyes + a tiny nose */
+  [[-0.08],[0.08]].forEach(p=>{const e=new THREE.Mesh(new THREE.SphereGeometry(0.028*s,6,6),eyeMat);e.position.set(p[0]*s,1.93*s,0.2*s);g.add(e);});
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(0.035*s,6,6),skin);nose.position.set(0,1.87*s,0.225*s);g.add(nose);
   function limb(mat,len,r){const p=new THREE.Group();
     const m=new THREE.Mesh(new THREE.CylinderGeometry(r*s,r*0.85*s,len*s,7),mat);m.position.y=-len*s/2;p.add(m);return p;}
-  const lA=limb(skin,0.6,0.08);lA.position.set(-0.38*s,1.56*s,0);g.add(lA);
-  const rA=limb(skin,0.6,0.08);rA.position.set(0.38*s,1.56*s,0);g.add(rA);
+  const lA=limb(shirt,0.6,0.085);lA.position.set(-0.38*s,1.56*s,0);g.add(lA);
+  const rA=limb(shirt,0.6,0.085);rA.position.set(0.38*s,1.56*s,0);g.add(rA);
+  /* hands swing with the arms, shoes with the legs */
+  [lA,rA].forEach(a=>{const h=new THREE.Mesh(new THREE.SphereGeometry(0.07*s,6,6),skin);h.position.y=-0.64*s;a.add(h);});
   const lL=limb(pants,0.76,0.1);lL.position.set(-0.16*s,0.76*s,0);g.add(lL);
   const rL=limb(pants,0.76,0.1);rL.position.set(0.16*s,0.76*s,0);g.add(rL);
+  [lL,rL].forEach(l=>{const f=new THREE.Mesh(new THREE.BoxGeometry(0.17*s,0.1*s,0.32*s),shoeMat);f.position.set(0,-0.76*s,0.07*s);l.add(f);});
   g.userData.limbs={lA,rA,lL,rL};
   return g;
 }
@@ -736,14 +774,41 @@ function apartment(x,z,rand,parent,baseY){
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
+/* one shared framed-window material for every house (glass + white frame + warm light) */
+let _houseWin=null;
+function houseWinMat(){
+  if(_houseWin)return _houseWin;
+  const cv=document.createElement("canvas");cv.width=64;cv.height=64;
+  const c=cv.getContext("2d");
+  c.fillStyle="#f4f7fb";c.fillRect(0,0,64,64);                 // frame
+  c.fillStyle="#2b4a63";c.fillRect(6,6,52,52);                 // glass
+  c.fillStyle="#8fb6d0";c.beginPath();c.moveTo(6,40);c.lineTo(40,6);c.lineTo(58,6);c.lineTo(6,58);c.fill(); // sky reflection
+  c.fillStyle="#f4f7fb";c.fillRect(29,6,6,52);c.fillRect(6,29,52,6); // cross bars
+  _houseWin=keep(new THREE.MeshLambertMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _houseWin;
+}
+const roofMats=[0xa0522d,0x7a4a3a,0x5b6470,0x8a3b2e].map(c=>keep(new THREE.MeshLambertMaterial({color:c})));
 function house(x,z,rand,parent,baseY){
   baseY=baseY||0;
   const cols=[0xf2e8cf,0xe8b4b8,0xcde3d0,0xf3d9a4,0xdbe7f5];
   const w=7+rand()*3,d=7+rand()*3,h=4+rand()*1.5;
   const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:cols[Math.floor(rand()*cols.length)]})));
   m.position.set(x,baseY+h/2-0.3,z);parent.add(m);
-  const roof=shadowBox(new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.75,3,4),new THREE.MeshLambertMaterial({color:0xa0522d})));
+  const roof=shadowBox(new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.75,3,4),roofMats[Math.floor(rand()*roofMats.length)]));
   roof.position.set(x,baseY+h+1.2,z);roof.rotation.y=Math.PI/4;parent.add(roof);
+  /* framed windows on the front and both sides + a brick chimney */
+  const wm=houseWinMat();
+  [[-w/4,d/2+0.03,0],[w/4,d/2+0.03,0]].forEach(p=>{
+    const win=new THREE.Mesh(new THREE.PlaneGeometry(1.3,1.2),wm);
+    win.position.set(x+p[0],baseY+h/2+0.2,z+p[1]);parent.add(win);});
+  [[-w/2-0.03,-Math.PI/2],[w/2+0.03,Math.PI/2]].forEach(p=>{
+    const win=new THREE.Mesh(new THREE.PlaneGeometry(1.3,1.2),wm);
+    win.position.set(x+p[0],baseY+h/2+0.2,z);win.rotation.y=p[1];parent.add(win);});
+  const chim=new THREE.Mesh(new THREE.BoxGeometry(0.7,1.8,0.7),new THREE.MeshLambertMaterial({color:0x9c5a4a}));
+  chim.position.set(x+w/4,baseY+h+1.6,z-d/4);parent.add(chim);
+  /* doorstep */
+  const step=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.18,0.9),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
+  step.position.set(x,baseY+0.09,z+d/2+0.45);parent.add(step);
   makeDoor(x,z+d/2+0.05,0,parent,baseY);
   return regBuilding(x,z,Math.max(w,d),Math.max(w,d),[m,roof],baseY);
 }
@@ -789,6 +854,12 @@ function shop(x,z,rand,parent,baseY){
       it.position.set(x-3+i*6,baseY+1.7,z-4+j*1.5);parent.add(it);}
   }
   makeDoor(x-1.15,z+d/2,0,parent,baseY,0x2e4a62);
+  /* glass storefront windows either side of the door + a striped awning */
+  [[-(w/4+0.6)],[w/4+0.6]].forEach(p=>{
+    const win=new THREE.Mesh(new THREE.PlaneGeometry(w/2-2.4,2.4),glassMat);
+    win.position.set(x+p[0],baseY+1.9,z+d/2+0.05);parent.add(win);});
+  const awn=new THREE.Mesh(new THREE.BoxGeometry(w*0.85,0.14,1.5),new THREE.MeshLambertMaterial({color:[0xd7263d,0x1d6fd1,0x0f7a3d][Math.floor(rand()*3)]}));
+  awn.position.set(x,baseY+3.3,z+d/2+0.8);awn.rotation.x=0.24;parent.add(awn);
   const name=SHOP_NAMES[Math.floor(rand()*SHOP_NAMES.length)];
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(9,2.2),shopSignMat(name));
   sign.position.set(x,baseY+h+1.6,z+d/2+0.05);parent.add(sign);

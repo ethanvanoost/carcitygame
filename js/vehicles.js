@@ -6,8 +6,15 @@ const darkTrim=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
 function addWheel(g,x,z,r,w,front){
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
-  const tire=new THREE.Mesh(new THREE.CylinderGeometry(r,r,w,16),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
-  const hub=new THREE.Mesh(new THREE.CylinderGeometry(r*0.55,r*0.55,w+0.02,10),hubMat);hub.rotation.z=Math.PI/2;spin.add(hub);
+  const tire=new THREE.Mesh(new THREE.CylinderGeometry(r,r,w,18),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
+  /* real rim: center cap + six spokes that visibly rotate */
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(r*0.2,r*0.2,w+0.03,8),hubMat);hub.rotation.z=Math.PI/2;spin.add(hub);
+  for(let i=0;i<3;i++){
+    const sp=new THREE.Mesh(new THREE.BoxGeometry(w+0.02,r*1.16,r*0.14),hubMat);
+    sp.rotation.x=i*Math.PI/3;spin.add(sp);
+  }
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(r*0.6,r*0.07,6,18),hubMat);
+  ring.rotation.y=Math.PI/2;spin.add(ring);
   g.add(pivot);
   (g.userData.wheels=g.userData.wheels||[]).push({pivot,spin,r,front:!!front});
 }
@@ -26,6 +33,16 @@ function buildVehicleMesh(type,color,top){
     [[-0.72],[0.72]].forEach(p=>{const h=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.16,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));h.position.set(p[0],0.82,2.33);g.add(h);
       const t=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0xd7263d}));t.position.set(p[0],0.82,-2.33);g.add(t);});
     [[-1.02],[1.02]].forEach(p=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,0.24),mat);m.position.set(p[0],1.22,0.75);g.add(m);});
+    /* roof pillars framing the glass cabin */
+    [[-0.9,0.85],[0.9,0.85],[-0.92,-1.32],[0.92,-1.32]].forEach(p=>{
+      const pil=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.52,0.12),darkTrim);
+      pil.position.set(p[0],1.32,p[1]);pil.rotation.x=p[1]>0?0.28:-0.22;g.add(pil);});
+    /* license plates + door handles */
+    [[2.345,0],[-2.345,Math.PI]].forEach(p=>{
+      const pl=new THREE.Mesh(new THREE.BoxGeometry(0.52,0.15,0.03),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
+      pl.position.set(0,0.52,p[0]);pl.rotation.y=p[1];g.add(pl);});
+    [[-1.05],[1.05]].forEach(p=>{const dh=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.05,0.3),hubMat);
+      dh.position.set(p[0],1.02,-0.15);g.add(dh);});
     /* wheel arches + side skirts */
     [[-1.06,1.5],[1.06,1.5],[-1.06,-1.5],[1.06,-1.5]].forEach(p=>{
       const a=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.24,1.18),darkTrim);a.position.set(p[0],0.72,p[1]);g.add(a);});

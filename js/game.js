@@ -3387,7 +3387,22 @@ const UPDATE_PAGES=[
 <li><b>Festivals</b>: a stage with balloons pops up nearby — visit on foot for <b>$50</b>!</li></ul>
 <h4>\u{1F697} REALISTIC VEHICLES</h4><ul>
 <li>Cars: wheel arches, skirts, splitters, exhausts — supercars get a rear wing.</li>
-<li>Motorcycles got fairings &amp; windscreens, bikes real frames &amp; pedals, buses AC units &amp; stripes, trains a pantograph, planes winglets and rockets landing legs + grid fins.</li></ul>`}
+<li>Motorcycles got fairings &amp; windscreens, bikes real frames &amp; pedals, buses AC units &amp; stripes, trains a pantograph, planes winglets and rockets landing legs + grid fins.</li></ul>`},
+{t:"Round 12 — The big realism glow-up",h:`
+<h4>\u{1F333} REAL TREES &amp; BUSHES</h4><ul>
+<li>Leafy trees now have lumpy multi-blob crowns in 5 shades of green, dark triple-cone pines, tapered trunks — and every tree is rotated differently.</li>
+<li>Bushes are proper shrubs made of overlapping blobs in two shades.</li></ul>
+<h4>\u{1F9CD} REAL PEOPLE</h4><ul>
+<li>Everyone has a face now: eyes and a nose, plus a neck, rounded shoulders, sleeves, swinging hands and real shoes.</li>
+<li>More pants and hair colors for variety.</li></ul>
+<h4>\u{1F3E0} REAL HOUSES &amp; SHOPS</h4><ul>
+<li>Houses got framed cross-bar windows (front and sides), a brick chimney, a doorstep and varied roof colors.</li>
+<li>Shops got glass storefronts and a colored awning over the door.</li></ul>
+<h4>\u{1F697} REAL WHEELS</h4><ul>
+<li>Every wheel has a six-spoke rim, a center cap and a rim ring — and you can see them spin.</li>
+<li>Cars gained roof pillars around the glass cabin, license plates and door handles.</li></ul>
+<h4>\u{1F305} SOFTER LIGHT</h4><ul>
+<li>Soft-edged shadows (PCF soft shadow maps) make everything look less \"cut out\".</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
