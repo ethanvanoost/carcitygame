@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=30">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -102,6 +102,9 @@
     <button class="btn on" id="bTraffic">&#128678; Traffic: ON</button>
     <button class="btn" id="bTablet">&#128241; Tablet</button>
     <button class="btn" id="bJobs">&#128188; Jobs</button>
+    <button class="btn" id="bAuto">&#129302; Auto</button>
+    <button class="btn" id="bPhoto">&#128247; Photo</button>
+    <button class="btn" id="bAch">&#127942;</button>
     <button class="btn" id="bPack">&#127890; Food</button>
     <button class="btn" id="bDump">&#129375; Dumplings</button>
     <button class="btn" id="bMoney">&#128176; Money</button>
@@ -155,6 +158,14 @@
     <button class="keybtn blue" id="kF" style="display:none">F</button>
   </div>
   <div id="camLabel">Camera: Chase &nbsp;<kbd>Q</kbd>/<kbd>E</kbd></div>
+  <div id="autoAsk">
+    <div id="autoAskTitle">&#129302; Which way?</div>
+    <div id="autoAskBtns">
+      <button id="autoL">&#11013;<br>LEFT</button>
+      <button id="autoS">&#11014;<br>STRAIGHT</button>
+      <button id="autoR">&#10145;<br>RIGHT</button>
+    </div>
+  </div>
   <div id="toast"></div>
   <div id="miniWrap"><canvas id="miniCv" width="150" height="150"></canvas></div>
   <div id="navDist" style="display:none"><span id="navTxt"></span><button id="navStopBtn" title="Stop navigation">✕</button></div>
@@ -284,6 +295,15 @@
   </div>
 </div>
 
+<div class="modal" id="achModal">
+  <div class="box">
+    <h2>&#127942; Achievements</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Every achievement is worth <b>$250</b>!</div>
+    <div id="achList"></div>
+    <button class="btn close" id="achClose">Close</button>
+  </div>
+</div>
+
 <div class="modal" id="jobsModal">
   <div class="box">
     <h2>&#128188; Pick a job</h2>
@@ -357,6 +377,21 @@
       <button id="sndTgl" class="on">&#128266; Sound ON</button>
       <button id="musTgl" class="on">&#127925; Music ON</button>
     </div>
+    <div style="font-size:14px;color:var(--dim);margin-top:14px">Effects (turn things off if you like)</div>
+    <div id="fxGrid">
+      <button class="btn on" id="fxPolice">&#128110; Police ON</button>
+      <button class="btn on" id="fxCrash">&#128165; Crash sound ON</button>
+      <button class="btn on" id="fxHonk">&#128227; Honks ON</button>
+      <button class="btn on" id="fxEngine">&#128663; Engine sound ON</button>
+      <button class="btn on" id="fxSiren">&#128680; Sirens ON</button>
+      <button class="btn on" id="fxWeather">&#127783; Weather ON</button>
+    </div>
+    <div style="font-size:14px;color:var(--dim);margin-top:14px">Graphics quality</div>
+    <div class="seg">
+      <button id="qLow">&#9889; Fast</button>
+      <button id="qMed" class="on">Normal</button>
+      <button id="qHigh">&#10024; Beautiful</button>
+    </div>
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Player name (other players see this)</div>
     <input id="pName" maxlength="16" placeholder="your name" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:6px">
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Password (&#128065; to view, Save to change)</div>
@@ -398,9 +433,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=29"></script>
-<script src="js/world.js?v=29"></script>
-<script src="js/vehicles.js?v=29"></script>
-<script src="js/game.js?v=29"></script>
+<script src="js/core.js?v=30"></script>
+<script src="js/world.js?v=30"></script>
+<script src="js/vehicles.js?v=30"></script>
+<script src="js/game.js?v=30"></script>
 </body>
 </html>

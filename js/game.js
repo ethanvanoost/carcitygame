@@ -263,7 +263,7 @@ $("musTgl").onclick=()=>{
   SND.music=!SND.music;
   $("musTgl").classList.toggle("on",SND.music);
   $("musTgl").innerHTML="\u{1F3B5} Music "+(SND.music?"ON":"OFF");
-  if(musicGain)musicGain.gain.setTargetAtTime(SND.music?0.4:0,audioCtx.currentTime,0.1);
+  setMusicOn(SND.music);
 };
 /* spawn / start */
 function goSpawn(){
@@ -399,6 +399,8 @@ function startGame(v){
   player.drive=myVehicle;player.onFoot=false;
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   player.mesh.visible=false;
+  /* every car honks differently — supercars sound deep, bikes ring high */
+  try{setHornPitch(v.type==="car"?(v.top>=340?300:v.top>=280?360:410):(v.type==="moto"?500:620));}catch(e){}
   updateLimitUI();updateChunks(sx,sz,true);updateLandmarks(sx,sz);
   mpJoin();chatStart();
   dailyReward();
@@ -522,6 +524,7 @@ const RAINBOW_CSS="linear-gradient(90deg,#ff004c,#ff9e00,#ffee00,#37ff00,#00cfff
 function dumpValue(d){
   if(d.color==="Rainbow")return d.glitter?250:30;
   if(d.color==="Gold")return d.glitter?20:30;
+  if(d.color==="Pumpkin"||d.color==="Snowy")return d.glitter?150:40;   // seasonal specials
   return d.glitter?100:15;
 }
 /* little white stars sprinkled on every glitter dumpling */
@@ -639,9 +642,11 @@ $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 $("dumpOpen").onclick=()=>{
   if(!DUMP.unopened)return;
   DUMP.unopened--;
-  const roll=Math.random();
+  const roll=Math.random(),month=new Date().getMonth();
   let color,hex;
-  if(roll<0.02){color="Rainbow";hex=RAINBOW_CSS;}             // rare!
+  if(month===9&&Math.random()<0.15){color="Pumpkin";hex="#ff7518";}        // 🎃 October special!
+  else if(month===11&&Math.random()<0.15){color="Snowy";hex="#eafcff";}    // ❄️ December special!
+  else if(roll<0.02){color="Rainbow";hex=RAINBOW_CSS;}             // rare!
   else if(roll<0.08){color="Gold";hex="#ffd700";}
   else{const c=DUMP_COLORS[Math.floor(Math.random()*DUMP_COLORS.length)];color=c[0];hex=c[1];}
   const glitter=Math.random()<0.08;   // rainbow + glitter = VERY rare
@@ -1175,6 +1180,7 @@ function tryFurniture(){
       addMoney(p2.hatMoney);
       toast("\u{1F3A9}\u{1F4B5} You collected $"+p2.hatMoney+" from the hat — great show!");
       p2.hatMoney=0;
+      ACH.flags.concert=true;saveAch();
       if(p2.hatBills)p2.hatBills.visible=false;
       return true;
     }
@@ -3082,7 +3088,7 @@ function driveVehicle(v,dt){
     /* construction & accident zones force you to crawl past */
     const evc=eventSpeedCap(v.x,v.z);
     if(isFinite(evc)&&v.speed>evc)v.speed+=(evc-v.speed)*Math.min(1,6*dt);
-    const grip=1/(1+Math.abs(v.speed)/45);
+    const grip=(1/(1+Math.abs(v.speed)/45))*wetGrip();   // wet roads = less grip
     const agility=isBike?2.8:(isMoto?2.5:2.1);
     v.yaw+=st*agility*grip*(spaceInput()?1.5:1)*Math.max(-1,Math.min(1,v.speed/9))*dt;
   }
@@ -3527,6 +3533,7 @@ function endRace(win){
   if(win){
     const reward=Math.max(50,Math.round(600-RACE.t*4));
     addMoney(reward);
+    ACH.flags.race=true;saveAch();
     toast("\u{1F3C6} FINISH in "+RACE.t.toFixed(1)+"s — you won $"+reward+"!");
   }else toast("\u{1F3C1} Race cancelled.");
 }
@@ -3589,6 +3596,7 @@ async function claimRaceWin(key,ts){
     if(g.ok&&g.data)cnt=Math.max(1,Object.values(g.data).filter(e=>e&&typeof e.ts==="number"&&e.ts>ts-300000).length);
     const pot=100*cnt;
     addMoney(pot);
+    ACH.flags.race=true;saveAch();
     toast("\u{1F3C6}\u{1F451} YOU WON THE MULTIPLAYER RACE! The pot is yours: $"+fmtMoney(pot)+" ("+cnt+" racer"+(cnt>1?"s":"")+")!");
   }else{
     const g=await fbGet(winPath);
@@ -3645,7 +3653,7 @@ function updateTraffic(dt){
   for(const c of traffic){
     if(c.controlled)continue;
     /* police spotting you: speeding nearby, or ramming their car */
-    if(S.arrest&&c.kind==="police"&&!c.chase&&arrestCd<=0&&player.drive===myVehicle&&player.drive){
+    if(S.arrest&&SETTINGS.police&&c.kind==="police"&&!c.chase&&arrestCd<=0&&player.drive===myVehicle&&player.drive){
       const cp=trafficPos(c);
       const d=Math.hypot(cp.x-player.x,cp.z-player.z);
       if(d<3.9&&playerSpd>6)startChase(c,"\u{1F694} You hit a police car!");
@@ -3715,6 +3723,12 @@ function updateTraffic(dt){
         const gap=(nxt-c.t)*c.lane.dir-9;
         if(gap>0&&gap<16)sp*=Math.max(0,gap-2)/14;
       }
+    }
+    /* traffic cars honk by themselves: stuck at a light or squeezing past a siren */
+    if(!c.kind&&sp<c.sp*0.3&&Math.random()<dt*0.3){
+      const bp=trafficPos(c);
+      const bd=Math.hypot(bp.x-player.x,bp.z-player.z);
+      if(bd<85)trafficBeep(bd);
     }
     c.t+=sp*dt*c.lane.dir;
     const p=trafficPos(c);
@@ -4145,6 +4159,12 @@ function mapEntries(q){
       switchWorld("earth");
       goNearest("\u{1F3F0} Nearest MEGA MANSION",nearestSpot(mansionSpot,MSP,1230,870,3),0,40);
     }],
+    ["\u{1F3F4}‍☠️ Today's TREASURE hunt",()=>{
+      switchWorld("earth");
+      setupTreasure();
+      $("mapModal").classList.remove("open");
+      toast(TREASURE.found?"\u{1F3F4}‍☠️ You already found today's treasure — a new one appears tomorrow!":treasureHintText());
+    }],
     ["\u{1F3DB} Nearest dumpling museum",()=>{
       switchWorld("earth");
       goNearest("\u{1F3DB} Nearest dumpling museum",nearestSpot(museumSpot,DMUS,520,260,6),0,10);
@@ -4557,12 +4577,19 @@ function updateHint(){
     for(const t of trains)if(t.state==="waiting"&&Math.hypot(player.x-railC(t.k,t.z),player.z-t.z)<16){txt="Train waiting — press F to board!";showF=true;}
     for(const p of planes)if(p.state==="parked"&&Math.hypot(player.x-p.x,player.z-p.z)<16){txt="Plane parked — press F to board!";showF=true;}
     for(const b of buses){const bp=busPos(b);if(b.state==="waiting"&&Math.hypot(player.x-bp.x,player.z-bp.z)<12){txt="Bus waiting — press F to board!";showF=true;}}
-    if(!txt&&player.onFoot&&myVehicle&&Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)<5){txt="Press F to get in your "+S.selected.name;showF=true;}
+    if(!txt&&player.onFoot&&myVehicle&&Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)<5){txt="Press F to get in your "+(S.selected?S.selected.name:"vehicle");showF=true;}
     }
     if(!txt&&S.world==="moon"&&player.onFoot){
       for(const mc of moonCars){
         if(!offScene(mc.g)&&Math.hypot(player.x-mc.x,player.z-mc.z)<6){txt="\u{1F319} Moon buggy — press F to drive!";showF=true;break;}
       }
+    }
+    /* treasure hunt: hot & cold */
+    if(!txt&&S.world==="earth"&&!TREASURE.found&&TREASURE.key){
+      const td=Math.hypot(player.x-TREASURE.x,player.z-TREASURE.z);
+      if(td<70)txt="\u{1F3F4}‍☠️\u{1F525} BURNING HOT — the treasure chest is RIGHT HERE somewhere!";
+      else if(td<200)txt="\u{1F3F4}‍☠️ HOT! The treasure is very close...";
+      else if(td<420)txt="\u{1F3F4}‍☠️ Getting warm... the treasure isn't far.";
     }
   }
   $("hintTxt").textContent=txt;
@@ -4572,6 +4599,312 @@ function updateHint(){
 }
 $("kT").onclick=()=>tryCall();
 $("kF").onclick=()=>tryEnterLeave();
+/* ================= EFFECT SETTINGS (police, sounds, weather, quality) ================= */
+const SETTINGS={police:true,crash:true,honk:true,engine:true,siren:true,weather:true,quality:"med"};
+try{Object.assign(SETTINGS,JSON.parse(localStorage.getItem("vc4fx")||"{}"));}catch(e){}
+function saveFx(){try{localStorage.setItem("vc4fx",JSON.stringify(SETTINGS))}catch(e){}}
+function wireFx(id,key,label){
+  const el=$(id);
+  const upd=()=>{el.classList.toggle("on",SETTINGS[key]);el.innerHTML=label+" "+(SETTINGS[key]?"ON":"OFF");};
+  el.onclick=()=>{
+    SETTINGS[key]=!SETTINGS[key];saveFx();upd();
+    if(key==="police"&&!SETTINGS.police)for(const c of traffic)if(c.chase)endChase(c);
+  };
+  upd();
+}
+wireFx("fxPolice","police","\u{1F46E} Police");
+wireFx("fxCrash","crash","\u{1F4A5} Crash sound");
+wireFx("fxHonk","honk","\u{1F4E3} Honks");
+wireFx("fxEngine","engine","\u{1F697} Engine sound");
+wireFx("fxSiren","siren","\u{1F6A8} Sirens");
+wireFx("fxWeather","weather","\u{1F327} Weather");
+function applyQualityUI(){
+  ["low","med","high"].forEach(q=>$("q"+q[0].toUpperCase()+q.slice(1)).classList.toggle("on",SETTINGS.quality===q));
+}
+["low","med","high"].forEach(q=>{
+  $("q"+q[0].toUpperCase()+q.slice(1)).onclick=()=>{
+    SETTINGS.quality=q;saveFx();setQuality(q);applyQualityUI();
+    toast("✨ Graphics: "+(q==="low"?"FAST (no shadows)":q==="high"?"BEAUTIFUL":"NORMAL"));
+  };
+});
+setQuality(SETTINGS.quality);applyQualityUI();
+/* ================= WEATHER: rain, snow (December) & fog — shared on servers ================= */
+const WEATHER={state:"clear",rain:null};
+function weatherState(){
+  if(!SETTINGS.weather)return "clear";
+  const slot=Math.floor((CLOCK.day*1440+CLOCK.min)/240);   // changes every 4 game hours, same for everyone
+  const r=h2i(slot,911);
+  if(r<0.62)return "clear";
+  if(r<0.86)return new Date().getMonth()===11?"snow":"rain";
+  return "fog";
+}
+function buildRain(){
+  const n=900,pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){pos[i*3]=(Math.random()-0.5)*80;pos[i*3+1]=Math.random()*40;pos[i*3+2]=(Math.random()-0.5)*80;}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  const m=new THREE.Points(g,new THREE.PointsMaterial({color:0x9fc4e0,size:0.14,transparent:true,opacity:0.8}));
+  m.visible=false;scene.add(m);
+  return m;
+}
+function updateWeather(dt){
+  if(!WEATHER.rain)WEATHER.rain=buildRain();
+  WEATHER.state=(S.world==="earth"&&!CAVE.in)?weatherState():"clear";
+  const r=WEATHER.rain,st=WEATHER.state;
+  if(st==="rain"||st==="snow"){
+    r.visible=true;
+    r.material.color.set(st==="snow"?0xffffff:0x9fc4e0);
+    r.material.size=st==="snow"?0.24:0.14;
+    const pos=r.geometry.attributes.position;
+    const fall=(st==="snow"?6:32)*dt;
+    for(let i=0;i<pos.count;i++){
+      let y=pos.getY(i)-fall*(0.7+(i%5)*0.12);
+      if(y<0)y=40;
+      pos.setY(i,y);
+    }
+    pos.needsUpdate=true;
+    r.position.set(player.x,player.y,player.z);
+  }else r.visible=false;
+  /* fog & rain thicken the air (applied after updateSky each frame) */
+  if(S.world==="earth"){
+    if(st==="fog"){scene.fog.near=34;scene.fog.far=230;}
+    else if(st==="rain"||st==="snow"){scene.fog.near=110;scene.fog.far=430;}
+  }
+}
+function wetGrip(){return WEATHER.state==="rain"?0.72:(WEATHER.state==="snow"?0.6:1);}
+/* ================= DAILY TREASURE HUNT — same spot for everyone on a server ================= */
+const TREASURE={key:"",x:0,z:0,found:false,mesh:null};
+function setupTreasure(){
+  const dstr=new Date().toISOString().slice(0,10);
+  if(TREASURE.key===dstr)return;
+  TREASURE.key=dstr;
+  let h=0;for(let i=0;i<dstr.length;i++)h=(h*33+dstr.charCodeAt(i))>>>0;
+  TREASURE.x=WORLD.ox+((h%160)-80)*31;
+  TREASURE.z=WORLD.oz+((Math.floor(h/160)%160)-80)*27;
+  TREASURE.found=localStorage.getItem("vc4treasure")===dstr+":"+mpWorldKey();
+  if(TREASURE.mesh){scene.remove(TREASURE.mesh);disposeGroup(TREASURE.mesh);TREASURE.mesh=null;}
+}
+function buildTreasureChest(){
+  const g=new THREE.Group();
+  const y=terrainH(TREASURE.x,TREASURE.z);
+  const body=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.4,0.8,0.9),new THREE.MeshLambertMaterial({color:0x6f4e37})));
+  body.position.set(0,0.4,0);g.add(body);
+  const lid=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.44,0.3,0.94),new THREE.MeshLambertMaterial({color:0x5a3d28})));
+  lid.position.set(0,0.9,0);g.add(lid);
+  const gold=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.14,0.7),new THREE.MeshBasicMaterial({color:0xffd700}));
+  gold.position.set(0,0.84,0);g.add(gold);
+  const band=new THREE.Mesh(new THREE.BoxGeometry(0.2,1.14,0.96),new THREE.MeshLambertMaterial({color:0xd9a520}));
+  band.position.set(0,0.55,0);g.add(band);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.6,0.09,8,22),new THREE.MeshBasicMaterial({color:0xffd700}));
+  ring.rotation.x=Math.PI/2;ring.position.y=0.25;g.add(ring);
+  g.position.set(TREASURE.x,y,TREASURE.z);
+  g.userData.ring=ring;
+  scene.add(g);
+  return g;
+}
+function updateTreasure(dt){
+  setupTreasure();
+  if(TREASURE.found||S.world!=="earth"||CAVE.in){
+    if(TREASURE.mesh)TREASURE.mesh.visible=false;
+    return;
+  }
+  const d=Math.hypot(player.x-TREASURE.x,player.z-TREASURE.z);
+  if(d<90&&!TREASURE.mesh)TREASURE.mesh=buildTreasureChest();
+  if(TREASURE.mesh){
+    TREASURE.mesh.visible=true;
+    TREASURE.mesh.userData.ring.rotation.z+=dt*1.2;
+    if(d<3.4&&player.onFoot)claimTreasure();
+  }
+}
+async function claimTreasure(){
+  TREASURE.found=true;
+  try{localStorage.setItem("vc4treasure",TREASURE.key+":"+mpWorldKey());}catch(e){}
+  if(TREASURE.mesh){scene.remove(TREASURE.mesh);disposeGroup(TREASURE.mesh);TREASURE.mesh=null;}
+  let first=true;
+  if(SERVER_READY)first=await fbPut("/treasure/"+mpWorldKey()+"/"+fbKey(TREASURE.key),{n:mpName(),ts:Date.now()});
+  ACH.flags.treasure=true;saveAch();
+  addMoney(first?2000:250);
+  toast(first
+    ?"\u{1F3F4}‍☠️\u{1F947} YOU FOUND TODAY'S TREASURE FIRST — $2,000!! A new one appears tomorrow!"
+    :"\u{1F3F4}‍☠️ Treasure found! Another player got here first — still $250 for you!");
+}
+function treasureHintText(){
+  const dx=TREASURE.x-player.x,dz=TREASURE.z-player.z,d=Math.hypot(dx,dz);
+  const ns=dz>200?"NORTH":dz<-200?"SOUTH":"";
+  const ew=dx>200?"EAST":dx<-200?"WEST":"";
+  const dir=(ns&&ew)?ns+"-"+ew:(ns||ew||"RIGHT HERE");
+  return "\u{1F3F4}‍☠️ Today's treasure is about "+(Math.round(d/500)*500>=1000?(Math.round(d/500)/2)+" km":"less than 500 m")+" to the "+dir+"! Get warmer to see the chest.";
+}
+/* ================= ACHIEVEMENTS ================= */
+const ACH={done:new Set(),flags:{}};
+try{
+  const a=JSON.parse(localStorage.getItem("vc4ach")||"null");
+  if(a){(a.done||[]).forEach(x=>ACH.done.add(x));Object.assign(ACH.flags,a.flags||{});}
+}catch(e){}
+function saveAch(){try{localStorage.setItem("vc4ach",JSON.stringify({done:[...ACH.done],flags:ACH.flags}))}catch(e){}}
+const ACH_DEFS=[
+  ["km100","\u{1F697}","Road tripper","Drive 100 km in total",()=>S.km>=100],
+  ["km1000","\u{1F6E3}","Marathon machine","Drive 1,000 km in total",()=>S.km>=1000],
+  ["cars5","\u{1F3CE}","Collector","Own 5 vehicles",()=>OWN.size>=5],
+  ["cars15","\u{1F3DB}","Car museum","Own 15 vehicles",()=>OWN.size>=15],
+  ["rich1k","\u{1F4B5}","First grand","Reach $1,000",()=>MONEY.v>=1000],
+  ["rich1m","\u{1F911}","Millionaire","Reach $1,000,000",()=>MONEY.v>=1000000],
+  ["mansion","\u{1F3F0}","Home sweet home","Get a MEGA MANSION",()=>RENT.list.some(r2=>String(r2.id).startsWith("M:"))],
+  ["glit","✨","Glitter fan","Own a glitter dumpling",()=>DUMP.owned.some(d=>d.glitter)],
+  ["rainglit","\u{1F308}","The rarest","Own a GLITTER RAINBOW dumpling",()=>DUMP.owned.some(d=>d.color==="Rainbow"&&d.glitter)],
+  ["moon","\u{1F319}","Astronaut","Visit the Moon",()=>!!ACH.flags.moon],
+  ["concert","\u{1F3B9}","Superstar","Collect tips from a concert",()=>!!ACH.flags.concert],
+  ["race","\u{1F3C6}","Race winner","Win a race",()=>!!ACH.flags.race],
+  ["pet","\u{1F436}","Best friend","Buy a pet",()=>!!PET.type],
+  ["treasure","\u{1F3F4}‍☠️","Treasure hunter","Find a daily treasure",()=>!!ACH.flags.treasure],
+  ["job500","\u{1F4BC}","Hard worker","Earn $500 in one job shift",()=>!!ACH.flags.job]
+];
+let _achT=2;
+function updateAch(dt){
+  _achT-=dt;
+  if(_achT>0)return;
+  _achT=3;
+  if(S.world==="moon")ACH.flags.moon=true;
+  if(JOB.type&&JOB.total>=500)ACH.flags.job=true;
+  for(const d of ACH_DEFS){
+    if(ACH.done.has(d[0]))continue;
+    let ok=false;
+    try{ok=d[4]();}catch(e){}
+    if(ok){
+      ACH.done.add(d[0]);saveAch();
+      addMoney(250);
+      toast("\u{1F3C6} ACHIEVEMENT: "+d[1]+" "+d[2]+" — +$250!");
+    }
+  }
+}
+function renderAch(){
+  const w=$("achList");w.innerHTML="";
+  ACH_DEFS.forEach(d=>{
+    const done=ACH.done.has(d[0]);
+    const el=document.createElement("div");
+    el.className="achRow"+(done?" done":"");
+    el.innerHTML="<span class='ae'>"+(done?d[1]:"\u{1F512}")+"</span><span class='at'><b>"+d[2]+"</b><br><span>"+d[3]+"</span></span><span class='ax'>"+(done?"✅":"")+"</span>";
+    w.appendChild(el);
+  });
+}
+$("bAch").onclick=()=>{renderAch();$("achModal").classList.toggle("open");};
+$("achClose").onclick=()=>$("achModal").classList.remove("open");
+/* ================= PHOTO MODE ================= */
+$("bPhoto").onclick=()=>{
+  if(S.mode!=="game"){toast("Start driving first!");return;}
+  $("hud").classList.remove("show");
+  requestAnimationFrame(()=>{
+    renderer.render(scene,camera);
+    renderer.domElement.toBlob(b=>{
+      $("hud").classList.add("show");
+      if(!b){toast("\u{1F4F7} Couldn't take the photo!");return;}
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(b);
+      a.download="car-city-photo.png";
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+      toast("\u{1F4F7} CLICK! Photo saved to your downloads!");
+    });
+  });
+};
+/* ================= AUTO-DRIVE: ~50 km/h, asks ⬅ ⬆ ➡ every 3rd crossing ================= */
+const AUTO={on:false,axis:"z",line:0,dir:1,t:0,count:0,ask:null,askT:0,turn:"straight"};
+function autoLaneC(){const off=3.5;return AUTO.axis==="z"?(AUTO.dir>0?AUTO.line-off:AUTO.line+off):(AUTO.dir>0?AUTO.line+off:AUTO.line-off);}
+function toggleAuto(){
+  if(AUTO.on){autoOff();return;}
+  if(!player.drive||player.drive!==myVehicle||myVehicle.type==="bike"){toast("\u{1F916} Get in a car or on a motorcycle first!");return;}
+  const v=myVehicle;
+  const gx=nearGridLine(v.x),gz=nearGridLine(v.z);
+  if(Math.min(gx,gz)>10){toast("\u{1F916} Drive onto a normal city road first — then turn auto-drive on!");return;}
+  if(gx<=gz){AUTO.axis="z";AUTO.line=Math.round((v.x-30)/120)*120+30;AUTO.dir=Math.cos(v.yaw)>=0?1:-1;AUTO.t=v.z;}
+  else{AUTO.axis="x";AUTO.line=Math.round((v.z-30)/120)*120+30;AUTO.dir=Math.sin(v.yaw)>=0?1:-1;AUTO.t=v.x;}
+  AUTO.count=0;AUTO.ask=null;AUTO.turn="straight";AUTO.on=true;
+  $("bAuto").classList.add("on");
+  toast("\u{1F916} AUTO-DRIVE ON (~50 km/h). Every 3rd crossing it asks ⬅ ⬆ ➡ — if you don't choose, it picks itself. Steer to take over!");
+}
+function autoOff(silent){
+  AUTO.on=false;AUTO.ask=null;
+  $("autoAsk").classList.remove("show");
+  $("bAuto").classList.remove("on");
+  if(!silent)toast("\u{1F916} Auto-drive OFF — you have the wheel!");
+}
+function autoChoose(c){
+  AUTO.turn=c;
+  $("autoAsk").classList.remove("show");
+}
+$("bAuto").onclick=()=>{if(S.mode==="game")toggleAuto();};
+$("autoL").onclick=()=>{autoChoose("left");toast("⬅ Okay — turning LEFT!");};
+$("autoS").onclick=()=>{autoChoose("straight");toast("⬆ Okay — STRAIGHT ahead!");};
+$("autoR").onclick=()=>{autoChoose("right");toast("➡ Okay — turning RIGHT!");};
+function updateAuto(dt){
+  const v=myVehicle;
+  if(!v||player.drive!==v){autoOff(true);return 0;}
+  if(steerInput()!==0||thrInput()!==0){autoOff();return Math.abs(v.speed);}
+  const max=50/3.6;
+  let tgt=max;
+  /* stop for red lights like a good robot */
+  const phase=lightPhase();
+  const redFor=AUTO.axis==="z"?phase===1:phase===0;
+  const nxtStop=AUTO.dir>0?Math.ceil((AUTO.t-30+10)/120)*120+30:Math.floor((AUTO.t-30-10)/120)*120+30;
+  const stopGap=(nxtStop-AUTO.t)*AUTO.dir-10;
+  if(redFor&&stopGap>0&&stopGap<18)tgt*=Math.max(0,stopGap-2)/16;
+  if(FUEL.km<=0&&v.type!=="bike")tgt=0;
+  v.speed+=(tgt-v.speed)*Math.min(1,1.4*dt);
+  const prev=AUTO.t;
+  AUTO.t+=v.speed*dt*AUTO.dir;
+  /* every 3rd crossing: ask ⬅ ⬆ ➡ */
+  const li1=Math.floor((AUTO.t-30)/120);
+  const nextCross=AUTO.dir>0?(li1+1)*120+30:li1*120+30;
+  const distToCross=(nextCross-AUTO.t)*AUTO.dir;
+  if(!AUTO.ask&&AUTO.count%3===2&&distToCross<48&&distToCross>8){
+    AUTO.ask=nextCross;AUTO.askT=0;AUTO.turn=null;
+    $("autoAsk").classList.add("show");
+    try{
+      const u=new SpeechSynthesisUtterance("Left, right, or straight?");
+      u.rate=1.15;speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  if(AUTO.ask!==null&&AUTO.turn===null){
+    AUTO.askT+=dt;
+    if(AUTO.askT>3.5||distToCross<8){
+      autoChoose(["left","straight","right"][Math.floor(Math.random()*3)]);
+      toast("\u{1F916} You didn't choose — I picked "+(AUTO.turn==="left"?"⬅ LEFT":AUTO.turn==="right"?"➡ RIGHT":"⬆ STRAIGHT")+"!");
+    }
+  }
+  /* passed a crossing? */
+  const li0=Math.floor((prev-30)/120);
+  if(li0!==li1){
+    const cl=(AUTO.dir>0?li1:li0)*120+30;
+    AUTO.count++;
+    if(AUTO.ask===cl&&AUTO.turn&&AUTO.turn!=="straight"){
+      const h=AUTO.axis==="z"?[0,AUTO.dir]:[AUTO.dir,0];
+      const nh=AUTO.turn==="left"?[h[1],-h[0]]:[-h[1],h[0]];
+      const oldLine=AUTO.line;
+      AUTO.axis=nh[0]!==0?"x":"z";
+      AUTO.dir=nh[0]!==0?nh[0]:nh[1];
+      AUTO.t=oldLine;
+      AUTO.line=cl;
+    }
+    if(AUTO.ask===cl){AUTO.ask=null;AUTO.turn="straight";$("autoAsk").classList.remove("show");}
+  }
+  /* place the car on its lane */
+  const c=autoLaneC();
+  if(AUTO.axis==="z"){v.x+=(c-v.x)*Math.min(1,4*dt);v.z=AUTO.t;}
+  else{v.z+=(c-v.z)*Math.min(1,4*dt);v.x=AUTO.t;}
+  const wantYaw=AUTO.axis==="z"?(AUTO.dir>0?0:Math.PI):(AUTO.dir>0?Math.PI/2:-Math.PI/2);
+  let dy=wantYaw-v.yaw;
+  while(dy>Math.PI)dy-=Math.PI*2;while(dy<-Math.PI)dy+=Math.PI*2;
+  v.yaw+=dy*Math.min(1,5*dt);
+  v.y=terrainH(v.x,v.z);v.grounded=true;v.vy=0;
+  v.mesh.position.set(v.x,v.y,v.z);
+  v.mesh.rotation.set(0,v.yaw,0);
+  v.mesh.rotateX(-slopePitch(v.x,v.z,v.yaw,2));
+  for(const w of v.mesh.userData.wheels)w.spin.rotation.x+=v.speed/w.r*dt;
+  headLight.intensity=isNight()?1.1:0;
+  headLight.position.set(v.x+Math.sin(v.yaw)*6,v.y+1.6,v.z+Math.cos(v.yaw)*6);
+  player.x=v.x;player.z=v.z;player.y=v.y;
+  return Math.abs(v.speed);
+}
 /* ================= UPDATE LOG (garage &#128220; Update button) ================= */
 const UPDATE_PAGES=[
 {t:"Round 1 — Mobile, sea, sound, mountains, rockets & the Moon",h:`
@@ -4839,7 +5172,37 @@ const UPDATE_PAGES=[
 <li>\u{1F4B5} <b>Sell cars back</b> for 70% in the garage (starter cars excluded).</li>
 <li>\u{1F3E8} Owned apartments earn <b>$25/day</b> from tenants.</li>
 <li>\u{1F381} <b>Gift dumplings</b> to other players; concerts pay <b>double, triple, more</b> when real players watch!</li>
-<li>⭐ <b>Friends</b>: star a player — gold on the map, top of the list.</li></ul>`}
+<li>⭐ <b>Friends</b>: star a player — gold on the map, top of the list.</li></ul>`},
+{t:"Round 17 — Big graphics glow-up, real music, weather & auto-drive",h:`
+<h4>\u{1F31F} MUCH NICER GRAPHICS</h4><ul>
+<li>Filmic tone mapping + sRGB colors: richer light, warmer sunsets, deeper shadows.</li>
+<li><b>Real grass</b>: a detailed grass texture on the ground + thousands of little 3D grass tufts.</li>
+<li><b>Shinier cars</b>: real specular paint and glossy glass instead of flat plastic.</li>
+<li>Graphics quality setting: ⚡ Fast (no shadows, great for slow devices) / Normal / ✨ Beautiful.</li></ul>
+<h4>\u{1F3B5} REAL MUSIC</h4><ul>
+<li>The game now plays the real songs from the Music folder in a random shuffle (\u{1F3B5} toggle in Settings).</li></ul>
+<h4>\u{1F327} WEATHER</h4><ul>
+<li>Rain (wet roads = less grip!), fog banks, and ❄️ SNOW in December — everyone on a server gets the same weather.</li></ul>
+<h4>\u{1F916} AUTO-DRIVE</h4><ul>
+<li>New \u{1F916} Auto button: your car drives itself at ~50 km/h and stops at red lights.</li>
+<li>Every 3rd crossing it asks <b>⬅ ⬆ ➡</b> (it even talks!) — don't choose and it picks itself. Steer to take over.</li></ul>
+<h4>\u{1F3F4}‍☠️ DAILY TREASURE HUNT</h4><ul>
+<li>Every day a treasure chest hides somewhere — same spot for everyone on a server.</li>
+<li>Use the map hint, follow the HOT/COLD messages — first finder gets <b>$2,000</b>, later finders $250.</li></ul>
+<h4>\u{1F3C6} ACHIEVEMENTS</h4><ul>
+<li>15 achievements worth $250 each — from "Road tripper" to the glitter rainbow dumpling.</li></ul>
+<h4>\u{1F50A} BETTER SOUNDS</h4><ul>
+<li>New smooth two-tone \u{1F693} siren (no more screech), softer deeper crash, rounder horn.</li>
+<li>Every car honks a little differently — and <b>traffic cars now honk by themselves</b> in jams!</li></ul>
+<h4>⚙️ EFFECT SWITCHES</h4><ul>
+<li>Settings: turn police, crash sound, honks, engine sound, sirens and weather ON/OFF separately.</li></ul>
+<h4>\u{1F4F7} PHOTO MODE + \u{1F383} SEASONS</h4><ul>
+<li>\u{1F4F7} Photo button: hides the HUD and saves a screenshot to your downloads.</li>
+<li>\u{1F383} Pumpkin dumplings in October, ❄️ Snowy dumplings in December (worth $40!).</li></ul>
+<h4>\u{1F41B} BUG FIXES</h4><ul>
+<li>Animals & people no longer twitch/spin at road edges — they turn smoothly and commit to a direction.</li>
+<li>Glitching/flickering roads fixed: every road layer got its own height.</li>
+<li>Faster: quality setting reduces load, fewer freeze spikes.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -4878,7 +5241,8 @@ function frame(now){
   else if(player.inBus)speedMS=Math.abs(player.bus.speed);
   else if(player.drive){
     const mcdBusy=player.drive===myVehicle&&MCD.phase!=="idle";
-    speedMS=mcdBusy?Math.abs(myVehicle.speed):driveVehicle(player.drive,dt);   // McDrive lane drives for you
+    speedMS=mcdBusy?Math.abs(myVehicle.speed)
+      :(AUTO.on&&player.drive===myVehicle?updateAuto(dt):driveVehicle(player.drive,dt));   // McDrive lane / auto-drive
   }
   else{speedMS=walkPlayer(dt);headLight.intensity=0;}
   if(player.inTrain){const t=player.train;player.x=railC(t.k,t.z);player.z=t.z;player.y=t.g.position.y;}
@@ -4909,6 +5273,7 @@ function frame(now){
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
+  updateWeather(dt);updateTreasure(dt);updateAch(dt);
   updateChunks(player.x,player.z);
   updateLandmarks(player.x,player.z);
   updateCamera(dt);

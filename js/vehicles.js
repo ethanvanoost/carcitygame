@@ -1,8 +1,10 @@
 /* ================= VEHICLE MESHES (realistic cars, buses, emergency) ================= */
 const tireMat=keep(new THREE.MeshLambertMaterial({color:0x1c1c1e}));
-const hubMat=keep(new THREE.MeshLambertMaterial({color:0xc9cfd8}));
-const glassMat=keep(new THREE.MeshLambertMaterial({color:0x9fd8ff,transparent:true,opacity:0.85}));
+const hubMat=keep(new THREE.MeshPhongMaterial({color:0xc9cfd8,shininess:80,specular:0x888888}));
+const glassMat=keep(new THREE.MeshPhongMaterial({color:0x9fd8ff,transparent:true,opacity:0.85,shininess:120,specular:0xaaddff}));
 const darkTrim=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
+/* shiny car paint: real specular highlights instead of flat plastic */
+function paintMat(color){return new THREE.MeshPhongMaterial({color,shininess:65,specular:0x666666});}
 function addWheel(g,x,z,r,w,front){
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
@@ -20,7 +22,7 @@ function addWheel(g,x,z,r,w,front){
 }
 function buildVehicleMesh(type,color,top){
   const g=new THREE.Group();g.userData.wheels=[];
-  const mat=new THREE.MeshLambertMaterial({color});
+  const mat=paintMat(color);
   if(type==="car"){
     const base=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.08,0.5,4.6),mat));base.position.y=0.62;g.add(base);
     const hood=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2,0.26,1.2),mat));hood.position.set(0,0.98,1.55);g.add(hood);
@@ -351,15 +353,44 @@ let engOsc=null,engOsc2=null,engFilt=null,engGain=null,musicGain=null,musicTimer
 let rocketNoise=null,rocketGain=null;
 function setHorn(on){
   if(!audioCtx||!hornGain)return;
-  hornGain.gain.setTargetAtTime(on&&SND.sound?0.14:0,audioCtx.currentTime,0.01);
+  const allow=SND.sound&&(typeof SETTINGS==="undefined"||SETTINGS.honk);
+  hornGain.gain.setTargetAtTime(on&&allow?0.12:0,audioCtx.currentTime,0.015);
+}
+let hornOscs=[];
+function setHornPitch(base){
+  /* every car honks a little differently — fast cars sound deeper */
+  hornOscs.forEach((o,i)=>{try{o.frequency.setTargetAtTime(base*(i?1.26:1),audioCtx.currentTime,0.02);}catch(e){}});
+}
+/* short polite "beep beep" from traffic cars */
+let _beepT=0;
+function trafficBeep(dist){
+  if(!audioCtx||!SND.sound)return;
+  if(typeof SETTINGS!=="undefined"&&!SETTINGS.honk)return;
+  const now=performance.now();
+  if(now-_beepT<900)return;
+  _beepT=now;
+  const t=audioCtx.currentTime,vol=Math.max(0.02,0.09*(1-dist/90));
+  [0,0.16].forEach(off=>{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type="triangle";o.frequency.value=430+Math.random()*140;
+    g.gain.setValueAtTime(0,t+off);
+    g.gain.linearRampToValueAtTime(vol,t+off+0.015);
+    g.gain.exponentialRampToValueAtTime(0.001,t+off+0.13);
+    o.connect(g);g.connect(audioCtx.destination);
+    o.start(t+off);o.stop(t+off+0.15);
+  });
 }
 function ensureAudio(){
   if(audioCtx)return;
   try{
     audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    /* a much nicer siren: soft triangle through a bandpass — smooth "wee-woo",
+       not the old piercing sine screech */
     sirenOsc=audioCtx.createOscillator();sirenGain=audioCtx.createGain();
-    sirenGain.gain.value=0;sirenOsc.frequency.value=700;
-    sirenOsc.connect(sirenGain);sirenGain.connect(audioCtx.destination);sirenOsc.start();
+    sirenGain.gain.value=0;sirenOsc.type="triangle";sirenOsc.frequency.value=660;
+    const sirenBP=audioCtx.createBiquadFilter();
+    sirenBP.type="bandpass";sirenBP.frequency.value=900;sirenBP.Q.value=1.4;
+    sirenOsc.connect(sirenBP);sirenBP.connect(sirenGain);sirenGain.connect(audioCtx.destination);sirenOsc.start();
     /* engine: a soft two-layer hum through a lowpass filter — pitch and
        volume follow your speed without the harsh sawtooth buzz */
     engOsc=audioCtx.createOscillator();engOsc.type="triangle";engOsc.frequency.value=60;
@@ -379,87 +410,73 @@ function ensureAudio(){
       rocketNoise.connect(rf);rf.connect(rocketGain);rocketGain.connect(audioCtx.destination);
       rocketNoise.start();
     }
-    /* two-tone car horn (held while the honk input is down) */
-    hornGain=audioCtx.createGain();hornGain.gain.value=0;hornGain.connect(audioCtx.destination);
-    [390,494].forEach(f=>{
-      const o=audioCtx.createOscillator();o.type="square";o.frequency.value=f;
-      const g=audioCtx.createGain();g.gain.value=0.5;
+    /* two-tone car horn — triangle waves through a lowpass: full but not harsh */
+    hornGain=audioCtx.createGain();hornGain.gain.value=0;
+    const hornLP=audioCtx.createBiquadFilter();hornLP.type="lowpass";hornLP.frequency.value=1500;
+    hornGain.connect(hornLP);hornLP.connect(audioCtx.destination);
+    hornOscs=[390,494].map(f=>{
+      const o=audioCtx.createOscillator();o.type="triangle";o.frequency.value=f;
+      const g=audioCtx.createGain();g.gain.value=0.55;
       o.connect(g);g.connect(hornGain);o.start();
+      return o;
     });
     /* music bus */
     musicGain=audioCtx.createGain();musicGain.gain.value=0.4;musicGain.connect(audioCtx.destination);   // music louder (sound effects unchanged)
     startMusic();
   }catch(e){}
 }
-/* nicer procedural music: an 8-bar chord progression with a warm pad,
-   a soft bass line and a little arpeggio melody that follows the chord */
-const MUSIC_PROG=[
-  [130.8,261.6,329.6,392],   // C
-  [98,196,246.9,293.7],      // G
-  [110,220,261.6,329.6],     // Am
-  [87.3,174.6,220,261.6],    // F
-  [130.8,261.6,329.6,392],   // C
-  [87.3,174.6,220,261.6],    // F
-  [98,196,246.9,293.7],      // G
-  [110,220,261.6,329.6]      // Am
+/* REAL music: the mp3s from the Music folder play in a random shuffle */
+const MUSIC_FILES=[
+  "Music/orbit-d0d-main-version-29627-02-39.mp3",
+  "Music/rainy-window-avbe-main-version-18796-01-21.mp3",
+  "Music/soft-mist-movement-tranquilium-main-version-25768-04-42.mp3"
 ];
-let musicBar=0;
+let musicAudio=null,musicIdx=-1;
+function nextTrack(){
+  if(!musicAudio)return;
+  let i;
+  do{i=Math.floor(Math.random()*MUSIC_FILES.length);}while(MUSIC_FILES.length>1&&i===musicIdx);
+  musicIdx=i;
+  musicAudio.src=MUSIC_FILES[i];
+  if(SND.music)musicAudio.play().catch(()=>{});
+}
 function startMusic(){
-  if(musicTimer)return;
-  const BAR=2.2;
-  musicTimer=setInterval(()=>{
-    if(!audioCtx||!SND.music)return;
-    const ch=MUSIC_PROG[musicBar%MUSIC_PROG.length];musicBar++;
-    const t=audioCtx.currentTime;
-    /* warm pad: the three chord tones, slow attack & release */
-    ch.slice(1).forEach((f,i)=>{
-      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-      o.type="triangle";o.frequency.value=f;
-      o.detune.value=(i-1)*4;                     // tiny detune = warmth
-      g.gain.setValueAtTime(0,t);
-      g.gain.linearRampToValueAtTime(0.032,t+0.5);
-      g.gain.setValueAtTime(0.032,t+BAR-0.7);
-      g.gain.linearRampToValueAtTime(0,t+BAR+0.15);
-      o.connect(g);g.connect(musicGain);o.start(t);o.stop(t+BAR+0.2);
-    });
-    /* soft bass: root note, two gentle pulses per bar */
-    [0,BAR/2].forEach(off=>{
-      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-      o.type="sine";o.frequency.value=ch[0];
-      g.gain.setValueAtTime(0,t+off);
-      g.gain.linearRampToValueAtTime(0.07,t+off+0.06);
-      g.gain.exponentialRampToValueAtTime(0.001,t+off+BAR/2*0.9);
-      o.connect(g);g.connect(musicGain);o.start(t+off);o.stop(t+off+BAR/2);
-    });
-    /* arpeggio melody: chord tones climbing up an octave, plucky */
-    const steps=[ch[1]*2,ch[2]*2,ch[3]*2,ch[Math.floor(Math.random()*3)+1]*2];
-    steps.forEach((f,i)=>{
-      const st=t+i*(BAR/4)+0.05;
-      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-      o.type="sine";o.frequency.value=f;
-      g.gain.setValueAtTime(0,st);
-      g.gain.linearRampToValueAtTime(0.045,st+0.03);
-      g.gain.exponentialRampToValueAtTime(0.001,st+0.5);
-      o.connect(g);g.connect(musicGain);o.start(st);o.stop(st+0.55);
-    });
-  },2200);
+  if(musicAudio)return;
+  try{
+    musicAudio=new Audio();
+    musicAudio.volume=0.45;
+    musicAudio.addEventListener("ended",nextTrack);
+    musicAudio.addEventListener("error",()=>setTimeout(nextTrack,4000));
+    nextTrack();
+  }catch(e){}
+}
+function setMusicOn(on){
+  if(!musicAudio)return;
+  if(on)musicAudio.play().catch(()=>{});
+  else musicAudio.pause();
 }
 function playCrash(strength){
   if(!audioCtx||!SND.sound)return;
+  if(typeof SETTINGS!=="undefined"&&!SETTINGS.crash)return;
   const now=performance.now();
   if(now-_lastCrash<350)return;_lastCrash=now;
-  const t=audioCtx.currentTime,dur=0.4;
+  const t=audioCtx.currentTime,dur=0.32;
+  /* softer, deeper crunch + a low "thump" — less like white-noise static */
   const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
   const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.6);
   const src=audioCtx.createBufferSource();src.buffer=buf;
-  const f=audioCtx.createBiquadFilter();f.type="lowpass";f.frequency.value=850;
-  const g=audioCtx.createGain();g.gain.value=Math.min(0.85,0.3+(strength||10)*0.012);
+  const f=audioCtx.createBiquadFilter();f.type="lowpass";f.frequency.value=520;
+  const g=audioCtx.createGain();g.gain.value=Math.min(0.7,0.22+(strength||10)*0.01);
   src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start();
+  const th=audioCtx.createOscillator(),tg=audioCtx.createGain();
+  th.type="sine";th.frequency.setValueAtTime(90,t);th.frequency.exponentialRampToValueAtTime(38,t+0.22);
+  tg.gain.setValueAtTime(0.4,t);tg.gain.exponentialRampToValueAtTime(0.001,t+0.26);
+  th.connect(tg);tg.connect(audioCtx.destination);th.start(t);th.stop(t+0.3);
 }
 function updateEngine(speedMS,driving){
   if(!audioCtx||!engOsc)return;
-  const on=SND.sound&&driving&&S.mode==="game";
+  const on=SND.sound&&driving&&S.mode==="game"&&(typeof SETTINGS==="undefined"||SETTINGS.engine);
   engGain.gain.setTargetAtTime(on?Math.min(0.13,0.032+speedMS*0.0009):0,audioCtx.currentTime,0.15);
   const f=38+Math.min(115,speedMS*0.9);   // deep smooth hum, never screechy
   engOsc.frequency.setTargetAtTime(f,audioCtx.currentTime,0.15);
@@ -480,7 +497,10 @@ function updateSiren(dt){
     const p=(c.controlled||c.chase)?{x:c.x,z:c.z}:trafficPos(c);
     nearest=Math.min(nearest,Math.hypot(p.x-player.x,p.z-player.z));
   }
-  const vol=(SND.sound&&any&&nearest<120)?0.18*(1-nearest/120):0;
+  const allow=SND.sound&&(typeof SETTINGS==="undefined"||SETTINGS.siren);
+  const vol=(allow&&any&&nearest<120)?0.13*(1-nearest/120):0;
   sirenGain.gain.setTargetAtTime(vol,audioCtx.currentTime,0.1);
-  sirenOsc.frequency.setTargetAtTime(650+Math.sin(performance.now()/300)*220,audioCtx.currentTime,0.05);
+  /* real European two-tone: it STEPS between the notes instead of screeching */
+  const hi=Math.floor(performance.now()/620)%2===0;
+  sirenOsc.frequency.setTargetAtTime(hi?880:660,audioCtx.currentTime,0.03);
 }

@@ -2,6 +2,18 @@
 const renderer=new THREE.WebGLRenderer({canvas:$("c3d"),antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+/* filmic tone mapping + sRGB output = much richer, more realistic light & colors */
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.12;
+/* graphics quality: low = fast (no shadows), high = extra sharp */
+function setQuality(q){
+  renderer.setPixelRatio(q==="low"?1:Math.min(devicePixelRatio,q==="high"?1.75:1.5));
+  sun.castShadow=q!=="low";
+  const sz=q==="high"?2048:1024;
+  sun.shadow.mapSize.set(sz,sz);
+  if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}
+}
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x8ec9f0);
 scene.fog=new THREE.Fog(0x9fd0f0,200,640);
@@ -434,7 +446,7 @@ function crossingPatch(lx,lz,size){
   const pos=geo.attributes.position;
   for(let i=0;i<pos.count;i++){
     const wx=lx+pos.getX(i),wz=lz+pos.getZ(i);
-    pos.setXYZ(i,wx,terrainH(wx,wz)+0.30,wz);
+    pos.setXYZ(i,wx,terrainH(wx,wz)+0.36,wz);
   }
   geo.computeVertexNormals();
   const m=new THREE.Mesh(geo,interMat);m.receiveShadow=true;return m;
@@ -539,10 +551,13 @@ function updatePeds(dt){
     if(p.t>3){p.t=0;p.yaw=p.mode==="wander"?Math.atan2(p.hx-p.x,p.hz-p.z)+(Math.random()-0.5)*2.4:p.yaw+(Math.random()-0.5)*1.4;}
     const sp=1.3;
     const nx=p.x+Math.sin(p.yaw)*sp*dt,nz=p.z+Math.cos(p.yaw)*sp*dt;
-    if(onCarRoad(nx,nz)){p.yaw+=Math.PI;}   // people stay on sidewalks, never the road
+    /* road ahead: pick ONE new direction and commit (no more frantic twitching) */
+    if(onCarRoad(nx,nz)){p.yaw+=Math.PI*0.75+Math.random()*Math.PI*0.5;p.t=-1.5;}
     else{p.x=nx;p.z=nz;}
     p.m.position.set(p.x,terrainH(p.x,p.z),p.z);
-    p.m.rotation.y=p.yaw;
+    let pdy=p.yaw-p.m.rotation.y;
+    while(pdy>Math.PI)pdy-=Math.PI*2;while(pdy<-Math.PI)pdy+=Math.PI*2;
+    p.m.rotation.y+=pdy*Math.min(1,7*dt);
     const a=Math.sin(performance.now()/180)*0.5;
     const L=p.m.userData.limbs;L.lL.rotation.x=a;L.rL.rotation.x=-a;L.lA.rotation.x=-a*0.7;L.rA.rotation.x=a*0.7;
   }
@@ -641,14 +656,20 @@ function updateAnimals(dt){
     if(a.t<=0){a.t=2+Math.random()*4;a.yaw+=(Math.random()-0.5)*2;}
     if(a.pen){ // stay inside zoo pen
       const nx=a.x+Math.sin(a.yaw)*a.sp*dt,nz=a.z+Math.cos(a.yaw)*a.sp*dt;
-      if(Math.hypot(nx-a.pen.x,nz-a.pen.z)<a.pen.r){a.x=nx;a.z=nz;}else a.yaw+=Math.PI;
+      if(Math.hypot(nx-a.pen.x,nz-a.pen.z)<a.pen.r){a.x=nx;a.z=nz;}
+      else{a.yaw=Math.atan2(a.pen.x-a.x,a.pen.z-a.z)+(Math.random()-0.5);a.t=2+Math.random()*2;}
     }else{
       const nx=a.x+Math.sin(a.yaw)*a.sp*dt,nz=a.z+Math.cos(a.yaw)*a.sp*dt;
-      if(onCarRoad(nx,nz))a.yaw+=Math.PI;   // animals never step onto the road
+      /* blocked by a road: pick ONE new direction and keep it for a while —
+         flipping 180° every frame made animals spin like crazy at road edges */
+      if(onCarRoad(nx,nz)){a.yaw+=Math.PI*0.75+Math.random()*Math.PI*0.5;a.t=2+Math.random()*2;}
       else{a.x=nx;a.z=nz;}
     }
+    /* the body turns smoothly toward the walking direction, never snaps */
+    let dy=a.yaw-a.m.rotation.y;
+    while(dy>Math.PI)dy-=Math.PI*2;while(dy<-Math.PI)dy+=Math.PI*2;
+    a.m.rotation.y+=dy*Math.min(1,6*dt);
     a.m.position.set(a.x,terrainH(a.x,a.z),a.z);
-    a.m.rotation.y=a.yaw;
   }
 }
 /* an object whose chunk was unloaded keeps its (detached) group as parent,
@@ -1546,6 +1567,51 @@ function updateTrafficLights(){
 }
 /* ================= CHUNKS ================= */
 const CS=220,SEG=28,chunks=new Map();
+/* real-looking ground: a grass detail texture multiplied with the biome colors */
+const groundTex=(function(){
+  const cv=document.createElement("canvas");cv.width=cv.height=128;
+  const c=cv.getContext("2d");
+  c.fillStyle="#f2f2f2";c.fillRect(0,0,128,128);
+  /* speckle */
+  for(let i=0;i<900;i++){
+    const v=200+Math.floor(Math.random()*56);
+    c.fillStyle="rgb("+v+","+v+","+v+")";
+    c.fillRect(Math.random()*128,Math.random()*128,1.6,1.6);
+  }
+  /* little grass-blade strokes */
+  c.strokeStyle="rgba(160,180,150,0.5)";c.lineWidth=1;
+  for(let i=0;i<240;i++){
+    const x=Math.random()*128,y=Math.random()*128;
+    c.beginPath();c.moveTo(x,y);c.lineTo(x+(Math.random()-0.5)*2,y-2-Math.random()*3);c.stroke();
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return keep(t);
+})();
+const groundMat=keep(new THREE.MeshLambertMaterial({map:groundTex,vertexColors:true}));
+/* tufts of real 3D grass, scattered as one InstancedMesh per chunk */
+const tuftGeo=new THREE.ConeGeometry(0.06,0.55,3);tuftGeo.translate(0,0.26,0);KEEP.add(tuftGeo);
+const tuftMat=keep(new THREE.MeshLambertMaterial({color:0x4e8f3a}));
+function addGrassTufts(g,ox,oz,r,dense){
+  const n=dense;
+  const im=new THREE.InstancedMesh(tuftGeo,tuftMat,n);
+  const M=new THREE.Matrix4(),Q=new THREE.Quaternion(),V=new THREE.Vector3(),SC=new THREE.Vector3();
+  let placed=0;
+  for(let i=0;i<n*2&&placed<n;i++){
+    const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS;
+    if(onAnyRoad(x,z)||keepClear(x,z))continue;
+    const h=rawH(x,z);
+    if(h<0||h>40)continue;
+    V.set(x,h,z);
+    Q.setFromAxisAngle(new THREE.Vector3(0,1,0),r()*6.28);
+    const s=0.7+r()*1.3;SC.set(s,s*(0.7+r()*0.9),s);
+    M.compose(V,Q,SC);
+    im.setMatrixAt(placed++,M);
+  }
+  im.count=placed;
+  g.add(im);
+}
 function keepClear(x,z){
   if(Math.abs(x)<160&&Math.abs(z)<160)return true;
   if(onAnyRoad(x,z))return true;
@@ -1641,10 +1707,14 @@ function buildChunk(cx,cz){
     cols.push(c.r,c.g,c.b);
   }
   geo.setAttribute("color",new THREE.Float32BufferAttribute(cols,3));
+  /* tile the grass detail texture ~28x across the chunk (uv 0..1 → 0..28) */
+  {const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*28,uv.getY(i)*28);}
   geo.computeVertexNormals();
-  const tm=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true}));
+  const tm=new THREE.Mesh(geo,groundMat);
   tm.position.set(ox,0,oz);tm.receiveShadow=true;g.add(tm);
   const r=rng(cx*7349+cz*911+13);
+  /* 3D grass tufts (not in the desert, lighter in the city) */
+  if(biome!=="desert")addGrassTufts(g,ox,oz,r,biome==="forest"?120:80);
   /* --- tunnels: where a road was cut through a mountain, cover it with a tube.
      Samples sit on an ABSOLUTE 12 m grid so tube pieces from neighbouring
      chunks meet exactly end-to-end (no overlapping walls = no flickering),
@@ -1705,8 +1775,8 @@ function buildChunk(cx,cz){
       if(b-a<10)continue;
       g.add(ribbon("z",lx,a,b,14,0.12,roadRibMat,18));
       addTunnels("z",lx,a,b,t=>nearGridLine(t)<15||Math.abs(t+170)<17);
-      g.add(ribbon("z",lx-8.15,a,b,2.7,0.24,sideMat));
-      g.add(ribbon("z",lx+8.15,a,b,2.7,0.24,sideMat));
+      g.add(ribbon("z",lx-8.15,a,b,2.7,0.20,sideMat));
+      g.add(ribbon("z",lx+8.15,a,b,2.7,0.20,sideMat));
       if(oz-40>=a&&oz-40<=b)lightPole(lx+9.9,oz-40,g);
       if(oz+50>=a&&oz+50<=b)lightPole(lx+9.9,oz+50,g);
     }
@@ -1722,10 +1792,10 @@ function buildChunk(cx,cz){
     }
     for(const[a,b]of segs){
       if(b-a<10)continue;
-      g.add(ribbon("x",lz,a,b,14,0.13,roadRibMat,18));
+      g.add(ribbon("x",lz,a,b,14,0.16,roadRibMat,18));
       addTunnels("x",lz,a,b,t=>nearGridLine(t)<15||Math.abs(t-170)<17);
-      g.add(ribbon("x",lz-8.15,a,b,2.7,0.25,sideMat));
-      g.add(ribbon("x",lz+8.15,a,b,2.7,0.25,sideMat));
+      g.add(ribbon("x",lz-8.15,a,b,2.7,0.22,sideMat));
+      g.add(ribbon("x",lz+8.15,a,b,2.7,0.22,sideMat));
     }
   }
   /* intersections: patch + traffic lights (not inside the airport fence) */
@@ -1750,14 +1820,14 @@ function buildChunk(cx,cz){
     }
   }
   /* highways (4 lanes) */
-  if(x0<=170&&x1>=170){g.add(ribbon("z",170,z0,z1,22,0.18,hwyRibMat,24));
+  if(x0<=170&&x1>=170){g.add(ribbon("z",170,z0,z1,22,0.24,hwyRibMat,24));
     addTunnels("z",170,z0,z1,t=>nearGridLine(t)<15||Math.abs(t+170)<17);}
-  if(z0<=-170&&z1>=-170){g.add(ribbon("x",-170,x0,x1,22,0.19,hwyRibMat,24));
+  if(z0<=-170&&z1>=-170){g.add(ribbon("x",-170,x0,x1,22,0.26,hwyRibMat,24));
     addTunnels("x",-170,x0,x1,t=>nearGridLine(t)<15||Math.abs(t-170)<17);}
   /* the MEGA HIGHWAY (8 lanes: 4 each side) */
-  if(x0<=MHX&&x1>=MHX){g.add(ribbon("z",MHX,z0,z1,38,0.2,megaRibMat,40));
+  if(x0<=MHX&&x1>=MHX){g.add(ribbon("z",MHX,z0,z1,38,0.30,megaRibMat,40));
     addTunnels("z",MHX,z0,z1,t=>nearGridLine(t)<15||Math.abs(t-MHZ)<24);}
-  if(z0<=MHZ&&z1>=MHZ){g.add(ribbon("x",MHZ,x0,x1,38,0.21,megaRibMat,40));
+  if(z0<=MHZ&&z1>=MHZ){g.add(ribbon("x",MHZ,x0,x1,38,0.32,megaRibMat,40));
     addTunnels("x",MHZ,x0,x1,t=>nearGridLine(t)<15||Math.abs(t-MHX)<24);}
   /* curvy country roads */
   const dwn=x1>-190&&x0<190&&z1>-190&&z0<190;
@@ -1767,12 +1837,12 @@ function buildChunk(cx,cz){
     const kx0=Math.round((ox-CHF)/CSP);
     for(let k=kx0-1;k<=kx0+1;k++){
       const cAt=zz=>curveCX(k,zz);
-      if(Math.abs(cAt(oz)-ox)<CS/2+CWIN)g.add(ribbon("z",0,z0,z1,12,0.15,roadRibMat,18,cAt));
+      if(Math.abs(cAt(oz)-ox)<CS/2+CWIN)g.add(ribbon("z",0,z0,z1,12,0.27,roadRibMat,18,cAt));
     }
     const kz0=Math.round((oz-CHF)/CSP);
     for(let k=kz0-1;k<=kz0+1;k++){
       const cAt=xx=>curveCZ(k,xx);
-      if(Math.abs(cAt(ox)-oz)<CS/2+CWIN)g.add(ribbon("x",0,x0,x1,12,0.16,roadRibMat,18,cAt));
+      if(Math.abs(cAt(ox)-oz)<CS/2+CWIN)g.add(ribbon("x",0,x0,x1,12,0.29,roadRibMat,18,cAt));
     }
   }
   /* curved railways */
@@ -1782,13 +1852,13 @@ function buildChunk(cx,cz){
     if(Math.abs(cAt(oz)-ox)<CS/2+120){
       /* raised track bed: sits ABOVE road surfaces so crossings look like
          level crossings instead of rails clipping through the asphalt */
-      g.add(ribbon("z",0,z0,z1,6,0.28,bedMat,0,cAt));
-      g.add(ribbon("z",0,z0,z1,0.24,0.46,railMat,0,zz=>cAt(zz)-0.85));
-      g.add(ribbon("z",0,z0,z1,0.24,0.46,railMat,0,zz=>cAt(zz)+0.85));
+      g.add(ribbon("z",0,z0,z1,6,0.40,bedMat,0,cAt));
+      g.add(ribbon("z",0,z0,z1,0.24,0.56,railMat,0,zz=>cAt(zz)-0.85));
+      g.add(ribbon("z",0,z0,z1,0.24,0.56,railMat,0,zz=>cAt(zz)+0.85));
       const n=Math.floor(CS/4);
       const sl=new THREE.InstancedMesh(new THREE.BoxGeometry(3,0.16,0.7),new THREE.MeshLambertMaterial({color:0x5a4634}),n);
       const M=new THREE.Matrix4();
-      for(let i=0;i<n;i++){const z=z0+2+i*4;M.setPosition(cAt(z),terrainH(cAt(z),z)+0.36,z);sl.setMatrixAt(i,M);}
+      for(let i=0;i<n;i++){const z=z0+2+i*4;M.setPosition(cAt(z),terrainH(cAt(z),z)+0.46,z);sl.setMatrixAt(i,M);}
       g.add(sl);
       /* level-crossing gates where roads cross the rails — they close for trains */
       for(const lz of roadLinesIn(z0,z1)){
