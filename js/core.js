@@ -37,7 +37,18 @@ function uLabel(){return S.unit==="kmh"?"km/h":"mph"}
 
 /* ================= GAME TIME (1 real second = 5 game minutes) ================= */
 const CLOCK={min:8*60,day:1};
-function clockTick(dt){CLOCK.min+=dt*300/60; if(CLOCK.min>=1440){CLOCK.min-=1440;CLOCK.day++;}}
+/* on a SERVER (named world) everyone shares the same clock: game time is
+   derived from the real-world clock, so all players see the same day & night */
+const SHARED_T0=1767225600000;   // 2026-01-01 — shared time starts counting here
+function clockTick(dt){
+  if(typeof WORLD!=="undefined"&&WORLD.name){
+    const tm=(Date.now()-SHARED_T0)/200;   // 1 real second = 5 game minutes
+    CLOCK.day=Math.floor(tm/1440)+1;
+    CLOCK.min=((tm%1440)+1440)%1440;
+    return;
+  }
+  CLOCK.min+=dt*300/60; if(CLOCK.min>=1440){CLOCK.min-=1440;CLOCK.day++;}
+}
 function dayFrac(){return CLOCK.min/1440;}
 function isNight(){const f=dayFrac();return f<0.23||f>0.81;}
 /* traffic-light phase: 40 game-minutes = 8 real seconds per green, so the

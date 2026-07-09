@@ -849,7 +849,11 @@ function spawnEvent(){
       bl.position.set(bx,y+2.9,bz);bl.userData.y0=y+2.9;g.add(bl);
       e.balloons.push(bl);
     }
-    for(let i=0;i<4;i++)spawnPed(fx-5+Math.random()*10,fz+2+Math.random()*5,"wander");
+    e.peds=[];
+    for(let i=0;i<4;i++){
+      const pp=spawnPed(fx-5+Math.random()*10,fz+2+Math.random()*5,"wander");
+      if(pp)e.peds.push(pp);
+    }
     toast("\u{1F389} A FESTIVAL started near ("+Math.round(fx)+", "+Math.round(fz)+") — visit it on foot for $50!");
   }
   scene.add(g);
@@ -875,6 +879,10 @@ function updateEvents(dt){
       }
     }
     if(e.life<=0||Math.hypot(player.x-e.x,player.z-e.z)>900){
+      /* the festival is over: the visitors walk off and go home */
+      if(e.peds)e.peds.forEach(p=>{p.mode="leave";p.ttl=Math.min(p.ttl,8+Math.random()*5);});
+      if(e.balloons&&e.life<=0&&Math.hypot(player.x-e.x,player.z-e.z)<220)
+        toast("\u{1F389} The festival is over — everyone is heading home.");
       scene.remove(e.g);disposeGroup(e.g);
       EVENTS.list.splice(i,1);
     }
@@ -1111,6 +1119,12 @@ function gotoRoom(rm){
   toast("\u{1F6CE}️ Welcome to your room!");
 }
 function sleepNight(){
+  if(WORLD.name){
+    /* on a server the clock is shared with everyone — the night can't be skipped */
+    HUNGER.v=Math.max(HUNGER.v,60);HUNGER.starveT=0;
+    toast("\u{1F634} Time is shared with everyone on this server, so the night goes on — but you had a lovely nap & breakfast!");
+    return;
+  }
   if(CLOCK.min>=7*60)CLOCK.day++;
   CLOCK.min=7*60;
   HUNGER.v=Math.max(HUNGER.v,40);HUNGER.starveT=0;   // breakfast included
@@ -1121,22 +1135,21 @@ function tryFurniture(){
   if(SIT.on){SIT.on=false;toast("You stood up.");return true;}
   const dk=nearFurn(hotelDesks,3.2);
   if(dk){
-    if(!rentedAt(dk.id)){
-      if(dk.mansion){
-        /* mansions cost $2,000,000 now */
-        if(MONEY.v<MANSION_PRICE){
-          toast("\u{1F3F0} This MEGA MANSION costs $"+fmtMoney(MANSION_PRICE)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings & win races!");
-          return true;
-        }
-        MONEY.v-=MANSION_PRICE;updateMoneyUI();profileSave(true);
-        toast("\u{1F389}\u{1F3F0} SOLD! You bought this MEGA MANSION for $"+fmtMoney(MANSION_PRICE)+" — press T inside to edit & furnish it!");
-      }else toast("\u{1F511} Room rented for free! Taking you upstairs...");
-      RENT.list.push({id:dk.id,x:dk.room.x,z:dk.room.z,ry:dk.room.ry,
-        label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"});
-      saveGame();
-    }
-    gotoRoom(dk.room);
+    if(rentedAt(dk.id))gotoRoom(dk.room);
+    else openPropertyDesk(dk);
     return true;
+  }
+  /* the concert tip hat: collect your earnings */
+  for(let i=pianos.length-1;i>=0;i--){
+    const p2=pianos[i];
+    if(offScene(p2.g)){pianos.splice(i,1);continue;}
+    if(p2.hat&&(p2.hatMoney||0)>0&&Math.abs(player.y-p2.y)<3&&Math.hypot(player.x-p2.hat.x,player.z-p2.hat.z)<2.4){
+      addMoney(p2.hatMoney);
+      toast("\u{1F3A9}\u{1F4B5} You collected $"+p2.hatMoney+" from the hat — great show!");
+      p2.hatMoney=0;
+      if(p2.hatBills)p2.hatBills.visible=false;
+      return true;
+    }
   }
   /* pianos: sit down and play (computer keyboard or a real MIDI keyboard) */
   const pn=nearFurn(pianos,4.5);
@@ -1163,8 +1176,111 @@ function tryFurniture(){
   }
   return false;
 }
-/* ================= MANSIONS: buying, furniture & the T editor ================= */
-const MANSION_PRICE=2000000;
+/* ================= PROPERTY: buy or rent apartments & mansions ================= */
+const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game day
+const APT_PRICE=100000,APT_RENT=100;             // $100K to buy, or $100 per game day
+/* ---- online claims: once a player owns a property, nobody else can buy it ---- */
+function fbKey(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,"_");}
+async function fbGet(path){
+  try{
+    const r=await fetch(SERVER_API+path+".json",{cache:"no-store"});
+    if(!r.ok)return{ok:false};
+    return{ok:true,data:await r.json()};
+  }catch(e){return{ok:false};}
+}
+async function fbPut(path,val){
+  try{
+    const r=await fetch(SERVER_API+path+".json",{method:"PUT",body:JSON.stringify(val)});
+    return r.ok;
+  }catch(e){return false;}
+}
+function claimPath(id){return "/claims/"+mpWorldKey()+"/"+fbKey(id);}
+async function checkClaim(id){
+  if(!SERVER_READY)return{res:"free"};
+  const g=await fbGet(claimPath(id));
+  if(g.ok&&g.data&&!g.data.free){
+    if(g.data.t===myToken())return{res:"mine"};
+    return{res:"taken",name:g.data.n||"another player"};
+  }
+  return{res:"free"};
+}
+async function writeClaim(id){
+  if(!SERVER_READY)return true;
+  if(await fbPut(claimPath(id),{t:myToken(),n:mpName(),ts:Date.now()}))return true;
+  /* write refused: either another player owns it, or the database still runs old rules */
+  const g=await fbGet(claimPath(id));
+  if(g.ok&&g.data&&!g.data.free&&g.data.t!==myToken())return false;
+  return true;   // old rules — claims can't be stored yet, so allow the purchase locally
+}
+function releaseClaim(id){
+  if(!SERVER_READY)return;
+  fbPut(claimPath(id),{t:myToken(),n:mpName(),ts:Date.now(),free:true});
+}
+function mkRentEntry(dk,mode,rate){
+  return{id:dk.id,x:dk.room.x,z:dk.room.z,ry:dk.room.ry,mode,rate,
+    label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"
+      +(mode==="rent"?" · $"+fmtMoney(rate)+"/day":"")};
+}
+function openPropertyDesk(dk){
+  const buy=dk.mansion?MANSION_PRICE:APT_PRICE,rate=dk.mansion?MANSION_RENT:APT_RENT;
+  showDest(dk.mansion?"\u{1F3F0} MEGA MANSION — buy or rent?":"\u{1F6CE}️ Apartment room — buy or rent?",[
+    {label:"\u{1F4B0} BUY — $"+fmtMoney(buy)+" (yours forever)",value:"own"},
+    {label:"\u{1F511} RENT — $"+fmtMoney(rate)+" per day",value:"rent"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],async mode=>{
+    if(mode==="cancel")return;
+    const price=mode==="own"?buy:rate;
+    const claim=await checkClaim(dk.id);
+    if(claim.res==="taken"){
+      toast("\u{1F512} Sorry — this "+(dk.mansion?"mansion":"room")+" is already owned by "+claim.name+"!");
+      return;
+    }
+    if(claim.res==="mine"){
+      RENT.list.push(mkRentEntry(dk,"own",0));
+      toast("\u{1F511} This place is already YOURS on this server — welcome back!");
+      saveGame();gotoRoom(dk.room);
+      return;
+    }
+    if(MONEY.v<price){
+      toast("\u{1F4B0} You need $"+fmtMoney(price)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings, win races, give concerts!");
+      return;
+    }
+    if(!await writeClaim(dk.id)){toast("\u{1F512} Another player claimed it just before you!");return;}
+    MONEY.v-=price;updateMoneyUI();profileSave(true);
+    RENT.list.push(mkRentEntry(dk,mode,mode==="rent"?rate:0));
+    toast(mode==="own"
+      ?(dk.mansion?"\u{1F389}\u{1F3F0} SOLD! The MEGA MANSION is yours — press T inside to edit & furnish it!":"\u{1F389} You BOUGHT this room for $"+fmtMoney(buy)+" — it's yours forever!")
+      :"\u{1F511} Rented for $"+fmtMoney(rate)+"/day (first day paid). Keep money on you or you'll lose it!");
+    saveGame();
+    gotoRoom(dk.room);
+  });
+}
+/* rent is charged every new game day — run out of money and you lose the place */
+let _rentDay=null;
+function updateRent(){
+  if(_rentDay===null||CLOCK.day<_rentDay){_rentDay=CLOCK.day;return;}
+  const delta=CLOCK.day-_rentDay;
+  if(delta===0)return;
+  _rentDay=CLOCK.day;
+  if(delta>3)return;   // clock jump (world switch) — don't back-charge
+  let paid=0;
+  for(let i=RENT.list.length-1;i>=0;i--){
+    const rm=RENT.list[i];
+    if(rm.mode!=="rent"||!rm.rate)continue;
+    const cost=rm.rate*delta;
+    if(MONEY.v>=cost){MONEY.v-=cost;paid+=cost;}
+    else{
+      RENT.list.splice(i,1);
+      releaseClaim(rm.id);
+      toast("\u{1F631} You couldn't pay the rent — you LOST "+rm.label+"!");
+    }
+  }
+  if(paid>0){
+    updateMoneyUI();profileSave();saveGame();
+    toast("\u{1F511} New day — rent paid: $"+fmtMoney(paid));
+  }
+}
+/* ================= MANSIONS: furniture & the T editor ================= */
 const MFURN=new Map();      // mansion id -> [{t,dx,dz,r}] placed furniture
 const TRAMPS=[];            // trampolines: walk on one to bounce!
 /* the furniture & garden shop — indoor and outdoor items */
@@ -1444,20 +1560,55 @@ function initMidi(){
     if([...acc.inputs.values()].length)toast("\u{1F3B9} MIDI keyboard connected — play away!");
   }).catch(()=>{});
 }
-function openPiano(p){
+/* ---- concert piano locks: while a player gives a concert, only THEY can play ---- */
+const PLOCK_TTL=15*60*1000;   // a crashed player's lock frees itself after 15 min
+function pianoLockPath(p){return "/pianolock/"+mpWorldKey()+"/"+fbKey("H:"+Math.round(p.x)+","+Math.round(p.z));}
+async function lockPiano(p){
+  if(!SERVER_READY)return true;
+  if(await fbPut(pianoLockPath(p),{t:myToken(),n:mpName(),ts:Date.now()}))return true;
+  const g=await fbGet(pianoLockPath(p));
+  if(g.ok&&g.data&&!g.data.free&&g.data.t!==myToken()&&Date.now()-(g.data.ts||0)<PLOCK_TTL)return false;
+  return true;   // old rules — locks can't be stored yet, play on
+}
+function unlockPiano(p){
+  if(!SERVER_READY)return;
+  fbPut(pianoLockPath(p),{t:myToken(),n:mpName(),ts:Date.now(),free:true});
+}
+function crowdBtnUI(p){
+  $("pianoCrowd").style.display=p&&p.hall?"":"none";
+  $("pianoCrowd").innerHTML=p&&p.crowded?"\u{1F51A} End the concert — the crowd claps & pays!":"\u{1F3AD} Play piano — call the crowd!";
+}
+function reallyOpenPiano(p){
   PIANO.open=true;PIANO.cur=p;
   buildPianoKeys();initMidi();
-  $("pianoCrowd").style.display=p.hall?"":"none";
+  crowdBtnUI(p);
   $("pianoModal").classList.add("open");
+}
+function openPiano(p){
+  /* a concert piano someone ELSE is using is locked until they end the concert */
+  if(p.hall&&!p.crowded&&SERVER_READY){
+    fbGet(pianoLockPath(p)).then(g=>{
+      const d=g.ok?g.data:null;
+      if(d&&!d.free&&d.t!==myToken()&&Date.now()-(d.ts||0)<PLOCK_TTL){
+        toast("\u{1F3B9} "+(d.n||"Another player")+" is giving a concert on this piano — you can play once they end it!");
+        return;
+      }
+      reallyOpenPiano(p);
+    });
+    return;
+  }
+  reallyOpenPiano(p);
 }
 $("pianoClose").onclick=()=>{PIANO.open=false;$("pianoModal").classList.remove("open");};
 /* the concert crowd: they walk in through the door and sit down on the seats */
 const CROWD=[];
-$("pianoCrowd").onclick=()=>{
+$("pianoCrowd").onclick=async()=>{
   const p=PIANO.cur;
   if(!p||!p.hall)return;
-  if(p.crowded){toast("\u{1F3AD} The crowd is already seated — play them a song!");return;}
+  if(p.crowded){endConcert(p);return;}
+  if(!await lockPiano(p)){toast("\u{1F512} Another player just started a concert on this piano!");return;}
   p.crowded=true;
+  crowdBtnUI(p);
   const hall=p.hall;
   hall.seats.forEach((s,i)=>{
     const m=makePerson(0.95);
@@ -1467,18 +1618,58 @@ $("pianoCrowd").onclick=()=>{
   });
   toast("\u{1F3AD} Here they come! A whole crowd walks in to hear you play...");
 };
+function endConcert(p){
+  p.crowded=false;
+  unlockPiano(p);
+  crowdBtnUI(p);
+  let n=0;
+  CROWD.forEach(c=>{
+    if(c.state==="out"||c.state==="clap")return;
+    n++;
+    c.state="clap";c.t=2+Math.random()*2;
+    c.exitX=p.hall.entrance.x+(Math.random()-0.5)*8;
+    c.exitZ=p.hall.entrance.z+2+Math.random()*5;
+  });
+  if(n>0){
+    const tip=n*(4+Math.floor(Math.random()*9));
+    p.hatMoney=(p.hatMoney||0)+tip;
+    if(p.hatBills)p.hatBills.visible=true;
+    toast("\u{1F44F}\u{1F44F} BRAVO! The crowd claps and drops $"+tip+" in the \u{1F3A9} hat on the way out — press T at the hat to collect it!");
+  }else toast("\u{1F3B5} Concert over — nobody was in the seats this time.");
+}
 function updateCrowd(dt){
   const now=performance.now();
   for(let i=CROWD.length-1;i>=0;i--){
     const c=CROWD[i];
     if(offScene(c.m)){CROWD.splice(i,1);continue;}
     if(c.state==="sit")continue;
+    const L=c.m.userData.limbs;
+    if(c.state==="clap"){
+      /* standing ovation: arms up, clapping fast */
+      c.t-=dt;
+      c.m.position.y=c.ty;
+      const a=Math.sin(now/80+i)*0.35;
+      L.lL.rotation.x=0;L.rL.rotation.x=0;
+      L.lA.rotation.x=-2.3+a;L.rA.rotation.x=-2.3-a;
+      if(c.t<=0){
+        c.state="out";
+        c.tx=c.exitX;c.tz=c.exitZ;
+        L.lA.rotation.x=0;L.rA.rotation.x=0;
+      }
+      continue;
+    }
     if(c.delay>0){c.delay-=dt;continue;}
     const dx=c.tx-c.m.position.x,dz=c.tz-c.m.position.z,d=Math.hypot(dx,dz);
     if(d<0.35){
+      if(c.state==="out"){
+        /* reached the door: wave goodbye and vanish */
+        if(c.m.parent)c.m.parent.remove(c.m);
+        disposeGroup(c.m);
+        CROWD.splice(i,1);
+        continue;
+      }
       c.m.position.set(c.tx,c.ty+0.6,c.tz);
       c.m.rotation.y=c.yaw;
-      const L=c.m.userData.limbs;
       L.lL.rotation.x=-1.5;L.rL.rotation.x=-1.5;L.lA.rotation.x=-0.4;L.rA.rotation.x=-0.4;
       c.state="sit";
       continue;
@@ -1488,7 +1679,6 @@ function updateCrowd(dt){
     c.m.position.x+=Math.sin(yaw)*2*dt;
     c.m.position.z+=Math.cos(yaw)*2*dt;
     const a=Math.sin(now/160+i)*0.5;
-    const L=c.m.userData.limbs;
     L.lL.rotation.x=a;L.rL.rotation.x=-a;L.lA.rotation.x=-a*0.7;L.rA.rotation.x=a*0.7;
   }
 }
@@ -3574,9 +3764,10 @@ function updateHint(){
     else if(MEDIT.on){txt="\u{1F6E0} EDITING your mansion — click the floor/lawn to place items · R = rotate · T = done";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
-      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T to BUY it ($"+fmtMoney(MANSION_PRICE)+")"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T to rent a room");showT=true;}
+      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
-      else if(pn){txt="\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
+      else if(pn&&pn.hat&&(pn.hatMoney||0)>0&&Math.hypot(player.x-pn.hat.x,player.z-pn.hat.z)<2.4){txt="\u{1F3A9} The hat is full — press T to collect $"+pn.hatMoney+"!";showT=true;}
+      else if(pn){txt=pn.crowded?"\u{1F3B9} Your concert is ON — press T at the piano, then \u{1F51A} End the concert":"\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
         if(!rentedAt(bd.id))txt="A room's bed — rent it at the reception first";
         else if(!isNight())txt="Your bed — come back at night to sleep";
@@ -3860,7 +4051,25 @@ const UPDATE_PAGES=[
 <li>In the garden: <b>trampolines</b> (walk on = BOING!), <b>in-ground swimming pools</b>, fountains, BBQs, benches, swings, trees &amp; flowers.</li>
 <li>You can move or replace your bed and chairs too — everything is saved.</li></ul>
 <h4>\u{1FA91} SITTING FIXED</h4><ul>
-<li>You no longer sit facing the wrong way — legs bend forward like a real person.</li></ul>`}
+<li>You no longer sit facing the wrong way — legs bend forward like a real person.</li></ul>`},
+{t:"Round 14 — Concert money, buy OR rent, one owner per house & shared time",h:`
+<h4>\u{1F51A} END THE CONCERT — AND GET PAID!</h4><ul>
+<li>Press T at the concert piano and hit <b>\u{1F51A} End the concert</b>: the whole crowd stands up, CLAPS, drops money in the \u{1F3A9} hat next to the piano and walks out.</li>
+<li>Press <b>T</b> at the hat to collect your earnings — bigger crowd, bigger tips!</li></ul>
+<h4>\u{1F3B9} CONCERT PIANOS LOCK</h4><ul>
+<li>While a player gives a concert, <b>nobody else can play that piano</b> — it unlocks the moment they end the concert.</li></ul>
+<h4>\u{1F4B0} BUY <i>OR</i> RENT YOUR HOME</h4><ul>
+<li>Apartment room: <b>BUY $100K</b> (forever) or <b>RENT $100 per day</b>.</li>
+<li>MEGA MANSION: <b>BUY $2M</b> or <b>RENT $1K per day</b>.</li>
+<li>Rent is charged every new game day — run out of money and you LOSE the place!</li></ul>
+<h4>\u{1F512} ONE OWNER PER HOUSE (online)</h4><ul>
+<li>On servers, claiming an apartment or mansion locks it for everyone else — the reception tells you who owns it.</li>
+<li>Your claims follow your username, so the same place is yours on any device.</li></ul>
+<h4>⏰ SHARED SERVER TIME</h4><ul>
+<li>On a server, every player sees the exact same clock, day and night — sunset happens for everyone at once.</li>
+<li>(That also means sleeping can't skip the night on servers — you still get breakfast!)</li></ul>
+<h4>\u{1F389} FESTIVALS END PROPERLY</h4><ul>
+<li>When a festival is over, the visitors walk off and go home instead of partying forever.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -3891,6 +4100,7 @@ function frame(now){
   }
   setHorn(keys.h||(TOUCH.on&&TOUCH.honk>0)||(GP.active&&GP.honk));
   clockTick(dt);
+  updateRent();
   let speedMS=0;
   if(player.inRocket)speedMS=Math.abs(rocket.vy)+Math.abs(rocket.hs||0);
   else if(player.inTrain)speedMS=Math.abs(player.train.speed);

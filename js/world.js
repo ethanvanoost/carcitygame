@@ -524,10 +524,12 @@ function makePerson(scale,shirtColor){
 }
 const peds=[]; // wandering / leaving people
 function spawnPed(x,z,mode,ttl){
-  if(peds.length>34)return;
+  if(peds.length>34)return null;
   const m=makePerson(0.95);m.position.set(x,terrainH(x,z),z);
   scene.add(m);
-  peds.push({m,x,z,yaw:Math.random()*7,t:Math.random()*9,ttl:ttl||9999,mode:mode||"wander",hx:x,hz:z});
+  const p={m,x,z,yaw:Math.random()*7,t:Math.random()*9,ttl:ttl||9999,mode:mode||"wander",hx:x,hz:z};
+  peds.push(p);
+  return p;
 }
 function updatePeds(dt){
   for(let i=peds.length-1;i>=0;i--){
@@ -724,7 +726,20 @@ function makePiano(px,pz,yaw,parent,baseY,hall){
   [[-0.4,0.7],[0.4,0.7],[-0.4,1],[0.4,1]].forEach(p=>{
     const l=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.5,0.07),blk);l.position.set(p[0],0.25,p[1]);g.add(l);});
   parent.add(g);
-  pianos.push({g,x:px,z:pz,y:baseY,hall:hall||null});
+  /* concert pianos get a tip hat next to them — the crowd drops money in */
+  let hat=null,hatBills=null;
+  if(hall){
+    const hx=px+1.9,hz=pz+0.9;
+    const hm=new THREE.MeshLambertMaterial({color:0x23262b,side:THREE.DoubleSide});
+    const cup=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.34,0.34,12,1,true),hm);
+    cup.position.set(hx,baseY+0.17,hz);parent.add(cup);
+    const brim=new THREE.Mesh(new THREE.TorusGeometry(0.4,0.055,8,16),hm);
+    brim.rotation.x=Math.PI/2;brim.position.set(hx,baseY+0.04,hz);parent.add(brim);
+    hatBills=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.26,0.09,10),new THREE.MeshLambertMaterial({color:0x2f9e44}));
+    hatBills.position.set(hx,baseY+0.3,hz);hatBills.visible=false;parent.add(hatBills);
+    hat={x:hx,z:hz};
+  }
+  pianos.push({g,x:px,z:pz,y:baseY,hall:hall||null,hat,hatBills,hatMoney:0});
   return g;
 }
 /* apartments are little hotels: walk in, rent a room at the reception,

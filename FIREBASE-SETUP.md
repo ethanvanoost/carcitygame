@@ -81,6 +81,34 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            "t": { ".validate": "newData.isNumber()" },
            "$other": { ".validate": false }
          }
+       },
+       "claims": {
+         "$world": {
+           "$prop": {
+             ".read": true,
+             ".write": "!data.exists() || data.child('t').val() === newData.child('t').val() || data.child('free').val() === true",
+             ".validate": "newData.hasChildren(['t','n','ts'])",
+             "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "free": { ".validate": "newData.isBoolean()" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
+       "pianolock": {
+         "$world": {
+           "$piano": {
+             ".read": true,
+             ".write": "!data.exists() || data.child('t').val() === newData.child('t').val() || data.child('free').val() === true || data.child('ts').val() < now - 900000",
+             ".validate": "newData.hasChildren(['t','n','ts'])",
+             "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "free": { ".validate": "newData.isBoolean()" },
+             "$other": { ".validate": false }
+           }
+         }
        }
      }
    }
@@ -99,7 +127,13 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    the **public chat**: anyone can post (max 200 characters), nobody can edit
    other people's messages, and messages **auto-delete after 5 minutes** (the game
    cleans up any message older than that; the rules only allow deleting old messages,
-   never fresh ones).
+   never fresh ones). The `claims` part makes every **apartment and mansion have ONE
+   owner per world**: whoever buys or rents it first claims it with their device's
+   secret token, and only that owner can ever change or release the claim (a claim
+   is freed automatically when a renter can't pay the rent anymore). The `pianolock`
+   part locks a **concert piano while a player is giving a concert** — only the
+   concert giver can play until they end the concert; a lock left behind by a
+   crashed game frees itself after 15 minutes.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming
