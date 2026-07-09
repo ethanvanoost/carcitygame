@@ -94,6 +94,8 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
              "ts": { ".validate": "newData.isNumber()" },
              "free": { ".validate": "newData.isBoolean()" },
+             "furn": { ".validate": "newData.isString() && newData.val().length <= 6000" },
+             "shop": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100" },
              "$other": { ".validate": false }
            }
          }
@@ -120,6 +122,61 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              ".validate": "newData.hasChildren(['from','amt','ts'])",
              "from": { ".validate": "newData.isString() && newData.val().length <= 16" },
              "amt": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1000000000" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "d": { ".validate": "newData.isString() && newData.val().length <= 80" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
+       "guestbook": {
+         "$world": {
+           "$prop": {
+             ".read": true,
+             "$id": {
+               ".write": "!data.exists()",
+               ".validate": "newData.hasChildren(['n','m','ts'])",
+               "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+               "m": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 100" },
+               "ts": { ".validate": "newData.isNumber()" },
+               "$other": { ".validate": false }
+             }
+           }
+         }
+       },
+       "races": {
+         "$world": {
+           "$flag": {
+             ".read": true,
+             ".write": "!data.exists() || data.child('ts').val() < now - 240000",
+             ".validate": "newData.hasChildren(['ts','seed','n'])",
+             "ts": { ".validate": "newData.isNumber()" },
+             "seed": { ".validate": "newData.isNumber()" },
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
+       "raceent": {
+         "$world": {
+           "$flag": {
+             ".read": true,
+             "$p": {
+               ".write": "!data.exists() || data.child('ts').val() < now - 240000",
+               ".validate": "newData.hasChildren(['n','ts'])",
+               "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+               "ts": { ".validate": "newData.isNumber()" },
+               "$other": { ".validate": false }
+             }
+           }
+         }
+       },
+       "racewin": {
+         "$world": {
+           "$id": {
+             ".read": true,
+             ".write": "!data.exists()",
+             ".validate": "newData.hasChildren(['n','ts'])",
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
              "ts": { ".validate": "newData.isNumber()" },
              "$other": { ".validate": false }
            }
@@ -154,7 +211,14 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    creates the account, and logging in with the right password on a new device
    hands that device the account. The `payments` part is the **pay-a-player inbox**:
    anyone can drop a payment into someone's inbox (amount 1 to 1 billion), and the
-   game collects and deletes them within seconds.
+   game collects and deletes them within seconds — a payment can also carry a
+   **dumpling gift** (`d`). Claims now also carry the mansion's **furniture layout**
+   (`furn`) and **dumpling shop price** (`shop`), so other players see your mansion
+   exactly how you decorated it and can buy from your stall. The `guestbook` part
+   lets visitors write one-line messages at a mansion (create-only, max 100
+   characters). The `races` / `raceent` / `racewin` parts run **multiplayer races**:
+   a race per flag (replaceable after 4 minutes), an entrant list, and a
+   create-only winner record — the first player to write it takes the pot.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming

@@ -344,6 +344,7 @@ function openGarage(v){
   $("garName").textContent=EMOJI[v.type]+" "+v.name;
   $("garInfo").textContent=TYPE_LABEL[v.type]+" · top speed "+Math.round(uConv(v.top))+" "+uLabel()+" · pick a paint color, then hit DRIVE!";
   S.mode="garage";
+  $("garSell").style.display=DEFAULT_OWNED.includes(v.name)?"none":"";
   $("menu").style.display="none";
   $("hud").classList.remove("show");
   $("garagePanel").classList.add("open");
@@ -361,6 +362,23 @@ function updateGarage(dt){
 }
 $("garBack").onclick=()=>closeGarage(true);
 $("garDrive").onclick=()=>{const v=GAR.v;closeGarage(false);startGame(v);};
+/* sell a vehicle back for 70% of its price (starter vehicles excluded) */
+$("garSell").onclick=()=>{
+  const v=GAR.v;
+  if(!v)return;
+  if(DEFAULT_OWNED.includes(v.name)){toast("That's one of your starter vehicles — you can't sell it!");return;}
+  const val=Math.max(10,Math.round(vehPrice(v)*0.7/10)*10);
+  showDest("\u{1F4B5} Sell your "+v.name+"?",[
+    {label:"✅ Sell it for $"+fmtMoney(val)+" (70% of the price)",value:"yes"},
+    {label:"❌ No, keep it!",value:"no"}
+  ],a=>{
+    if(a!=="yes")return;
+    OWN.delete(v.name);
+    addMoney(val);profileSave(true);
+    toast("\u{1F4B5} Sold the "+v.name+" for $"+fmtMoney(val)+"!");
+    closeGarage(true);renderMenu();
+  });
+};
 function startGame(v){
   player.inRocket=false;
   if(CAVE.in)exitCave(true);
@@ -383,6 +401,7 @@ function startGame(v){
   player.mesh.visible=false;
   updateLimitUI();updateChunks(sx,sz,true);updateLandmarks(sx,sz);
   mpJoin();chatStart();
+  dailyReward();
 }
 /* ---------- destination modal ---------- */
 let destCb=null;
@@ -482,6 +501,15 @@ function openShop(s){
     b.innerHTML="\u{1F95F} Squishy Dumpling <span style='color:#ff5d8f'>surprise!</span>";
     b.onclick=()=>{DUMP.unopened++;toast("\u{1F95F} Squishy Dumpling bought! Open it in the \u{1F95F} Dumplings menu.");};
     list.appendChild(b);
+    /* the pet corner */
+    const dog=document.createElement("button");
+    dog.innerHTML="\u{1F436} Puppy <span style='color:var(--dim)'>$500 — follows you everywhere!</span>";
+    dog.onclick=()=>buyPet("dog",500);
+    list.appendChild(dog);
+    const cat=document.createElement("button");
+    cat.innerHTML="\u{1F431} Kitten <span style='color:var(--dim)'>$400 — follows you everywhere!</span>";
+    cat.onclick=()=>buyPet("cat",400);
+    list.appendChild(cat);
   }
   $("shopModal").classList.add("open");
 }
@@ -793,8 +821,8 @@ function eventRoadPoint(){
   const off=Math.random()<0.5?3.5:-3.5;
   return axis==="z"?{x:line+off,z:along,axis}:{x:along,z:line+off,axis};
 }
-function spawnEvent(){
-  const type=["construction","accident","festival"][Math.floor(Math.random()*3)];
+function spawnEvent(forceType){
+  const type=forceType||["construction","accident","festival"][Math.floor(Math.random()*3)];
   const g=new THREE.Group();
   const e={type,g,life:150,x:0,z:0};
   if(type==="construction"){
@@ -1176,6 +1204,235 @@ function tryFurniture(){
   }
   return false;
 }
+/* ================= JOBS: taxi, food delivery & tow truck ================= */
+const JOB={type:null,stage:0,t:0,tx:0,tz:0,reward:0,count:0,total:0,label:""};
+const jobBeacon=(function(){
+  const g=new THREE.Group();
+  const cyl=new THREE.Mesh(new THREE.CylinderGeometry(5,5,34,14,1,true),
+    new THREE.MeshBasicMaterial({color:0xffb02e,transparent:true,opacity:0.35,side:THREE.DoubleSide}));
+  cyl.position.y=17;g.add(cyl);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(5,0.4,8,22),new THREE.MeshBasicMaterial({color:0xffb02e}));
+  ring.rotation.x=Math.PI/2;ring.position.y=0.8;g.add(ring);
+  g.visible=false;scene.add(g);return g;
+})();
+let jobPassenger=null;   // the taxi passenger standing at the kerb
+function jobTarget(x,z,label){
+  JOB.tx=x;JOB.tz=z;JOB.label=label;
+  jobBeacon.position.set(x,terrainH(x,z),z);jobBeacon.visible=true;
+  setRoute(x,z);
+}
+function jobRoadPoint(minD,maxD){
+  /* a random spot ON a grid road, minD..maxD meters away */
+  for(let i=0;i<14;i++){
+    const a=Math.random()*Math.PI*2,d=minD+Math.random()*(maxD-minD);
+    let x=player.x+Math.sin(a)*d,z=player.z+Math.cos(a)*d;
+    if(Math.random()<0.5)x=Math.round((x-30)/120)*120+30+10;   // beside a N-S road
+    else z=Math.round((z-30)/120)*120+30+10;                    // beside an E-W road
+    if(baseH(x,z)>-1&&baseH(x,z)<15&&!inAirport(x,z))return{x,z};
+  }
+  return{x:player.x+minD,z:player.z};
+}
+function endJob(silent){
+  JOB.type=null;jobBeacon.visible=false;
+  if(jobPassenger){scene.remove(jobPassenger);disposeGroup(jobPassenger);jobPassenger=null;}
+  navStop(true);
+  if(!silent)toast("\u{1F4BC} Job ended. Total earned this shift: $"+fmtMoney(JOB.total));
+}
+function startJob(type){
+  $("jobsModal").classList.remove("open");
+  if(!player.drive||player.drive!==myVehicle||myVehicle.type==="bike"){
+    toast("\u{1F697} Get in a car or on a motorcycle first — then start the job!");
+    return;
+  }
+  JOB.type=type;JOB.stage=0;JOB.count=0;JOB.total=0;JOB.t=0;
+  if(type==="taxi"){
+    const p=jobRoadPoint(120,350);
+    jobPassenger=makePerson(0.95);
+    jobPassenger.position.set(p.x,terrainH(p.x,p.z),p.z);
+    scene.add(jobPassenger);
+    jobTarget(p.x,p.z,"\u{1F696} Pick up the passenger");
+    toast("\u{1F696} TAXI SHIFT — a passenger is waiting! Follow the route and stop next to them.");
+  }else if(type==="deliver"){
+    const m=nearestSpot(function(i,j){return mcdSpot(i,j);},MCSP,46,90,5);
+    if(!m){toast("No McDrive found nearby!");JOB.type=null;return;}
+    JOB.t=300;   // 5 minutes for the whole run
+    jobTarget(m.sp.x,m.sp.z,"\u{1F354} Pick up the food");
+    toast("\u{1F354} DELIVERY JOB — pick up 3 meals at the McDrive, then deliver them. 5 minutes on the clock!");
+  }else if(type==="tow"){
+    let acc=EVENTS.list.find(e=>e.type==="accident");
+    if(!acc){spawnEvent("accident");acc=EVENTS.list.find(e=>e.type==="accident");}
+    if(!acc){toast("No accidents right now — lucky city! Try again in a bit.");JOB.type=null;return;}
+    JOB.acc=acc;
+    jobTarget(acc.x,acc.z,"\u{1F69B} Drive to the accident");
+    toast("\u{1F69B} TOW TRUCK JOB — get to the accident and stop next to the wrecks!");
+  }
+}
+/* nearestSpot for jobs (the map sidebar has its own local copy) */
+function nearestSpot(spotFn,cell,ox,oz,range){
+  const ci=Math.round((player.x-ox)/cell),cj=Math.round((player.z-oz)/cell);
+  let best=null;
+  for(let i=ci-range;i<=ci+range;i++)for(let j=cj-range;j<=cj+range;j++){
+    const sp=spotFn(i,j);
+    if(!sp)continue;
+    const d=Math.hypot(sp.x-player.x,sp.z-player.z);
+    if(!best||d<best.d)best={sp,d};
+  }
+  return best;
+}
+function updateJob(dt){
+  if(!JOB.type)return;
+  if(!player.drive||player.drive!==myVehicle){endJob();return;}
+  jobBeacon.rotation.y+=dt*1.4;
+  const d=Math.hypot(player.x-JOB.tx,player.z-JOB.tz);
+  const stopped=Math.abs(myVehicle.speed)<1.5;
+  const el=$("navDist");
+  el.style.display="flex";
+  if(JOB.type==="deliver"){
+    JOB.t-=dt;
+    if(JOB.t<=0){toast("⏰ Time's up! The food got cold — delivery job over.");endJob(true);return;}
+  }
+  $("navTxt").textContent=JOB.label+" · "+(d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km")
+    +(JOB.type==="deliver"?" · ⏰ "+Math.ceil(JOB.t)+"s":"")+(JOB.total?" · $"+fmtMoney(JOB.total):"");
+  if(d>14||!stopped)return;
+  /* arrived & stopped */
+  if(JOB.type==="taxi"){
+    if(JOB.stage===0){
+      if(jobPassenger){scene.remove(jobPassenger);disposeGroup(jobPassenger);jobPassenger=null;}
+      const dest=jobRoadPoint(300,800);
+      JOB.fare=Math.max(30,Math.round(Math.hypot(dest.x-player.x,dest.z-player.z)*0.12/5)*5);
+      JOB.stage=1;
+      jobTarget(dest.x,dest.z,"\u{1F696} Drop off — fare $"+JOB.fare);
+      toast("\u{1F44B} Passenger aboard! Take them to the blue route's end for $"+JOB.fare+".");
+    }else{
+      addMoney(JOB.fare);JOB.total+=JOB.fare;JOB.count++;
+      toast("\u{1F4B0} Fare paid: $"+JOB.fare+"! Passengers so far: "+JOB.count+". Next one is waiting...");
+      const p=jobRoadPoint(120,350);
+      jobPassenger=makePerson(0.95);
+      jobPassenger.position.set(p.x,terrainH(p.x,p.z),p.z);
+      scene.add(jobPassenger);
+      JOB.stage=0;
+      jobTarget(p.x,p.z,"\u{1F696} Pick up the passenger");
+    }
+  }else if(JOB.type==="deliver"){
+    if(JOB.stage===0){
+      JOB.stage=1;JOB.count=0;
+      const h=jobRoadPoint(200,500);
+      jobTarget(h.x,h.z,"\u{1F3E0} Delivery 1 of 3");
+      toast("\u{1F35F} Food loaded! Deliver 3 meals before the clock runs out — $40 each, $80 bonus for all 3!");
+    }else{
+      JOB.count++;
+      addMoney(40);JOB.total+=40;
+      if(JOB.count>=3){
+        addMoney(80);JOB.total+=80;
+        toast("\u{1F3C6} ALL 3 DELIVERED with "+Math.ceil(JOB.t)+"s left — +$80 bonus! Starting a new run...");
+        JOB.stage=0;JOB.t=300;
+        const m=nearestSpot(function(i,j){return mcdSpot(i,j);},MCSP,46,90,5);
+        if(m)jobTarget(m.sp.x,m.sp.z,"\u{1F354} Pick up the food");else endJob();
+      }else{
+        toast("\u{1F4E6} Delivered! +$40 — "+(3-JOB.count)+" to go!");
+        const h=jobRoadPoint(200,500);
+        jobTarget(h.x,h.z,"\u{1F3E0} Delivery "+(JOB.count+1)+" of 3");
+      }
+    }
+  }else if(JOB.type==="tow"){
+    if(JOB.stage===0){
+      /* hook up the wreck: the accident disappears */
+      if(JOB.acc){
+        const i=EVENTS.list.indexOf(JOB.acc);
+        if(i>=0){scene.remove(JOB.acc.g);disposeGroup(JOB.acc.g);EVENTS.list.splice(i,1);}
+        JOB.acc=null;
+      }
+      JOB.stage=1;
+      const g=nearestSpot(function(i,j){return gasSpot(i,j);},GSP,286,150,5);
+      const t=g?g.sp:{x:player.x+300,z:player.z};
+      jobTarget(t.x,t.z,"\u{1F69B} Tow the wreck to the garage");
+      toast("\u{1F517} Wreck hooked up! Tow it to the garage (gas station) for $150.");
+    }else{
+      addMoney(150);JOB.total+=150;JOB.count++;
+      toast("\u{1F4B0} Wreck delivered — +$150! Looking for the next accident...");
+      let acc=EVENTS.list.find(e=>e.type==="accident");
+      if(!acc){spawnEvent("accident");acc=EVENTS.list.find(e=>e.type==="accident");}
+      if(acc){JOB.acc=acc;JOB.stage=0;jobTarget(acc.x,acc.z,"\u{1F69B} Drive to the accident");}
+      else endJob();
+    }
+  }
+}
+$("bJobs").onclick=()=>{
+  if(S.mode!=="game"){toast("Start driving first!");return;}
+  if(JOB.type){endJob();return;}
+  $("jobsModal").classList.add("open");
+};
+$("jobsClose").onclick=()=>$("jobsModal").classList.remove("open");
+$("jobTaxi").onclick=()=>startJob("taxi");
+$("jobDeliver").onclick=()=>startJob("deliver");
+$("jobTow").onclick=()=>startJob("tow");
+/* ---------- daily reward + streak (shares the real-world calendar) ---------- */
+function dailyReward(){
+  let d=null;
+  try{d=JSON.parse(localStorage.getItem("vc4daily")||"null");}catch(e){}
+  const today=new Date().toISOString().slice(0,10);
+  if(d&&d.date===today)return;
+  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const streak=(d&&d.date===yesterday)?(d.streak||0)+1:1;
+  const reward=Math.min(1000,100*streak);
+  addMoney(reward);
+  try{localStorage.setItem("vc4daily",JSON.stringify({date:today,streak}));}catch(e){}
+  toast("\u{1F381} DAILY REWARD: $"+reward+" — day "+streak+" in a row!"+(streak<10?" Come back tomorrow for more!":" MAX streak!"));
+}
+/* ---------- scratch cards at the gas station kiosk ---------- */
+function scratchCard(){
+  if(MONEY.v<50){toast("\u{1F4B0} A scratch card costs $50 — you have $"+fmtMoney(MONEY.v)+".");return;}
+  MONEY.v-=50;
+  const r=Math.random();
+  let win=0;
+  if(r<0.02)win=5000;else if(r<0.10)win=500;else if(r<0.30)win=100;else if(r<0.60)win=25;
+  if(win>0){addMoney(win);toast(win>=500?"\u{1F3B0}\u{1F929} JACKPOT!! Your scratch card won $"+fmtMoney(win)+"!!":"\u{1F3B0} Scratch scratch... you won $"+win+"!");}
+  else{updateMoneyUI();saveGame();toast("\u{1F3B0} Scratch scratch... nothing this time. Better luck next card!");}
+}
+/* ---------- your pet: buy a puppy or kitten at the MEGA MART ---------- */
+const PET={type:localStorage.getItem("vc4pet")||null,mesh:null,x:0,z:0};
+function makeDog(){const g=makeQuad(0xc9a35a,0.36,0.32,0.7,0.26,0xb8924a);
+  const t=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.4,6),new THREE.MeshLambertMaterial({color:0xc9a35a}));
+  t.rotation.x=1.1;t.position.set(0,0.55,-0.45);g.add(t);
+  [[-0.1],[0.1]].forEach(p=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.16,0.04),new THREE.MeshLambertMaterial({color:0xb8924a}));e.position.set(p[0],0.66,0.32);g.add(e);});
+  return g;}
+function makeCat(){const g=makeQuad(0x3a3a3a,0.3,0.26,0.6,0.22,0x2c2c2c);
+  const t=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.05,0.5),new THREE.MeshLambertMaterial({color:0x3a3a3a}));
+  t.rotation.x=1.3;t.position.set(0,0.5,-0.42);g.add(t);
+  [[-0.08],[0.08]].forEach(p=>{const e=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.12,4),new THREE.MeshLambertMaterial({color:0x3a3a3a}));e.position.set(p[0],0.56,0.24);g.add(e);});
+  return g;}
+function spawnPetMesh(){
+  if(PET.mesh){scene.remove(PET.mesh);disposeGroup(PET.mesh);PET.mesh=null;}
+  if(!PET.type)return;
+  PET.mesh=PET.type==="dog"?makeDog():makeCat();
+  PET.x=player.x+2;PET.z=player.z+2;
+  scene.add(PET.mesh);
+}
+function buyPet(type,price){
+  if(MONEY.v<price){toast("\u{1F4B0} That costs $"+price+"!");return;}
+  MONEY.v-=price;updateMoneyUI();saveGame();
+  PET.type=type;
+  try{localStorage.setItem("vc4pet",type);}catch(e){}
+  spawnPetMesh();
+  toast(type==="dog"?"\u{1F436} WOOF! Your puppy will follow you everywhere!":"\u{1F431} MEOW! Your kitten will follow you everywhere!");
+}
+function updatePet(dt){
+  if(!PET.type)return;
+  if(!PET.mesh||offScene(PET.mesh))spawnPetMesh();
+  const m=PET.mesh;
+  if(S.world!=="earth"||CAVE.in){m.visible=false;return;}
+  m.visible=true;
+  const tx=player.x-Math.sin(player.yaw)*2.2+1,tz=player.z-Math.cos(player.yaw)*2.2;
+  const dx=tx-PET.x,dz=tz-PET.z,d=Math.hypot(dx,dz);
+  if(d>60){PET.x=tx;PET.z=tz;}   // teleported away: pet catches up instantly
+  else if(d>1.2){
+    const sp=Math.min(14,2+d*1.1);
+    PET.x+=dx/d*sp*dt;PET.z+=dz/d*sp*dt;
+    m.rotation.y=Math.atan2(dx,dz);
+  }
+  const bounce=d>1.2?Math.abs(Math.sin(performance.now()/120))*0.16:0;
+  m.position.set(PET.x,terrainH(PET.x,PET.z)+bounce,PET.z);
+}
 /* ================= PROPERTY: buy or rent apartments & mansions ================= */
 const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game day
 const APT_PRICE=100000,APT_RENT=100;             // $100K to buy, or $100 per game day
@@ -1204,13 +1461,38 @@ async function checkClaim(id){
   }
   return{res:"free"};
 }
+/* the claim record also carries your mansion's furniture + dumpling shop,
+   so other players see your place exactly how you decorated it */
+const MYSHOP={};   // mansion id -> dumpling shop price
+try{Object.assign(MYSHOP,JSON.parse(localStorage.getItem("vc4shops")||"{}"));}catch(e){}
+function saveShops(){try{localStorage.setItem("vc4shops",JSON.stringify(MYSHOP))}catch(e){}}
+function claimBody(id){
+  const b={t:myToken(),n:mpName(),ts:Date.now()};
+  const items=MFURN.get(id);
+  if(items){
+    const s=JSON.stringify(items.slice(0,80));
+    if(s.length<=6000)b.furn=s;
+  }
+  if(MYSHOP[id])b.shop=MYSHOP[id];
+  return b;
+}
+function syncClaim(id){if(SERVER_READY)fbPut(claimPath(id),claimBody(id));}
 async function writeClaim(id){
   if(!SERVER_READY)return true;
-  if(await fbPut(claimPath(id),{t:myToken(),n:mpName(),ts:Date.now()}))return true;
+  if(await fbPut(claimPath(id),claimBody(id)))return true;
   /* write refused: either another player owns it, or the database still runs old rules */
   const g=await fbGet(claimPath(id));
   if(g.ok&&g.data&&!g.data.free&&g.data.t!==myToken())return false;
   return true;   // old rules — claims can't be stored yet, so allow the purchase locally
+}
+const CLAIMCACHE=new Map();
+async function fetchClaim(id){
+  if(CLAIMCACHE.has(id))return CLAIMCACHE.get(id);
+  CLAIMCACHE.set(id,null);
+  const g=await fbGet(claimPath(id));
+  const d=(g.ok&&g.data&&!g.data.free)?g.data:null;
+  CLAIMCACHE.set(id,d);
+  return d;
 }
 function releaseClaim(id){
   if(!SERVER_READY)return;
@@ -1275,10 +1557,15 @@ function updateRent(){
       toast("\u{1F631} You couldn't pay the rent — you LOST "+rm.label+"!");
     }
   }
-  if(paid>0){
-    updateMoneyUI();profileSave();saveGame();
-    toast("\u{1F511} New day — rent paid: $"+fmtMoney(paid));
+  /* owned apartments earn tenant money every day */
+  let income=0;
+  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:"))income+=25*delta;
+  if(income>0){
+    MONEY.v+=income;
+    toast("\u{1F3E8} Your apartments earned $"+fmtMoney(income)+" from tenants!");
   }
+  if(paid>0)toast("\u{1F511} New day — rent paid: $"+fmtMoney(paid));
+  if(paid>0||income>0){updateMoneyUI();profileSave();saveGame();}
 }
 /* ================= MANSIONS: furniture & the T editor ================= */
 const MFURN=new Map();      // mansion id -> [{t,dx,dz,r}] placed furniture
@@ -1433,6 +1720,109 @@ function buildMansionFurniture(man){
     const fy=inside?man.baseY+0.3:terrainH(wx,wz)+0.12;
     buildFurnPiece(it.t,wx,wz,fy,it.r||0,fg,man);
   }
+  if(rentedAt(man.id)){
+    /* YOUR mansion: your 3 fastest owned cars park on the driveway */
+    VEHICLES.filter(v=>v.type==="car"&&OWN.has(v.name)).sort((a,b)=>b.top-a.top).slice(0,3)
+      .forEach((v,i)=>{
+        const c=buildVehicleMesh("car",paintOf(v),v.top);
+        const cx=man.x-24+i*11,cz=man.z+44;
+        c.position.set(cx,terrainH(cx,cz)+0.1,cz);c.rotation.y=Math.PI;fg.add(c);
+      });
+    if(MYSHOP[man.id])buildStall(man,mpName(),MYSHOP[man.id],fg);
+  }
+}
+/* a roadside dumpling stall in the mansion garden */
+function buildStall(man,owner,price,parent){
+  const g=new THREE.Group();(parent||man.g).add(g);
+  const x=man.x+32,z=man.z+44,y=terrainH(x,z);
+  const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3,1.05,1.1),new THREE.MeshLambertMaterial({color:0xff5d8f})));
+  ct.position.set(x,y+0.52,z);g.add(ct);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.12,1.6),new THREE.MeshLambertMaterial({color:0xd7263d}));
+  roof.position.set(x,y+2.3,z);g.add(roof);
+  [[-1.5],[1.5]].forEach(p=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.8),poleMat);pl.position.set(x+p[0],y+1.4,z);g.add(pl);});
+  [0xd7263d,0x8ac926,0xf4d35e,0x9b5de5].forEach((dc,i)=>{
+    const dm=new THREE.Mesh(new THREE.SphereGeometry(0.16,8,7),new THREE.MeshLambertMaterial({color:dc}));
+    dm.scale.y=0.72;dm.position.set(x-1.1+i*0.75,y+1.2,z);g.add(dm);
+  });
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(3.6,0.9),shopSignMat((owner||"").toUpperCase().slice(0,9)+"'S \u{1F95F} $"+price));
+  sg.position.set(x,y+3,z);g.add(sg);
+  man.stall={x,z,price,owner};
+}
+/* ---------- visiting OTHER players' mansions (their furniture, shop & guest book) ---------- */
+let _visitT=0;
+function updateVisit(dt){
+  _visitT-=dt;
+  if(_visitT>0)return;
+  _visitT=1.5;
+  if(S.world!=="earth"||!SERVER_READY)return;
+  const m=nearMansion();
+  if(!m||m.visitDone)return;
+  m.visitDone=true;
+  if(rentedAt(m.id))return;
+  fetchClaim(m.id).then(d=>{
+    if(!d||d.t===myToken()||offScene(m.g))return;
+    m.owner=d.n||"a player";
+    /* show their furniture exactly how they placed it */
+    if(typeof d.furn==="string"){
+      try{
+        const items=JSON.parse(d.furn);
+        if(Array.isArray(items)){MFURN.set(m.id,items.slice(0,80));buildMansionFurniture(m);}
+      }catch(e){}
+    }
+    const lbl=mpMakeLabel("\u{1F3F0} "+m.owner);
+    lbl.scale.set(16,4,1);
+    lbl.position.set(m.x,m.baseY+30,m.z+40);
+    m.g.add(lbl);
+    if(typeof d.shop==="number"&&d.shop>0)buildStall(m,m.owner,d.shop);
+    toast("\u{1F3F0} You're visiting "+m.owner+"'s mansion — press T inside for the \u{1F4D6} guest book"+(d.shop?" and \u{1F95F} dumpling shop":"")+"!");
+  });
+}
+function guestbookPath(id){return "/guestbook/"+mpWorldKey()+"/"+fbKey(id);}
+async function readGuestbook(id,owner){
+  const g=await fbGet(guestbookPath(id));
+  const opts=[];
+  if(g.ok&&g.data){
+    Object.values(g.data).filter(e=>e&&typeof e.m==="string")
+      .sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,8)
+      .forEach(e=>opts.push({label:"\u{1F4DD} "+(e.n||"?")+": "+e.m.slice(0,80),value:"x"}));
+  }
+  if(!opts.length)opts.push({label:"(The guest book is still empty!)",value:"x"});
+  opts.push({label:"✅ Close",value:"x"});
+  showDest("\u{1F4D6} Guest book — "+owner+"'s mansion",opts,()=>{});
+}
+function writeGuestbook(id,owner){
+  const msg=prompt("Write something nice in "+owner+"'s guest book:");
+  if(!msg||!msg.trim())return;
+  fetch(SERVER_API+guestbookPath(id)+".json",{method:"POST",
+    body:JSON.stringify({n:mpName(),m:msg.trim().slice(0,100),ts:Date.now()})})
+    .then(r=>toast(r.ok?"✍️ Your message is in the guest book!":"\u{1F534} Couldn't write — old database rules?"))
+    .catch(()=>toast("\u{1F534} Couldn't reach the guest book."));
+}
+function openVisitorMenu(m){
+  const opts=[];
+  if(m.stall)opts.push({label:"\u{1F95F} Buy a dumpling — $"+m.stall.price,value:"buy"});
+  opts.push({label:"\u{1F514} Ring the doorbell",value:"bell"});
+  opts.push({label:"\u{1F4D6} Read the guest book",value:"read"});
+  opts.push({label:"✍️ Write in the guest book",value:"write"});
+  opts.push({label:"❌ Leave",value:"cancel"});
+  showDest("\u{1F3F0} "+m.owner+"'s mansion",opts,async v=>{
+    if(v==="buy"){
+      const ok=await sendMoney(m.owner,m.stall.price,null,true);
+      if(!ok)return;
+      const roll=Math.random();
+      let color,hex;
+      if(roll<0.03){color="Rainbow";hex=RAINBOW_CSS;}
+      else if(roll<0.1){color="Gold";hex="#ffd700";}
+      else{const c=DUMP_COLORS[Math.floor(Math.random()*DUMP_COLORS.length)];color=c[0];hex=c[1];}
+      DUMP.owned.push({color,hex,glitter:Math.random()<0.08});
+      renderDump();saveGame();
+      toast("\u{1F95F} Yummy — a "+color+" dumpling from "+m.owner+"'s shop! They got your $"+m.stall.price+".");
+    }else if(v==="bell"){
+      const home=[...MP.others.values()].some(o=>o.name===m.owner);
+      toast("\u{1F514} DING DONG! "+(home?m.owner+" is somewhere in this world — maybe they'll come by!":"Nobody's home right now."));
+    }else if(v==="read")readGuestbook(m.id,m.owner);
+    else if(v==="write")writeGuestbook(m.id,m.owner);
+  });
 }
 /* ---------- the T editor: buy & place furniture in your mansion + garden ---------- */
 const MEDIT={on:false,man:null,sel:null,tool:"place",rot:0};
@@ -1455,11 +1845,35 @@ function openMansionEdit(man){
   toast("\u{1F6E0} MANSION EDITOR — pick an item below, then click where to put it. R rotates, T (or ✅ Done) exits.");
 }
 function closeMansionEdit(){
+  const man=MEDIT.man;
   MEDIT.on=false;MEDIT.man=null;
   $("meditBar").classList.remove("show");
   toast("\u{1F3F0} Mansion saved — enjoy your home!");
   saveGame();
+  if(man)syncClaim(man.id);   // visitors see your new layout
 }
+$("meditBook").onclick=()=>{
+  if(MEDIT.man)readGuestbook(MEDIT.man.id,"your");
+};
+$("meditShop").onclick=()=>{
+  const man=MEDIT.man;
+  if(!man)return;
+  if(MYSHOP[man.id]){
+    delete MYSHOP[man.id];saveShops();
+    buildMansionFurniture(man);syncClaim(man.id);
+    toast("\u{1F6D2} Your dumpling shop is closed.");
+    return;
+  }
+  if(MONEY.v<2000){toast("\u{1F4B0} Opening a dumpling shop costs $2,000 — you have $"+fmtMoney(MONEY.v)+"!");return;}
+  const s=prompt("Your dumpling shop is OPEN for $2,000!\nWhat should one dumpling cost? ($5 - $100)","25");
+  let price=parseInt(s,10);
+  if(!(price>0)){toast("Shop not opened.");return;}
+  price=Math.max(5,Math.min(100,price));
+  MONEY.v-=2000;updateMoneyUI();saveGame();
+  MYSHOP[man.id]=price;saveShops();
+  buildMansionFurniture(man);syncClaim(man.id);
+  toast("\u{1F6D2}\u{1F95F} Your dumpling shop is OPEN at $"+price+" each — other players' money lands in your inbox!");
+};
 $("meditDone").onclick=()=>closeMansionEdit();
 $("meditRotate").onclick=()=>{MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — next item faces a new way");};
 $("meditRemove").onclick=()=>{MEDIT.tool=MEDIT.tool==="remove"?"place":"remove";renderMeditBar();
@@ -1631,10 +2045,15 @@ function endConcert(p){
     c.exitZ=p.hall.entrance.z+2+Math.random()*5;
   });
   if(n>0){
-    const tip=n*(4+Math.floor(Math.random()*9));
+    /* REAL players in the audience multiply the tips! */
+    let real=0;
+    for(const o of MP.others.values())if(Math.hypot(o.x-p.x,o.z-p.z)<26)real++;
+    const mult=1+real;
+    const tip=n*(4+Math.floor(Math.random()*9))*mult;
     p.hatMoney=(p.hatMoney||0)+tip;
     if(p.hatBills)p.hatBills.visible=true;
-    toast("\u{1F44F}\u{1F44F} BRAVO! The crowd claps and drops $"+tip+" in the \u{1F3A9} hat on the way out — press T at the hat to collect it!");
+    toast("\u{1F44F}\u{1F44F} BRAVO! The crowd claps and drops $"+tip+" in the \u{1F3A9} hat"
+      +(real?" — "+real+" REAL player"+(real>1?"s":"")+" watched, tips x"+mult+"!":" on the way out — press T at the hat to collect it!"));
   }else toast("\u{1F3B5} Concert over — nobody was in the seats this time.");
 }
 function updateCrowd(dt){
@@ -2213,21 +2632,24 @@ renderAvatarRows();
 applyAvatar(false);
 /* ---------- pay other players: money lands in their online inbox ---------- */
 function payKey(name){return name.toLowerCase().replace(/[^a-z0-9]/g,"_");}
-async function sendMoney(name,amt){
+async function sendMoney(name,amt,extra,quiet){
   amt=Math.floor(amt);
-  if(!(amt>0))return;
-  if(payKey(name)===profileKey()){toast("\u{1F914} That's you — you can't pay yourself!");return;}
-  if(MONEY.v<amt){toast("\u{1F4B0} You don't have $"+fmtMoney(amt)+"!");return;}
-  if(!SERVER_READY){toast("\u{1F534} Paying players needs the online database.");return;}
+  if(!(amt>0))return false;
+  if(payKey(name)===profileKey()){toast("\u{1F914} That's you — you can't pay yourself!");return false;}
+  if(MONEY.v<amt){toast("\u{1F4B0} You don't have $"+fmtMoney(amt)+"!");return false;}
+  if(!SERVER_READY){toast("\u{1F534} Paying players needs the online database.");return false;}
   let ok=false;
   try{
+    const body={from:mpName(),amt,ts:Date.now()};
+    if(extra)Object.assign(body,extra);
     const r=await fetch(SERVER_API+"/payments/"+payKey(name)+".json",
-      {method:"POST",body:JSON.stringify({from:mpName(),amt,ts:Date.now()})});
+      {method:"POST",body:JSON.stringify(body)});
     ok=r.ok;
   }catch(e){}
-  if(!ok){toast("\u{1F534} Payment failed — the database may still run old rules.");return;}
+  if(!ok){toast("\u{1F534} Payment failed — the database may still run old rules.");return false;}
   MONEY.v-=amt;updateMoneyUI();profileSave(true);saveGame();
-  toast("\u{1F4B8} You sent $"+fmtMoney(amt)+" to "+name+"!");
+  if(!quiet)toast("\u{1F4B8} You sent $"+fmtMoney(amt)+" to "+name+"!");
+  return true;
 }
 function openPay(name){
   showDest("\u{1F4B8} Send money to "+name,[
@@ -2260,11 +2682,40 @@ async function checkPayments(){
       if(!p||typeof p.amt!=="number"||p.amt<=0)continue;
       fetch(SERVER_API+"/payments/"+k+"/"+id+".json",{method:"DELETE"}).catch(()=>{});
       addMoney(Math.floor(p.amt));
-      toast("\u{1F4B8} "+(p.from||"A player")+" sent you $"+fmtMoney(Math.floor(p.amt))+"!");
+      if(typeof p.d==="string"){
+        /* a dumpling GIFT rides along with the payment */
+        const[color,gl]=p.d.split("|");
+        const hex=color==="Rainbow"?RAINBOW_CSS:(color==="Gold"?"#ffd700":((DUMP_COLORS.find(c=>c[0]===color)||["White","#f2f5f7"])[1]));
+        DUMP.owned.push({color:color||"White",hex,glitter:gl==="1"});
+        renderDump();saveGame();
+        toast("\u{1F381} "+(p.from||"A player")+" sent you a "+(gl==="1"?"✨ GLITTER ":"")+color+" dumpling!");
+      }else toast("\u{1F4B8} "+(p.from||"A player")+" sent you $"+fmtMoney(Math.floor(p.amt))+"!");
     }
   }catch(e){}
 }
 setInterval(checkPayments,9000);
+/* ---------- friends: star a player — gold on the map, top of the list ---------- */
+const FRIENDS=new Set();
+try{JSON.parse(localStorage.getItem("vc4friends")||"[]").forEach(n=>{if(typeof n==="string")FRIENDS.add(n);});}catch(e){}
+function saveFriends(){try{localStorage.setItem("vc4friends",JSON.stringify([...FRIENDS]))}catch(e){}}
+/* ---------- gift a dumpling to another player (rides the payments inbox) ---------- */
+function openGift(name){
+  if(!DUMP.owned.length){toast("\u{1F95F} You have no dumplings to give — buy some at a MEGA MART!");return;}
+  const opts=DUMP.owned.slice(0,10).map((d,i)=>({
+    label:(d.glitter?"✨ GLITTER ":"")+d.color+" dumpling ($"+dumpValue(d)+")",value:i}));
+  opts.push({label:"❌ Cancel",value:"cancel"});
+  showDest("\u{1F381} Give a dumpling to "+name,opts,async v=>{
+    if(v==="cancel")return;
+    const d=DUMP.owned[v];
+    if(!d)return;
+    const ok=await sendMoney(name,1,{d:d.color+"|"+(d.glitter?"1":"0")},true);
+    if(!ok)return;
+    if(HOLD.d===d){HOLD.d=null;HOLD.mesh.visible=false;}
+    DUMP.owned.splice(v,1);
+    renderDump();saveGame();
+    toast("\u{1F381} You gave your "+(d.glitter?"GLITTER ":"")+d.color+" dumpling to "+name+"!");
+  });
+}
 /* the \u{1F4B0} Money menu lists online players you can pay */
 function renderPayList(){
   const w=$("payList");w.innerHTML="";
@@ -2353,13 +2804,31 @@ function tryCall(){
   if(S.world==="earth"){
     const cv=nearCaveEntrance();
     if(cv){enterCave(cv);return;}
-    /* gas stations: fill the tank */
-    if(nearGasSt()&&fuelVehicle()){tryRefuel();return;}
+    /* gas stations: fill the tank & the scratch-card kiosk */
+    if(nearGasSt()){
+      const opts=[];
+      if(fuelVehicle()&&FUEL.km<FUEL.cap-1)opts.push({label:"⛽ Fill up the tank",value:"fuel"});
+      opts.push({label:"\u{1F3B0} Scratch card — $50 (win up to $5,000!)",value:"card"});
+      opts.push({label:"❌ Nothing, thanks",value:"cancel"});
+      showDest("⛽ Gas station kiosk",opts,v=>{
+        if(v==="fuel")tryRefuel();
+        else if(v==="card")scratchCard();
+      });
+      return;
+    }
   }
   /* race start flag (works on foot or in your car) */
-  if(S.world==="earth"&&nearRaceFlag()){
-    if(RACE.on)endRace(false);else startRace();
-    return;
+  if(S.world==="earth"){
+    const rf=nearRaceFlag();
+    if(rf){
+      if(RACE.on){endRace(false);return;}
+      if(RACEMP.state==="waiting"){
+        toast("\u{1F3C1} The multiplayer race starts in "+Math.max(0,Math.ceil((RACEMP.ts-Date.now())/1000))+"s — stay near the flag!");
+        return;
+      }
+      openRaceMenu(rf);
+      return;
+    }
   }
   /* shops: walk inside and press T to buy food; buyers: sell dumplings */
   if(player.onFoot&&S.world==="earth"){
@@ -2369,9 +2838,10 @@ function tryCall(){
     if(by){openSell();return;}
     /* the dumpling museum */
     if(nearMuseum()){openMuseum();return;}
-    /* standing in YOUR mansion: T opens the editor */
+    /* standing in YOUR mansion: T opens the editor. In someone ELSE's: the visitor menu */
     const mn=nearMansion();
     if(mn&&rentedAt(mn.id)){openMansionEdit(mn);return;}
+    if(mn&&mn.owner){openVisitorMenu(mn);return;}
     if(mn){toast("\u{1F3F0} Buy this mansion first — press T at the RECEPTION out front ($"+fmtMoney(MANSION_PRICE)+")!");return;}
   }
   /* rocket stations work on BOTH worlds */
@@ -3027,28 +3497,104 @@ function moveBeacon(){
   raceBeacon.position.set(cp.x,terrainH(cp.x,cp.z),cp.z);
   raceBeacon.visible=true;
 }
-function startRace(){
+function startRace(rand,origin){
+  rand=rand||Math.random;
   const snap=v=>Math.round((v-30)/120)*120+30;
-  let cx=snap(player.x),cz=snap(player.z);
+  let cx=snap(origin?origin.x:player.x),cz=snap(origin?origin.z:player.z);
   RACE.cp=[];
-  let axis=Math.random()<0.5;
+  let axis=rand()<0.5;
   for(let k=0;k<5;k++){   // 5 checkpoints along the grid roads
-    const step=(2+Math.floor(Math.random()*3))*120*(Math.random()<0.5?-1:1);
+    const step=(2+Math.floor(rand()*3))*120*(rand()<0.5?-1:1);
     if(axis)cx+=step;else cz+=step;
     axis=!axis;
     RACE.cp.push({x:cx,z:cz});
   }
   RACE.on=true;RACE.i=0;RACE.t=0;
+  RACE.mp=!!origin;
   moveBeacon();
   toast("\u{1F3C1} RACE! Drive through 5 blue checkpoints — GO GO GO!");
 }
 function endRace(win){
   RACE.on=false;raceBeacon.visible=false;
+  if(RACE.mp){
+    RACE.mp=false;
+    const key=RACEMP.flagKey,ts=RACEMP.ts;
+    RACEMP.state=null;
+    if(win)claimRaceWin(key,ts);
+    else toast("\u{1F3C1} Race over — no prize this time.");
+    return;
+  }
   if(win){
     const reward=Math.max(50,Math.round(600-RACE.t*4));
     addMoney(reward);
     toast("\u{1F3C6} FINISH in "+RACE.t.toFixed(1)+"s — you won $"+reward+"!");
   }else toast("\u{1F3C1} Race cancelled.");
+}
+/* ---------- MULTIPLAYER races: $100 entry, first to finish takes the pot ---------- */
+const RACEMP={state:null,flagKey:null,ts:0,seed:0,origin:null};
+function raceFlagKey(f){return fbKey("F:"+Math.round(f.x)+","+Math.round(f.z));}
+function racerId(){return fbKey(profileKey()||MP.id);}
+function openRaceMenu(f){
+  showDest("\u{1F3C1} Race start",[
+    {label:"\u{1F3CE} Solo race — free, win up to $600",value:"solo"},
+    {label:"\u{1F465} MULTIPLAYER race — $100 entry, winner takes the whole pot!",value:"mp"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],async v=>{
+    if(v==="solo"){startRace();return;}
+    if(v!=="mp")return;
+    if(!SERVER_READY){toast("\u{1F534} Multiplayer races need the online database.");return;}
+    if(MONEY.v<100){toast("\u{1F4B0} The entry fee is $100 — you have $"+fmtMoney(MONEY.v)+"!");return;}
+    const key=raceFlagKey(f),now=Date.now();
+    const g=await fbGet("/races/"+mpWorldKey()+"/"+key);
+    const race=g.ok?g.data:null;
+    if(race&&race.ts>now){
+      /* an upcoming race exists here: JOIN it */
+      await fbPut("/raceent/"+mpWorldKey()+"/"+key+"/"+racerId(),{n:mpName(),ts:now});
+      MONEY.v-=100;updateMoneyUI();saveGame();
+      RACEMP.state="waiting";RACEMP.flagKey=key;RACEMP.ts=race.ts;RACEMP.seed=race.seed||1;RACEMP.origin={x:f.x,z:f.z};
+      toast("\u{1F465} You joined "+(race.n||"the")+"'s race — it starts in "+Math.ceil((race.ts-now)/1000)+"s. Stay at the flag!");
+      return;
+    }
+    if(race&&race.ts>now-240000){
+      toast("\u{1F3C1} A race just ran here — this flag frees up in a few minutes!");
+      return;
+    }
+    /* HOST a new race, starting in 30 seconds */
+    const ts=now+30000,seed=Math.floor(Math.random()*1e9);
+    const ok=await fbPut("/races/"+mpWorldKey()+"/"+key,{ts,seed,n:mpName()});
+    if(!ok){toast("\u{1F534} Couldn't create the race — are the database rules updated?");return;}
+    await fbPut("/raceent/"+mpWorldKey()+"/"+key+"/"+racerId(),{n:mpName(),ts:now});
+    MONEY.v-=100;updateMoneyUI();saveGame();
+    RACEMP.state="waiting";RACEMP.flagKey=key;RACEMP.ts=ts;RACEMP.seed=seed;RACEMP.origin={x:f.x,z:f.z};
+    toast("\u{1F465}\u{1F3C1} RACE CREATED — it starts in 30s! Tell everyone in \u{1F4AC} chat to press T at this flag!");
+  });
+}
+function updateRaceMP(){
+  if(RACEMP.state!=="waiting")return;
+  const left=RACEMP.ts-Date.now();
+  const el=$("navDist");
+  el.style.display="flex";
+  $("navTxt").textContent="\u{1F3C1} Multiplayer race starts in "+Math.max(0,Math.ceil(left/1000))+"s — pot grows with every racer!";
+  if(left<=0){
+    RACEMP.state="racing";
+    startRace(rng(RACEMP.seed),RACEMP.origin);
+  }
+}
+async function claimRaceWin(key,ts){
+  const winPath="/racewin/"+mpWorldKey()+"/"+key+"_"+ts;
+  const ok=await fbPut(winPath,{n:mpName(),ts:Date.now()});
+  if(ok){
+    const g=await fbGet("/raceent/"+mpWorldKey()+"/"+key);
+    let cnt=1;
+    if(g.ok&&g.data)cnt=Math.max(1,Object.values(g.data).filter(e=>e&&typeof e.ts==="number"&&e.ts>ts-300000).length);
+    const pot=100*cnt;
+    addMoney(pot);
+    toast("\u{1F3C6}\u{1F451} YOU WON THE MULTIPLAYER RACE! The pot is yours: $"+fmtMoney(pot)+" ("+cnt+" racer"+(cnt>1?"s":"")+")!");
+  }else{
+    const g=await fbGet(winPath);
+    if(g.ok&&g.data&&g.data.n)toast("\u{1F3C1} You finished — but "+g.data.n+" was faster and takes the pot!");
+    else{addMoney(200);toast("\u{1F3C1} You finished the race — +$200! (The database rules are too old for pots.)");}
+  }
 }
 function updateRace(dt){
   if(!RACE.on)return;
@@ -3458,7 +4004,7 @@ function drawMap(){
   /* other players: cyan dots with their names — click one to teleport / route to them */
   if(S.world==="earth"){
     for(const o of MP.others.values()){
-      dot(o.x,o.z,"#3fd0ff",6);
+      dot(o.x,o.z,FRIENDS.has(o.name)?"#ffd700":"#3fd0ff",FRIENDS.has(o.name)?7:6);
       const px=(o.x-mapView.cx)*sc+cv.width/2,py=-(o.z-mapView.cz)*sc+cv.height/2;
       if(px>-20&&px<cv.width+20&&py>-20&&py<cv.height+20){
         c.font="bold 12px 'Segoe UI',sans-serif";c.textAlign="center";
@@ -3474,10 +4020,19 @@ function choosePlayer(o){
     {label:"⚡ Teleport (instant)",value:"tp"},
     {label:"\u{1F9ED} Follow route — keeps updating while they move",value:"route"},
     {label:"\u{1F4B8} Send money",value:"pay"},
+    {label:"\u{1F381} Give a dumpling",value:"gift"},
+    {label:FRIENDS.has(o.name)?"\u{1F494} Remove friend":"⭐ Add friend",value:"friend"},
     {label:"❌ Cancel",value:"cancel"}
   ],v=>{
     if(v==="cancel")return;
     if(v==="pay"){openPay(o.name);return;}
+    if(v==="gift"){openGift(o.name);return;}
+    if(v==="friend"){
+      if(FRIENDS.has(o.name)){FRIENDS.delete(o.name);toast("\u{1F494} "+o.name+" removed from your friends.");}
+      else{FRIENDS.add(o.name);toast("⭐ "+o.name+" is now your FRIEND — gold on the map!");}
+      saveFriends();requestMap();
+      return;
+    }
     switchWorld("earth");
     if(v==="tp")teleportTo(o.tx!==undefined?o.tx:o.x,o.tz!==undefined?o.tz:o.z);
     else followPlayer(o);
@@ -3548,8 +4103,8 @@ function mapEntries(q){
   [...MP.others.values()]
     .filter(o=>!q||o.name.toLowerCase().includes(q))
     .map(o=>({o,d:Math.hypot(o.x-player.x,o.z-player.z)}))
-    .sort((a,b)=>a.d-b.d)
-    .forEach(({o,d})=>out.push({label:"\u{1F464} "+o.name+" — "+fmtDist(d),go:()=>choosePlayer(o)}));
+    .sort((a,b)=>((FRIENDS.has(b.o.name)?1:0)-(FRIENDS.has(a.o.name)?1:0))||(a.d-b.d))
+    .forEach(({o,d})=>out.push({label:(FRIENDS.has(o.name)?"\u{1F49B} ":"\u{1F464} ")+o.name+" — "+fmtDist(d),go:()=>choosePlayer(o)}));
   /* live random events, nearest first */
   EVENTS.list
     .map(e=>({e,d:Math.hypot(e.x-player.x,e.z-player.z),
@@ -4261,7 +4816,30 @@ const UPDATE_PAGES=[
 <li>The money lands in their online inbox — they get it within seconds, even mid-game, with a message saying who sent it.</li></ul>
 <h4>\u{1F9CD} AVATAR EDITOR</h4><ul>
 <li>In ⚙ Settings: pick your <b>shirt, pants, hair and skin</b> colors — your character updates instantly.</li>
-<li>Other players see your look too: your avatar is broadcast along with your position.</li></ul>`}
+<li>Other players see your look too: your avatar is broadcast along with your position.</li></ul>`},
+{t:"Round 16 — Jobs, pets, multiplayer races & visiting mansions",h:`
+<h4>\u{1F4BC} JOBS (new top-bar button!)</h4><ul>
+<li>\u{1F696} <b>Taxi driver</b>: pick up passengers, drop them at the beacon — fare grows with distance.</li>
+<li>\u{1F35F} <b>Food delivery</b>: grab 3 meals at a McDrive, deliver them in 5 minutes — $40 each + $80 bonus.</li>
+<li>\u{1F69B} <b>Tow truck</b>: hook up crashed cars at accidents and tow them to the garage — $150 per wreck.</li>
+<li>Follow the blue route to the orange beacon; press \u{1F4BC} Jobs again to end your shift.</li></ul>
+<h4>\u{1F465}\u{1F3C1} MULTIPLAYER RACES</h4><ul>
+<li>Press T at a race flag → <b>MULTIPLAYER race</b>: $100 entry, starts 30 s later, everyone at the flag can join.</li>
+<li>Same checkpoints for everyone — <b>first to finish takes the whole pot!</b></li></ul>
+<h4>\u{1F3F0} VISIT OTHER PLAYERS' MANSIONS</h4><ul>
+<li>Walk into a claimed mansion and see the owner's <b>real furniture</b>, exactly how they placed it.</li>
+<li>\u{1F514} Ring the doorbell, \u{1F4D6} read &amp; ✍️ write in the <b>guest book</b>.</li>
+<li>\u{1F6D2} Open a <b>dumpling shop</b> at your mansion ($2,000, you set the price) — buyers' money lands in YOUR inbox!</li>
+<li>Your 3 fastest cars park on your driveway for everyone to admire.</li></ul>
+<h4>\u{1F436} PETS</h4><ul>
+<li>MEGA MARTs sell puppies ($500) and kittens ($400) — they follow you everywhere, bouncing along.</li></ul>
+<h4>\u{1F4B0} MORE ECONOMY</h4><ul>
+<li>\u{1F381} <b>Daily reward</b>: $100 × your streak (up to $1,000) — come back every day!</li>
+<li>\u{1F3B0} <b>Scratch cards</b> at gas station kiosks: $50 a card, win up to $5,000.</li>
+<li>\u{1F4B5} <b>Sell cars back</b> for 70% in the garage (starter cars excluded).</li>
+<li>\u{1F3E8} Owned apartments earn <b>$25/day</b> from tenants.</li>
+<li>\u{1F381} <b>Gift dumplings</b> to other players; concerts pay <b>double, triple, more</b> when real players watch!</li>
+<li>⭐ <b>Friends</b>: star a player — gold on the map, top of the list.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -4327,6 +4905,7 @@ function frame(now){
     });
   }
   updateRocket(dt);
+  updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
