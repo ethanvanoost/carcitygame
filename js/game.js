@@ -663,7 +663,7 @@ function addMoney(n){
   }
   updateMoneyUI();saveGame();profileSave();
 }
-$("bMoney").onclick=()=>{updateMoneyUI();$("moneyModal").classList.toggle("open");};
+$("bMoney").onclick=()=>{updateMoneyUI();renderPayList();$("moneyModal").classList.toggle("open");};
 $("moneyClose").onclick=()=>$("moneyModal").classList.remove("open");
 /* ---------- fuel: cars & motorcycles run dry after 699 km — fill up at ⛽ gas stations ---------- */
 const FUEL={cap:699,km:699,warned:false};
@@ -1874,9 +1874,23 @@ function myToken(){
   if(!t){t="t"+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("vc4ptoken",t);}
   return t;
 }
-async function claimName(raw){
+/* passwords are stored as a SHA-256 hash — never as plain text */
+async function hashPass(p){
+  try{
+    const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("vc4:"+p));
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }catch(e){
+    let h=5381;for(let i=0;i<p.length;i++)h=((h*33)^p.charCodeAt(i))>>>0;
+    return "x"+h.toString(16);
+  }
+}
+function savedPass(){return localStorage.getItem("vc4ppass")||"";}
+/* mode: "register" = create a new account, "login" = existing account,
+   "auto" = whichever fits (used by the settings name field) */
+async function claimName(raw,pass,mode){
   const n=cleanServerName(raw||"").slice(0,16);
   if(n.length<3)return{ok:false,msg:"Use at least 3 letters or numbers."};
+  if(!pass||pass.length<3)return{ok:false,msg:"Type a password of at least 3 characters."};
   if(!SERVER_READY)return{ok:true,offline:true,name:n};
   const key=n.toLowerCase().replace(/[^a-z0-9]/g,"_");
   const url=SERVER_API+"/usernames/"+key+".json";
@@ -1884,33 +1898,53 @@ async function claimName(raw){
     const r=await fetch(url,{cache:"no-store"});
     if(!r.ok)throw 0;
     const d=await r.json();
-    if(d&&d.t===myToken())return{ok:true,name:n};          /* already mine */
-    if(d)return{ok:false,msg:"\""+n+"\" is already taken — try another!"};
+    const hp=await hashPass(pass);
+    if(d){
+      /* the account exists */
+      if(d.t===myToken()){
+        /* it's already this device's account — saving also updates the password */
+        await fetch(url,{method:"PUT",body:JSON.stringify({t:myToken(),name:d.name||n,created:d.created||new Date().toISOString().slice(0,10),p:hp})});
+        return{ok:true,name:n};
+      }
+      if(mode==="register")return{ok:false,msg:"\""+n+"\" already exists — use ▶ Log in with its password!"};
+      if(d.p){
+        if(d.p!==hp)return{ok:false,msg:"Wrong password for \""+n+"\"!"};
+        localStorage.setItem("vc4ptoken",d.t);   // correct password: this device becomes the account
+        return{ok:true,name:n};
+      }
+      return{ok:false,msg:"\""+n+"\" is an account from before passwords existed — open the game on its original device and set a password in ⚙ Settings first."};
+    }
+    /* the account doesn't exist yet */
+    if(mode==="login")return{ok:false,msg:"No account called \""+n+"\" — click \u{1F195} Register to create it!"};
     const w=await fetch(url,{method:"PUT",
-      body:JSON.stringify({t:myToken(),name:n,created:new Date().toISOString().slice(0,10)})});
+      body:JSON.stringify({t:myToken(),name:n,created:new Date().toISOString().slice(0,10),p:hp})});
     if(!w.ok)return{ok:false,msg:"\""+n+"\" is already taken — try another!"}; /* lost the race */
     return{ok:true,name:n};
   }catch(e){return{ok:true,offline:true,name:n};}          /* offline: allow for now */
 }
-async function doClaim(){
-  const btn=$("nameClaim");
-  btn.disabled=true;
-  $("nameStatus").textContent="⏳ Checking if that name is free...";
-  const res=await claimName($("nameInput").value);
-  btn.disabled=false;
+async function doClaim(mode){
+  const b1=$("nameClaim"),b2=$("nameReg");
+  b1.disabled=b2.disabled=true;
+  $("nameStatus").textContent=mode==="register"?"⏳ Creating your account...":"⏳ Logging in...";
+  const res=await claimName($("nameInput").value,$("namePass").value,mode);
+  b1.disabled=b2.disabled=false;
   if(!res.ok){$("nameStatus").textContent="❌ "+res.msg;return;}
   localStorage.setItem("vc4pname",res.name);
+  localStorage.setItem("vc4ppass",$("namePass").value);
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
+  $("pPass").value=$("namePass").value;
   $("nameModal").classList.remove("open");
   profileLoad();
   toast(res.offline
-    ?"\u{1F464} You are \""+res.name+"\" (offline — not reserved online yet)"
-    :"\u{1F464} Username \""+res.name+"\" is yours!");
+    ?"\u{1F464} You are \""+res.name+"\" (offline — not saved online yet)"
+    :(mode==="register"?"\u{1F389}\u{1F464} Account \""+res.name+"\" created — remember your password!":"\u{1F511}\u{1F464} Welcome back, "+res.name+"!"));
 }
-$("nameClaim").onclick=doClaim;
-$("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim();});
+$("nameClaim").onclick=()=>doClaim("login");
+$("nameReg").onclick=()=>doClaim("register");
+$("namePass").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim("login");});
 $("nameInput").addEventListener("input",()=>{$("nameStatus").textContent="";});
+$("namePass").addEventListener("input",()=>{$("nameStatus").textContent="";});
 $("nameSkip").onclick=()=>{
   localStorage.setItem("vc4nameok","1");
   $("nameModal").classList.remove("open");
@@ -2036,17 +2070,19 @@ function mpApply(k,d){
   const kind=d.f?"foot":(d.v==="moto"||d.v==="bike"?d.v:"car");
   const col=typeof d.c==="number"?(d.c&0xffffff):0x3fd0ff;
   const nm=typeof d.n==="string"?d.n.slice(0,16):"player";
+  const av=typeof d.av==="string"?d.av:"";
   let o=MP.others.get(k);
-  if(o&&(o.kind!==kind||o.color!==col||o.name!==nm)){mpDrop(k);o=null;}
+  if(o&&(o.kind!==kind||o.color!==col||o.name!==nm||o.av!==av)){mpDrop(k);o=null;}
   if(!o){
     const g=new THREE.Group();
-    const body=kind==="foot"?makePerson(1,col):buildVehicleMesh(kind,col);
+    const avObj=parseAv(av);
+    const body=kind==="foot"?makePerson(1,avObj?avObj.shirt:col,avObj):buildVehicleMesh(kind,col);
     if(body.userData&&body.userData.riderMesh)body.userData.riderMesh.visible=true;
     g.add(body);
     const lbl=mpMakeLabel(nm);
     lbl.position.y=kind==="foot"?2.7:3.1;g.add(lbl);
     scene.add(g);
-    o={g,kind,color:col,name:nm,k,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
+    o={g,kind,color:col,name:nm,av,k,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
     MP.others.set(k,o);
   }
   o.tx=d.x;o.tz=d.z;o.ty=typeof d.y==="number"?d.y:0;o.tyaw=typeof d.r==="number"?d.r:0;
@@ -2084,19 +2120,20 @@ function mpTick(dt){
     f:player.onFoot?1:0,
     v:player.drive?player.drive.type:"car",
     c:paintOf(S.selected),
+    av:avString(),
     t:Date.now()};
-  const sig=[d.x,d.z,d.y,d.r,d.f,d.v,d.n].join("|");
+  const sig=[d.x,d.z,d.y,d.r,d.f,d.v,d.n,d.av].join("|");
   if(sig===MP.lastSig&&now-MP.lastSendAt<5000)return;  /* parked: just a heartbeat every 5 s */
   MP.lastSig=sig;MP.lastSendAt=now;
   try{MP.myRef.set(d);}catch(e){}
 }
-/* player-name field in settings: goes through the same taken-check */
+/* player-name field in settings: goes through the same login/register check */
 $("pName").value=mpName();
 $("pName").addEventListener("change",async()=>{
-  const res=await claimName($("pName").value);
+  const res=await claimName($("pName").value,$("pPass").value||savedPass(),"auto");
   if(!res.ok){toast("❌ "+res.msg);$("pName").value=mpName();return;}
-  if(res.name===mpName()){$("pName").value=res.name;return;}
   localStorage.setItem("vc4pname",res.name);
+  if($("pPass").value)localStorage.setItem("vc4ppass",$("pPass").value);
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
   profileLoad();
@@ -2104,6 +2141,147 @@ $("pName").addEventListener("change",async()=>{
     ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"
     :"\u{1F464} Username \""+res.name+"\" is yours!");
 });
+/* password in settings: view it with the eye, change it with Save */
+$("pPass").value=savedPass();
+$("pPassEye").onclick=()=>{
+  const p=$("pPass");
+  p.type=p.type==="password"?"text":"password";
+  $("pPassEye").textContent=p.type==="password"?"\u{1F441}":"\u{1F648}";
+};
+$("pPassSave").onclick=async()=>{
+  const pass=$("pPass").value;
+  if(pass.length<3){toast("❌ Type a password of at least 3 characters first!");return;}
+  const res=await claimName(mpName(),pass,"auto");
+  if(!res.ok){toast("❌ "+res.msg);return;}
+  localStorage.setItem("vc4ppass",pass);
+  toast(res.offline?"\u{1F511} Password saved on this device (offline).":"\u{1F511} Password saved — use it to log in anywhere!");
+};
+/* ---------- your avatar: shirt, pants, hair & skin ---------- */
+const AVATAR={shirt:0x2563eb,pants:0x30395c,hair:0x4a2f1d,skin:0xf1c39a};
+try{
+  const a=JSON.parse(localStorage.getItem("vc4avatar")||"null");
+  if(a)for(const k of["shirt","pants","hair","skin"])if(typeof a[k]==="number")AVATAR[k]=a[k];
+}catch(e){}
+function avString(){return[AVATAR.shirt,AVATAR.pants,AVATAR.hair,AVATAR.skin].map(c=>c.toString(16)).join(",");}
+function parseAv(s){
+  const a=String(s||"").split(",").map(x=>parseInt(x,16));
+  if(a.length<4||a.some(isNaN))return null;
+  return{shirt:a[0],pants:a[1],hair:a[2],skin:a[3]};
+}
+function applyAvatar(save){
+  /* rebuild your (earth) body with the chosen colors */
+  const old=playerEarthMesh;
+  const g=makePerson(1,AVATAR.shirt,AVATAR);
+  g.traverse(o=>{if(o.castShadow!==undefined)o.castShadow=true;});
+  g.position.copy(old.position);g.rotation.y=old.rotation.y;
+  g.visible=old.visible;
+  scene.add(g);scene.remove(old);disposeGroup(old);
+  playerEarthMesh=g;
+  if(player.mesh===old){player.mesh=g;player.limbs=g.userData.limbs;}
+  if(save){
+    try{localStorage.setItem("vc4avatar",JSON.stringify(AVATAR))}catch(e){}
+    MP.lastSig="";   // broadcast the new look right away
+  }
+}
+const AV_PALETTES={
+  shirt:[0x2563eb,0xd7263d,0xff7f11,0xf4d35e,0x8ac926,0x2ec4b6,0x9b5de5,0xff5d8f,0xefefef,0x111111],
+  pants:[0x30395c,0x3a3a3a,0x4a3728,0x24405e,0xd7263d,0x0f7a3d,0xb56576,0x111111,0xefefef,0x6d28d9],
+  hair:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a,0xd7263d,0x9b5de5,0x2f8f46,0x1b98e0,0xefefef,0xff5d8f],
+  skin:[0xf1c39a,0xd9a06b,0x8c5a2b,0x6b4226,0xffdbac,0xc68642]
+};
+const AV_LABELS={shirt:"\u{1F455} Shirt",pants:"\u{1F456} Pants",hair:"\u{1F487} Hair",skin:"\u{1F9CD} Skin"};
+function renderAvatarRows(){
+  const w=$("avatarRows");w.innerHTML="";
+  for(const key of["shirt","pants","hair","skin"]){
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap";
+    const lab=document.createElement("span");
+    lab.style.cssText="font-size:12px;color:var(--dim);width:74px";
+    lab.textContent=AV_LABELS[key];
+    row.appendChild(lab);
+    AV_PALETTES[key].forEach(c=>{
+      const b=document.createElement("button");
+      b.className="gcol"+(AVATAR[key]===c?" on":"");
+      b.style.cssText+=";width:24px;height:24px;background:#"+c.toString(16).padStart(6,"0");
+      b.onclick=()=>{AVATAR[key]=c;applyAvatar(true);renderAvatarRows();};
+      row.appendChild(b);
+    });
+    w.appendChild(row);
+  }
+}
+renderAvatarRows();
+applyAvatar(false);
+/* ---------- pay other players: money lands in their online inbox ---------- */
+function payKey(name){return name.toLowerCase().replace(/[^a-z0-9]/g,"_");}
+async function sendMoney(name,amt){
+  amt=Math.floor(amt);
+  if(!(amt>0))return;
+  if(payKey(name)===profileKey()){toast("\u{1F914} That's you — you can't pay yourself!");return;}
+  if(MONEY.v<amt){toast("\u{1F4B0} You don't have $"+fmtMoney(amt)+"!");return;}
+  if(!SERVER_READY){toast("\u{1F534} Paying players needs the online database.");return;}
+  let ok=false;
+  try{
+    const r=await fetch(SERVER_API+"/payments/"+payKey(name)+".json",
+      {method:"POST",body:JSON.stringify({from:mpName(),amt,ts:Date.now()})});
+    ok=r.ok;
+  }catch(e){}
+  if(!ok){toast("\u{1F534} Payment failed — the database may still run old rules.");return;}
+  MONEY.v-=amt;updateMoneyUI();profileSave(true);saveGame();
+  toast("\u{1F4B8} You sent $"+fmtMoney(amt)+" to "+name+"!");
+}
+function openPay(name){
+  showDest("\u{1F4B8} Send money to "+name,[
+    {label:"$10",value:10},{label:"$100",value:100},
+    {label:"$1,000",value:1000},{label:"$10,000",value:10000},
+    {label:"✏️ Another amount...",value:"custom"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    if(v==="custom"){
+      const s=prompt("How much money do you want to send to "+name+"?");
+      const a=parseInt(s,10);
+      if(a>0)sendMoney(name,a);else if(s!==null)toast("Type a normal number, like 250!");
+      return;
+    }
+    sendMoney(name,v);
+  });
+}
+/* check my inbox every few seconds — collect what other players sent me */
+async function checkPayments(){
+  if(!SERVER_READY)return;
+  const k=profileKey();if(!k)return;
+  try{
+    const r=await fetch(SERVER_API+"/payments/"+k+".json",{cache:"no-store"});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(!d)return;
+    for(const id of Object.keys(d)){
+      const p=d[id];
+      if(!p||typeof p.amt!=="number"||p.amt<=0)continue;
+      fetch(SERVER_API+"/payments/"+k+"/"+id+".json",{method:"DELETE"}).catch(()=>{});
+      addMoney(Math.floor(p.amt));
+      toast("\u{1F4B8} "+(p.from||"A player")+" sent you $"+fmtMoney(Math.floor(p.amt))+"!");
+    }
+  }catch(e){}
+}
+setInterval(checkPayments,9000);
+/* the \u{1F4B0} Money menu lists online players you can pay */
+function renderPayList(){
+  const w=$("payList");w.innerHTML="";
+  const others=[...MP.others.values()];
+  if(!others.length){
+    w.innerHTML="<div style='color:var(--dim);font-size:12px'>No other players online right now — they appear here so you can pay them.</div>";
+    return;
+  }
+  others.forEach(o=>{
+    const b=document.createElement("button");
+    b.className="btn";
+    b.style.cssText="width:100%;margin-top:6px;text-align:left";
+    b.innerHTML="\u{1F4B8} Pay \u{1F464} "+o.name;
+    b.onclick=()=>{$("moneyModal").classList.remove("open");openPay(o.name);};
+    w.appendChild(b);
+  });
+}
 let _saveT=0;
 function autoSave(dt){_saveT+=dt;if(_saveT>5){_saveT=0;saveGame();if(PROF.dirty)profileSave(true);}}
 function saveGame(){
@@ -3295,9 +3473,11 @@ function choosePlayer(o){
   showDest("\u{1F464} "+o.name,[
     {label:"⚡ Teleport (instant)",value:"tp"},
     {label:"\u{1F9ED} Follow route — keeps updating while they move",value:"route"},
+    {label:"\u{1F4B8} Send money",value:"pay"},
     {label:"❌ Cancel",value:"cancel"}
   ],v=>{
     if(v==="cancel")return;
+    if(v==="pay"){openPay(o.name);return;}
     switchWorld("earth");
     if(v==="tp")teleportTo(o.tx!==undefined?o.tx:o.x,o.tz!==undefined?o.tz:o.z);
     else followPlayer(o);
@@ -4069,7 +4249,19 @@ const UPDATE_PAGES=[
 <li>On a server, every player sees the exact same clock, day and night — sunset happens for everyone at once.</li>
 <li>(That also means sleeping can't skip the night on servers — you still get breakfast!)</li></ul>
 <h4>\u{1F389} FESTIVALS END PROPERLY</h4><ul>
-<li>When a festival is over, the visitors walk off and go home instead of partying forever.</li></ul>`}
+<li>When a festival is over, the visitors walk off and go home instead of partying forever.</li></ul>`},
+{t:"Round 15 — Accounts with passwords, paying players & your avatar",h:`
+<h4>\u{1F511} REAL ACCOUNTS: USERNAME + PASSWORD</h4><ul>
+<li>Choosing a username now needs a <b>password</b> — click <b>\u{1F195} Register</b> to create a new account or <b>▶ Log in</b> on any device.</li>
+<li>Your money, cars and houses follow your account everywhere. Passwords are stored online as a secure hash, never as plain text.</li>
+<li>In ⚙ <b>Settings</b> you can view your password (\u{1F441} eye button) and change it (Save).</li>
+<li>Old accounts from before passwords: open the game on the original device and set a password in Settings.</li></ul>
+<h4>\u{1F4B8} PAY OTHER PLAYERS</h4><ul>
+<li>Click a player on the map (or open the \u{1F4B0} Money menu) and choose <b>\u{1F4B8} Send money</b>: $10, $100, $1K, $10K or any amount.</li>
+<li>The money lands in their online inbox — they get it within seconds, even mid-game, with a message saying who sent it.</li></ul>
+<h4>\u{1F9CD} AVATAR EDITOR</h4><ul>
+<li>In ⚙ Settings: pick your <b>shirt, pants, hair and skin</b> colors — your character updates instantly.</li>
+<li>Other players see your look too: your avatar is broadcast along with your position.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

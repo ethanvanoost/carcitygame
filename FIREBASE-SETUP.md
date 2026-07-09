@@ -43,6 +43,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "f": { ".validate": "newData.isNumber()" },
              "v": { ".validate": "newData.isString() && newData.val().length <= 8" },
              "c": { ".validate": "newData.isNumber()" },
+             "av": { ".validate": "newData.isString() && newData.val().length <= 32" },
              "t": { ".validate": "newData.isNumber()" },
              "$other": { ".validate": false }
            }
@@ -51,11 +52,12 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
        "usernames": {
          "$name": {
            ".read": true,
-           ".write": "!data.exists()",
+           ".write": "!data.exists() || data.child('t').val() === newData.child('t').val()",
            ".validate": "newData.hasChildren(['t','name'])",
            "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
            "name": { ".validate": "newData.isString() && newData.val().length >= 3 && newData.val().length <= 16" },
            "created": { ".validate": "newData.isString() && newData.val().length <= 10" },
+           "p": { ".validate": "newData.isString() && newData.val().length <= 64" },
            "$other": { ".validate": false }
          }
        },
@@ -109,6 +111,19 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "$other": { ".validate": false }
            }
          }
+       },
+       "payments": {
+         "$name": {
+           ".read": true,
+           "$id": {
+             ".write": "!data.exists() || !newData.exists()",
+             ".validate": "newData.hasChildren(['from','amt','ts'])",
+             "from": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "amt": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1000000000" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "$other": { ".validate": false }
+           }
+         }
        }
      }
    }
@@ -133,7 +148,13 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    is freed automatically when a renter can't pay the rent anymore). The `pianolock`
    part locks a **concert piano while a player is giving a concert** — only the
    concert giver can play until they end the concert; a lock left behind by a
-   crashed game frees itself after 15 minutes.
+   crashed game frees itself after 15 minutes. The `usernames` rules now also allow
+   the **owner to update their own record** — that's how **passwords** work: each
+   account stores a password *hash* (`p`, never the plain password), registering
+   creates the account, and logging in with the right password on a new device
+   hands that device the account. The `payments` part is the **pay-a-player inbox**:
+   anyone can drop a payment into someone's inbox (amount 1 to 1 billion), and the
+   game collects and deletes them within seconds.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming

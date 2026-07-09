@@ -495,17 +495,18 @@ function makeBush(x,z,s,parent,y){
 /* ================= PEOPLE / ANIMALS / DOORS ================= */
 const eyeMat=keep(new THREE.MeshLambertMaterial({color:0x1c1c1e}));
 const shoeMat=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
-function makePerson(scale,shirtColor){
+function makePerson(scale,shirtColor,av){
+  /* av = optional avatar colors {skin,pants,hair} — random when not given */
   const g=new THREE.Group(),s=scale||1;
-  const skin=new THREE.MeshLambertMaterial({color:[0xf1c39a,0xd9a06b,0x8c5a2b][Math.floor(Math.random()*3)]});
-  const shirt=new THREE.MeshLambertMaterial({color:shirtColor||COLORS[Math.floor(Math.random()*COLORS.length)]});
-  const pants=new THREE.MeshLambertMaterial({color:[0x30395c,0x3a3a3a,0x4a3728,0x24405e][Math.floor(Math.random()*4)]});
+  const skin=new THREE.MeshLambertMaterial({color:av&&av.skin!==undefined?av.skin:[0xf1c39a,0xd9a06b,0x8c5a2b][Math.floor(Math.random()*3)]});
+  const shirt=new THREE.MeshLambertMaterial({color:shirtColor!==undefined&&shirtColor!==null?shirtColor:COLORS[Math.floor(Math.random()*COLORS.length)]});
+  const pants=new THREE.MeshLambertMaterial({color:av&&av.pants!==undefined?av.pants:[0x30395c,0x3a3a3a,0x4a3728,0x24405e][Math.floor(Math.random()*4)]});
   const torso=new THREE.Mesh(new THREE.BoxGeometry(0.56*s,0.72*s,0.3*s),shirt);torso.position.y=1.28*s;torso.castShadow=true;g.add(torso);
   /* shoulders round the silhouette a little */
   [[-0.28],[0.28]].forEach(p=>{const sh=new THREE.Mesh(new THREE.SphereGeometry(0.11*s,7,7),shirt);sh.position.set(p[0]*s,1.56*s,0);g.add(sh);});
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.07*s,0.08*s,0.12*s,7),skin);neck.position.y=1.68*s;g.add(neck);
   const head=new THREE.Mesh(new THREE.SphereGeometry(0.23*s,10,10),skin);head.position.y=1.9*s;g.add(head);
-  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a][Math.floor(Math.random()*4)]}));
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:av&&av.hair!==undefined?av.hair:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a][Math.floor(Math.random()*4)]}));
   hair.position.y=1.95*s;g.add(hair);
   /* a real face: two eyes + a tiny nose */
   [[-0.08],[0.08]].forEach(p=>{const e=new THREE.Mesh(new THREE.SphereGeometry(0.028*s,6,6),eyeMat);e.position.set(p[0]*s,1.93*s,0.2*s);g.add(e);});
