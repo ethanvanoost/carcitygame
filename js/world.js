@@ -703,6 +703,30 @@ function makeChair(cx,cz,yaw,parent,baseY){
   });
   chairs.push({g:parent,x:cx,z:cz,yaw,y:baseY+0.6});
 }
+/* ---- pianos you can really play (computer keyboard + MIDI) ---- */
+const pianos=[];
+function makePiano(px,pz,yaw,parent,baseY,hall){
+  const g=new THREE.Group();g.position.set(px,baseY,pz);g.rotation.y=yaw;
+  const blk=new THREE.MeshLambertMaterial({color:0x17181c});
+  const body=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.7,1.25,0.55),blk));
+  body.position.set(0,0.75,-0.28);g.add(body);
+  const shelf=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.09,0.42),blk);
+  shelf.position.set(0,0.78,0.12);g.add(shelf);
+  const keysW=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.05,0.32),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
+  keysW.position.set(0,0.85,0.12);g.add(keysW);
+  for(let i=0;i<10;i++){
+    const bk=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.03,0.18),blk);
+    bk.position.set(-0.66+i*0.147,0.885,0.05);g.add(bk);
+  }
+  [[-0.78],[0.78]].forEach(p=>{const l=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.72,0.09),blk);l.position.set(p[0],0.36,0.22);g.add(l);});
+  /* bench */
+  const bn=new THREE.Mesh(new THREE.BoxGeometry(1,0.09,0.4),blk);bn.position.set(0,0.5,0.85);g.add(bn);
+  [[-0.4,0.7],[0.4,0.7],[-0.4,1],[0.4,1]].forEach(p=>{
+    const l=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.5,0.07),blk);l.position.set(p[0],0.25,p[1]);g.add(l);});
+  parent.add(g);
+  pianos.push({g,x:px,z:pz,y:baseY,hall:hall||null});
+  return g;
+}
 /* apartments are little hotels: walk in, rent a room at the reception,
    sleep in the bed (skips the night), sit on the chairs */
 function apartment(x,z,rand,parent,baseY){
@@ -1034,28 +1058,50 @@ function mansion(x,z,rand,parent,baseY){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(30,5.6),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)}));
   sign.position.set(x,baseY+H+22.6,z+d/2+0.1);parent.add(sign);
   const id="M:"+Math.round(x)+","+Math.round(z);
-  /* reception: rent the mansion for FREE (press T) — it lands in your Rooms menu */
-  const dx=x+14,dz=z-d/2+8;
+  /* reception OUTSIDE, in front of the entrance: buy the mansion here ($2M, press T) */
+  const dx=x+11,dz=z+d/2+7;
+  const dy=terrainH(dx,dz);
   const desk=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3.4,1.1,1),new THREE.MeshLambertMaterial({color:0x8a6f4d})));
-  desk.position.set(dx,baseY+0.55,dz);parent.add(desk);
-  const rsign=new THREE.Mesh(new THREE.PlaneGeometry(4,1),shopSignMat("RECEPTION"));
-  rsign.position.set(dx,baseY+2.8,dz-0.6);parent.add(rsign);
-  const rp=makePerson(0.92);rp.position.set(dx,baseY,dz-1.4);parent.add(rp);
-  hotelDesks.push({g:parent,x:dx,z:dz+1,id,y:baseY,room:{x,z,ry:baseY},mansion:true});
-  /* a giant bed + seats in the hall */
-  const bx=x-30,bz=z-20;
-  const frame=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3.4,0.5,4.4),new THREE.MeshLambertMaterial({color:0x6f4e37})));
-  frame.position.set(bx,baseY+0.25,bz);parent.add(frame);
-  const matt=new THREE.Mesh(new THREE.BoxGeometry(3.2,0.3,4.2),new THREE.MeshLambertMaterial({color:0xf2f5f7}));
-  matt.position.set(bx,baseY+0.62,bz);parent.add(matt);
-  const blank=new THREE.Mesh(new THREE.BoxGeometry(3.24,0.12,2.6),new THREE.MeshLambertMaterial({color:0x9b5de5}));
-  blank.position.set(bx,baseY+0.8,bz+0.8);parent.add(blank);
-  hotelBeds.push({g:parent,x:bx,z:bz,id,y:baseY});
-  makeChair(x-33,z+10,Math.PI,parent,baseY);
-  makeChair(x-30,z+10,Math.PI,parent,baseY);
-  makeChair(x-27,z+10,Math.PI,parent,baseY);
+  desk.position.set(dx,dy+0.55,dz);parent.add(desk);
+  const rsign=new THREE.Mesh(new THREE.PlaneGeometry(5,1),shopSignMat("RECEPTION · $2M"));
+  rsign.position.set(dx,dy+2.8,dz-0.6);parent.add(rsign);
+  const rp=makePerson(0.92);rp.position.set(dx,dy,dz-1.4);parent.add(rp);
+  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},mansion:true});
+  /* every mansion has a GARDEN in front: lawn, hedges, a stone path & flowers */
+  {
+    /* two lawn strips: front (with the reception) and back — the block leaves ~11 m each */
+    for(const side of[1,-1]){
+      const lg=new THREE.PlaneGeometry(100,11,10,2);lg.rotateX(-Math.PI/2);
+      const lp=lg.attributes.position;
+      for(let i=0;i<lp.count;i++){
+        const wx=x+lp.getX(i),wz=z+side*(d/2+6.2)+lp.getZ(i);
+        lp.setXYZ(i,wx,terrainH(wx,wz)+0.14,wz);
+      }
+      lg.computeVertexNormals();
+      const lawn=new THREE.Mesh(lg,new THREE.MeshLambertMaterial({color:0x5da24a}));
+      lawn.receiveShadow=true;parent.add(lawn);
+    }
+    /* stone path from the door through the front garden */
+    parent.add(ribbon("z",x-2,z+d/2+1,z+d/2+11.5,3,0.2,sideMat));
+    const hedgeM=new THREE.MeshLambertMaterial({color:0x2f7a3c});
+    for(let hx=-48;hx<=48;hx+=8){
+      if(Math.abs(hx-(-2))<4)continue;   // gap for the path
+      const h=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6,1.2,1.2),hedgeM));
+      const hz=z+d/2+11;
+      h.position.set(x+hx,terrainH(x+hx,hz)+0.7,hz);parent.add(h);
+    }
+    const flowerCols=[0xff5d8f,0xf4d35e,0xef476f,0x9b5de5,0xffffff];
+    for(let i=0;i<10;i++){
+      const fx=x-46+i*10.2,fz=z+d/2+(i%2?3:9);
+      const fy=terrainH(fx,fz);
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.5),new THREE.MeshLambertMaterial({color:0x2f7a3c}));
+      st.position.set(fx,fy+0.35,fz);parent.add(st);
+      const bl=new THREE.Mesh(new THREE.SphereGeometry(0.14,7,6),new THREE.MeshLambertMaterial({color:flowerCols[i%flowerCols.length]}));
+      bl.position.set(fx,fy+0.66,fz);parent.add(bl);
+    }
+  }
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
-  const man={g:parent,x,z,id,baseY,tableG:null};
+  const man={g:parent,x,z,id,baseY,tableG:null,furnG:null};
   mansions.push(man);
   if(window.onMansionBuilt)onMansionBuilt(man);   // rebuilds the dumpling display table
   return rec;
@@ -1243,6 +1289,177 @@ function buildCaveMouth(x,z,g){
     tor.position.set(x+p[0],y+3.6,z+1.72);g.add(tor);});
   caves.push({g,x,z});
 }
+/* ---------- DUMPLING MUSEUMS: one every ~1 km — see (and buy!) the rainbow glitter dumpling ---------- */
+const museums=[];
+const DMUS=1000;
+let _musSign=null;
+function museumSignMat(){
+  if(_musSign)return _musSign;
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");
+  const gr=c.createLinearGradient(0,0,512,0);
+  ["#ff004c","#ff9e00","#ffee00","#37ff00","#00cfff","#9b5de5"].forEach((cc,i)=>gr.addColorStop(i/5,cc));
+  c.fillStyle="#2a1030";c.fillRect(0,0,512,96);
+  c.fillStyle=gr;c.font="bold 44px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3DB} DUMPLING MUSEUM",256,62);
+  _musSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _musSign;
+}
+function museumSpot(i,j){
+  /* snapped to a block center, so it always sits nicely between the grid roads */
+  const x=Math.round((i*DMUS+520-90)/120)*120+90;
+  const z=Math.round((j*DMUS+260-90)/120)*120+90;
+  if(Math.abs(x)<220&&Math.abs(z)<220)return null;
+  if(inAirport(x,z)||inAirport(x-14,z)||inAirport(x+14,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox,oz]of[[-10,-8],[10,-8],[-10,8],[10,8]]){
+    const ch=baseH(x+ox,z+oz);
+    if(ch<-1||Math.abs(ch-h)>2.5)return null;
+  }
+  if(nearestRail(x,z).d<20)return null;
+  if(Math.abs(x-curveXC(x,z))<20||Math.abs(z-curveZC(x,z))<20)return null;
+  if(rocketPadDist(x,z)<70)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<70&&Math.abs(hs.z-z)<58)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<70&&Math.abs(ms.z-z)<58)return null;
+  const ch2=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
+  if(ch2&&Math.abs(ch2.x-x)<40&&Math.abs(ch2.z-z)<34)return null;
+  return{x,z};
+}
+/* the rainbow texture also lives here so the museum can use it (game.js reuses it) */
+let _rainbowMat=null;
+function rainbowMat(){
+  if(_rainbowMat)return _rainbowMat;
+  const cv=document.createElement("canvas");cv.width=64;cv.height=16;
+  const c=cv.getContext("2d");const gr=c.createLinearGradient(0,0,64,0);
+  ["#ff004c","#ff9e00","#ffee00","#37ff00","#00cfff","#9b5de5"].forEach((cc,i)=>gr.addColorStop(i/5,cc));
+  c.fillStyle=gr;c.fillRect(0,0,64,16);
+  _rainbowMat=keep(new THREE.MeshLambertMaterial({map:keep(new THREE.CanvasTexture(cv))}));
+  return _rainbowMat;
+}
+function buildMuseum(x,z,rand,parent,baseY){
+  const w=18,d=14,h=5,wall=0.35;
+  const mat=new THREE.MeshLambertMaterial({color:0xf3d7e8});
+  const parts=[];
+  function wallBox(bw,bh,bd,px,py,pz){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat));
+    m.position.set(x+px,baseY+py,z+pz);parent.add(m);parts.push(m);return m;}
+  wallBox(w,h,wall,0,h/2,-d/2);
+  wallBox(wall,h,d,-w/2,h/2,0);wallBox(wall,h,d,w/2,h/2,0);
+  wallBox(w/2-1.2,h,wall,-(w/4+0.6),h/2,d/2);
+  wallBox(w/2-1.2,h,wall,(w/4+0.6),h/2,d/2);
+  wallBox(w,0.6,wall*2,0,h-0.3,d/2);
+  const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+0.8,0.5,d+0.8),new THREE.MeshLambertMaterial({color:0x6d28d9})));
+  roof.position.set(x,baseY+h+0.25,z);parent.add(roof);parts.push(roof);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.4,0.12,d-0.4),new THREE.MeshLambertMaterial({color:0xe8e2f0}));
+  floor.position.set(x,baseY+0.06,z);parent.add(floor);
+  /* marble pedestal + THE rainbow glitter dumpling in a glass case */
+  const ped=shadowBox(new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.1,1.3,12),new THREE.MeshLambertMaterial({color:0xf4f7fb})));
+  ped.position.set(x,baseY+0.65,z-2.5);parent.add(ped);
+  const dump=new THREE.Mesh(new THREE.SphereGeometry(0.6,12,10),rainbowMat());
+  dump.scale.y=0.75;dump.position.set(x,baseY+1.95,z-2.5);parent.add(dump);
+  for(let i=0;i<10;i++){
+    const th=i*2.399963,yy=1-(i+0.5)/5,rad=Math.sqrt(Math.max(0,1-yy*yy));
+    const s=new THREE.Mesh(new THREE.OctahedronGeometry(0.11,0),new THREE.MeshBasicMaterial({color:0xffffff}));
+    s.position.set(Math.cos(th)*rad*0.62,yy*0.47,Math.sin(th)*rad*0.62);s.rotation.set(i,i*2,0);
+    dump.add(s);
+  }
+  const caseG=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.8,2.2),glassMat);
+  caseG.position.set(x,baseY+2.2,z-2.5);parent.add(caseG);
+  /* little side exhibits: one dumpling of every color on small stands */
+  [0xd7263d,0x1b98e0,0x8ac926,0xf4d35e,0xff5d8f,0x9b5de5].forEach((dc,i)=>{
+    const sx=x-6+(i%3)*6,sz=z+2.5+(i<3?0:2.8);
+    const st=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.9,0.8),new THREE.MeshLambertMaterial({color:0xd8d2e4}));
+    st.position.set(sx,baseY+0.45,sz);parent.add(st);
+    const dm=new THREE.Mesh(new THREE.SphereGeometry(0.24,10,8),new THREE.MeshLambertMaterial({color:dc}));
+    dm.scale.y=0.75;dm.position.set(sx,baseY+1.1,sz);parent.add(dm);
+  });
+  makeDoor(x-1.15,z+d/2,0,parent,baseY,0x6d28d9);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.4),museumSignMat());
+  sign.position.set(x,baseY+h+1.7,z+d/2+0.05);parent.add(sign);
+  museums.push({g:parent,x,z,dump});
+  const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
+  return rec;
+}
+/* ---------- CONCERT HALLS: a stage, a real playable piano and a crowd ---------- */
+const concertHalls=[];
+const CHSP=2400;
+let _chSign=null;
+function chSignMat(){
+  if(_chSign)return _chSign;
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#1a1030";c.fillRect(0,0,512,96);
+  c.fillStyle="#e3c5ff";c.font="bold 52px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3B5} CONCERT HALL",256,64);
+  _chSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _chSign;
+}
+function concertSpot(i,j){
+  const x=i*CHSP+1530,z=j*CHSP+1050;   // block-centered: always 60 m from the grid roads
+  if(Math.abs(x)<260&&Math.abs(z)<260)return null;
+  if(inAirport(x,z)||inAirport(x-22,z)||inAirport(x+22,z))return null;
+  if(nearGridLine(x)<34||nearGridLine(z)<30)return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox,oz]of[[-18,-13],[18,-13],[-18,13],[18,13]]){
+    const ch=baseH(x+ox,z+oz);
+    if(ch<-1||Math.abs(ch-h)>3)return null;
+  }
+  if(nearestRail(x,z).d<30)return null;
+  if(Math.abs(x-curveXC(x,z))<30||Math.abs(z-curveZC(x,z))<30)return null;
+  if(rocketPadDist(x,z)<80)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<90&&Math.abs(hs.z-z)<70)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<90&&Math.abs(ms.z-z)<70)return null;
+  return{x,z};
+}
+function buildConcertHall(x,z,rand,parent,baseY){
+  const w=40,d=30,h=8,wall=0.45;
+  const mat=new THREE.MeshLambertMaterial({color:0x5b2333});
+  const parts=[];
+  function wallBox(bw,bh,bd,px,py,pz){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat));
+    m.position.set(x+px,baseY+py,z+pz);parent.add(m);parts.push(m);return m;}
+  wallBox(w,h,wall,0,h/2,-d/2);
+  wallBox(wall,h,d,-w/2,h/2,0);wallBox(wall,h,d,w/2,h/2,0);
+  wallBox(w/2-5,h,wall,-(w/4+2.5),h/2,d/2);   // 10 m doorway in the middle
+  wallBox(w/2-5,h,wall,(w/4+2.5),h/2,d/2);
+  wallBox(w,1.4,wall*2,0,h-0.7,d/2);
+  const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+1,0.7,d+1),new THREE.MeshLambertMaterial({color:0x2a1020})));
+  roof.position.set(x,baseY+h+0.35,z);parent.add(roof);parts.push(roof);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.6,0.2,d-0.6),new THREE.MeshLambertMaterial({color:0x6b4a3a}));
+  floor.position.set(x,baseY+0.1,z);parent.add(floor);
+  decks.push({g:parent,x,z,hw:w/2-0.5,hd:d/2-0.5,tops:[baseY+0.2],ramp:null});
+  /* the podium (stage) with red curtains behind it */
+  const stage=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(22,0.7,8),new THREE.MeshLambertMaterial({color:0x8a5a2d})));
+  stage.position.set(x,baseY+0.35,z-10);parent.add(stage);
+  const curt=new THREE.Mesh(new THREE.BoxGeometry(22,6.4,0.3),new THREE.MeshLambertMaterial({color:0xb01e3c}));
+  curt.position.set(x,baseY+3.9,z-13.8);parent.add(curt);
+  /* spotlights over the stage */
+  [[-6],[0],[6]].forEach(p=>{
+    const sp=new THREE.Mesh(new THREE.SphereGeometry(0.28,8,8),new THREE.MeshBasicMaterial({color:0xfff2b0}));
+    sp.position.set(x+p[0],baseY+h-0.8,z-10);parent.add(sp);
+  });
+  /* the piano on the podium, facing the audience */
+  makePiano(x,z-10,0,parent,baseY+0.7,{
+    entrance:{x:x,z:z+d/2+2},
+    seats:(function(){
+      const seats=[];
+      for(let r2=0;r2<4;r2++)for(let cix=0;cix<7;cix++)seats.push({x:x-12+cix*4,z:z-2+r2*3.4,yaw:Math.PI});
+      return seats;
+    })(),
+    baseY
+  });
+  /* rows of seats for the crowd (you can sit on them too) */
+  for(let r2=0;r2<4;r2++)for(let cix=0;cix<7;cix++)makeChair(x-12+cix*4,z-2+r2*3.4,Math.PI,parent,baseY);
+  makeDoor(x-4.5,z+d/2,0,parent,baseY,0x2a1020);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(18,3.4),chSignMat());
+  sign.position.set(x,baseY+h+2.2,z+d/2+0.06);parent.add(sign);
+  concertHalls.push({g:parent,x,z});
+  const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
+  return rec;
+}
 function hitBuilding(x,z,speed){
   if(S.world!=="earth")return false;   // no invisible Earth buildings on the Moon
   if(speed<8)return false;
@@ -1324,6 +1541,10 @@ function keepClear(x,z){
   if(hs&&Math.abs(x-hs.x)<60&&Math.abs(z-hs.z)<48)return true;
   const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
   if(ms&&Math.abs(x-ms.x)<60&&Math.abs(z-ms.z)<48)return true;
+  const mu=museumSpot(Math.round((x-520)/DMUS),Math.round((z-260)/DMUS));
+  if(mu&&Math.abs(x-mu.x)<16&&Math.abs(z-mu.z)<14)return true;
+  const chh=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
+  if(chh&&Math.abs(x-chh.x)<26&&Math.abs(z-chh.z)<22)return true;
   return false;
 }
 /* ---- drivable decks (parking garage floors + ramp) ---- */
@@ -1685,6 +1906,22 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(mansion(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* a DUMPLING MUSEUM every ~1 km */
+  for(let i=Math.floor((x0-600)/DMUS);i<=Math.ceil((x1-440)/DMUS);i++)
+  for(let j=Math.floor((z0-340)/DMUS);j<=Math.ceil((z1-180)/DMUS);j++){
+    const sp=museumSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    g.userData.recs.push(buildMuseum(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* a CONCERT HALL every ~2.4 km */
+  for(let i=Math.floor((x0-1570)/CHSP);i<=Math.ceil((x1-1490)/CHSP);i++)
+  for(let j=Math.floor((z0-1090)/CHSP);j<=Math.ceil((z1-1010)/CHSP);j++){
+    const sp=concertSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    g.userData.recs.push(buildConcertHall(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
   }
   /* a dumpling buyer every ~500 m */
   for(let i=Math.floor((x0-160)/DBSP);i<=Math.ceil((x1+100)/DBSP);i++)

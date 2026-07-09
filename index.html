@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=26">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -280,6 +280,25 @@
   </div>
 </div>
 
+<div class="modal" id="pianoModal">
+  <div class="box" style="max-width:760px;width:min(96vw,760px)">
+    <h2>&#127929; Piano</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click the keys, use your computer keyboard (<kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd> <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd>...) or plug in a real MIDI keyboard!</div>
+    <div id="pianoKeys"></div>
+    <button class="btn warn" id="pianoCrowd" style="width:100%;margin-top:10px;display:none">&#127917; Play piano &mdash; call the crowd!</button>
+    <button class="btn close" id="pianoClose">Close</button>
+  </div>
+</div>
+
+<div id="meditBar">
+  <div id="meditItems"></div>
+  <div id="meditTools">
+    <button class="btn" id="meditRotate">&#128260; Rotate</button>
+    <button class="btn" id="meditRemove">&#128465; Remove</button>
+    <button class="btn warn" id="meditDone">&#9989; Done</button>
+  </div>
+</div>
+
 <div class="modal" id="roomsModal">
   <div class="box">
     <h2>&#128719; Your rented rooms</h2>
@@ -352,9 +371,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=23"></script>
-<script src="js/world.js?v=25"></script>
-<script src="js/vehicles.js?v=25"></script>
-<script src="js/game.js?v=25"></script>
+<script src="js/core.js?v=26"></script>
+<script src="js/world.js?v=26"></script>
+<script src="js/vehicles.js?v=26"></script>
+<script src="js/game.js?v=26"></script>
 </body>
 </html>

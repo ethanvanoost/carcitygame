@@ -2,6 +2,13 @@
 const keys={};
 addEventListener("keydown",e=>{
   if(e.target.tagName==="INPUT")return;
+  /* piano open: your computer keyboard plays notes instead of driving */
+  if($("pianoModal").classList.contains("open")){
+    if(e.key==="Escape"){PIANO.open=false;$("pianoModal").classList.remove("open");return;}
+    const m=PKEYMAP[e.key.toLowerCase()];
+    if(m!==undefined&&!e.repeat)playPianoNote(m);
+    return;
+  }
   keys[e.key.toLowerCase()]=true;
   if(e.key===" ")e.preventDefault();
   if(S.mode!=="game")return;
@@ -12,7 +19,10 @@ addEventListener("keydown",e=>{
   if(e.key.toLowerCase()==="m")toggleMap();
   if(e.key.toLowerCase()==="c")$("controls").classList.toggle("open");
   if(e.key.toLowerCase()==="v")toggleACC();
-  if(e.key.toLowerCase()==="r")eatSelected();
+  if(e.key.toLowerCase()==="r"){
+    if(MEDIT.on){MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — the next item you place faces a new way");}
+    else eatSelected();
+  }
 });
 addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
 /* free look with right mouse */
@@ -536,16 +546,7 @@ function updateHeld(){
 }
 /* displaying your dumplings on a table at your MEGA MANSION */
 const DISPLAYS=new Map();   // mansion id -> dumplings on the table
-let _rainbowMat=null;
-function rainbowMat(){
-  if(_rainbowMat)return _rainbowMat;
-  const cv=document.createElement("canvas");cv.width=64;cv.height=16;
-  const c=cv.getContext("2d");const gr=c.createLinearGradient(0,0,64,0);
-  ["#ff004c","#ff9e00","#ffee00","#37ff00","#00cfff","#9b5de5"].forEach((cc,i)=>gr.addColorStop(i/5,cc));
-  c.fillStyle=gr;c.fillRect(0,0,64,16);
-  _rainbowMat=new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(cv)});
-  return _rainbowMat;
-}
+/* rainbowMat() lives in world.js now (the museum uses it too) */
 function nearMansion(){
   for(let i=mansions.length-1;i>=0;i--){
     const m=mansions[i];
@@ -579,7 +580,7 @@ function buildDumpTable(m){
   });
   m.g.add(tg);m.tableG=tg;
 }
-window.onMansionBuilt=m=>{if(DISPLAYS.has(m.id))buildDumpTable(m);};
+window.onMansionBuilt=m=>{if(DISPLAYS.has(m.id))buildDumpTable(m);buildMansionFurniture(m);};
 function renderDump(){
   $("dumpInfo").textContent=DUMP.unopened
     ?"You have "+DUMP.unopened+" unopened dumpling"+(DUMP.unopened>1?"s":"")+" — open one!"
@@ -1121,14 +1122,25 @@ function tryFurniture(){
   const dk=nearFurn(hotelDesks,3.2);
   if(dk){
     if(!rentedAt(dk.id)){
+      if(dk.mansion){
+        /* mansions cost $2,000,000 now */
+        if(MONEY.v<MANSION_PRICE){
+          toast("\u{1F3F0} This MEGA MANSION costs $"+fmtMoney(MANSION_PRICE)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings & win races!");
+          return true;
+        }
+        MONEY.v-=MANSION_PRICE;updateMoneyUI();profileSave(true);
+        toast("\u{1F389}\u{1F3F0} SOLD! You bought this MEGA MANSION for $"+fmtMoney(MANSION_PRICE)+" — press T inside to edit & furnish it!");
+      }else toast("\u{1F511} Room rented for free! Taking you upstairs...");
       RENT.list.push({id:dk.id,x:dk.room.x,z:dk.room.z,ry:dk.room.ry,
         label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"});
-      toast(dk.mansion?"\u{1F3F0} MEGA MANSION rented for FREE! Find it in your \u{1F6CF} Rooms menu.":"\u{1F511} Room rented for free! Taking you upstairs...");
       saveGame();
     }
     gotoRoom(dk.room);
     return true;
   }
+  /* pianos: sit down and play (computer keyboard or a real MIDI keyboard) */
+  const pn=nearFurn(pianos,4.5);
+  if(pn){openPiano(pn);return true;}
   const ex=nearFurn(roomExits,2.2);
   if(ex){
     player.x=ex.outX;player.z=ex.outZ;player.y=ex.outY;
@@ -1150,6 +1162,365 @@ function tryFurniture(){
     return true;
   }
   return false;
+}
+/* ================= MANSIONS: buying, furniture & the T editor ================= */
+const MANSION_PRICE=2000000;
+const MFURN=new Map();      // mansion id -> [{t,dx,dz,r}] placed furniture
+const TRAMPS=[];            // trampolines: walk on one to bounce!
+/* the furniture & garden shop — indoor and outdoor items */
+const FURN=[
+  {t:"bed",n:"Bed",e:"\u{1F6CF}",p:500,out:0},
+  {t:"chair",n:"Chair",e:"\u{1FA91}",p:100,out:0},
+  {t:"couch",n:"Couch",e:"\u{1F6CB}",p:400,out:0},
+  {t:"table",n:"Table",e:"\u{1F37D}",p:250,out:0},
+  {t:"closet",n:"Closet",e:"\u{1F5C4}",p:350,out:0},
+  {t:"piano",n:"Piano",e:"\u{1F3B9}",p:3000,out:0},
+  {t:"lamp",n:"Lamp",e:"\u{1F4A1}",p:150,out:0},
+  {t:"tv",n:"TV",e:"\u{1F4FA}",p:800,out:0},
+  {t:"plant",n:"Plant",e:"\u{1FAB4}",p:60,out:0},
+  {t:"rug",n:"Rug",e:"\u{1F7E5}",p:120,out:0},
+  {t:"tramp",n:"Trampoline",e:"\u{1F938}",p:800,out:1},
+  {t:"pool",n:"Pool",e:"\u{1F3CA}",p:1500,out:1},
+  {t:"fountain",n:"Fountain",e:"⛲",p:1000,out:1},
+  {t:"bbq",n:"BBQ",e:"\u{1F356}",p:300,out:1},
+  {t:"bench",n:"Bench",e:"\u{1FA91}",p:150,out:1},
+  {t:"tree",n:"Tree",e:"\u{1F333}",p:100,out:1},
+  {t:"flower",n:"Flowers",e:"\u{1F338}",p:40,out:1},
+  {t:"swing",n:"Swing",e:"\u{1F6DD}",p:400,out:1}
+];
+const furnDef=t=>FURN.find(f=>f.t===t);
+/* build one piece of furniture at world (x,z), on floor y, rotated r */
+function buildFurnPiece(t,x,z,y,r,parent,man){
+  const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=r||0;parent.add(g);
+  const wood=new THREE.MeshLambertMaterial({color:0x6f4e37});
+  const wood2=new THREE.MeshLambertMaterial({color:0x8a6f4d});
+  function box(w,h,d,px,py,pz,mat){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wood));m.position.set(px,py,pz);g.add(m);return m;}
+  if(t==="bed"){
+    box(3.4,0.5,4.4,0,0.25,0);
+    box(3.2,0.3,4.2,0,0.62,0,new THREE.MeshLambertMaterial({color:0xf2f5f7}));
+    box(3.24,0.12,2.6,0,0.8,0.8,new THREE.MeshLambertMaterial({color:0x9b5de5}));
+    box(2.2,0.18,0.9,0,0.85,-1.5,new THREE.MeshLambertMaterial({color:0x9fd8ff}));
+    hotelBeds.push({g,x,z,id:man.id,y:man.baseY});
+  }else if(t==="chair"){
+    makeChair(0,0,0,g,0);   // chair registers itself (coords are local to g)
+    /* re-register with WORLD coords so sitting works */
+    chairs[chairs.length-1].x=x;chairs[chairs.length-1].z=z;chairs[chairs.length-1].yaw=r||0;chairs[chairs.length-1].y=y+0.6;
+  }else if(t==="couch"){
+    const cm=new THREE.MeshLambertMaterial({color:0x2e4a62});
+    box(2.6,0.5,1,0,0.4,0,cm);
+    box(2.6,0.8,0.28,0,0.85,-0.42,cm);
+    box(0.28,0.75,1,-1.2,0.7,0,cm);box(0.28,0.75,1,1.2,0.7,0,cm);
+    chairs.push({g,x,z,yaw:r||0,y:y+0.65});
+    chairs.push({g,x:x+Math.cos(r||0)*0.8,z:z-Math.sin(r||0)*0.8,yaw:r||0,y:y+0.65});
+  }else if(t==="table"){
+    box(2,0.1,1.2,0,0.78,0,wood2);
+    [[-0.85,-0.45],[0.85,-0.45],[-0.85,0.45],[0.85,0.45]].forEach(p=>box(0.09,0.75,0.09,p[0],0.37,p[1]));
+  }else if(t==="closet"){
+    box(1.8,2.3,0.7,0,1.15,0,wood2);
+    box(0.03,2,0.02,0,1.15,0.36);
+    [[-0.35],[0.35]].forEach(p=>{const kn=new THREE.Mesh(new THREE.SphereGeometry(0.05),new THREE.MeshLambertMaterial({color:0xffd75e}));kn.position.set(p[0],1.2,0.38);g.add(kn);});
+  }else if(t==="piano"){
+    makePiano(x,z,r||0,parent,y);   // builds its own group & registers itself as playable
+  }else if(t==="lamp"){
+    box(0.5,0.08,0.5,0,0.04,0,darkTrim);
+    box(0.07,1.5,0.07,0,0.8,0,darkTrim);
+    const sh=new THREE.Mesh(new THREE.ConeGeometry(0.35,0.4,10,1,true),new THREE.MeshLambertMaterial({color:0xf4d35e,emissive:0xffe9a0,emissiveIntensity:0.6,side:THREE.DoubleSide}));
+    sh.position.set(0,1.6,0);g.add(sh);
+  }else if(t==="tv"){
+    box(1.6,0.5,0.5,0,0.25,0,darkTrim);
+    box(2.2,1.25,0.12,0,1.2,0,darkTrim);
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(2,1.05),new THREE.MeshBasicMaterial({color:0x2e8bff}));
+    scr.position.set(0,1.2,0.07);g.add(scr);
+  }else if(t==="plant"){
+    const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.22,0.45,10),new THREE.MeshLambertMaterial({color:0xb8532b}));
+    pot.position.y=0.22;g.add(pot);
+    const bl=new THREE.Mesh(new THREE.SphereGeometry(0.42,8,7),new THREE.MeshLambertMaterial({color:0x2f8f46}));
+    bl.position.y=0.85;g.add(bl);
+  }else if(t==="rug"){
+    const rg=new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.6,0.04,20),new THREE.MeshLambertMaterial({color:0xb01e3c}));
+    rg.position.y=0.06;g.add(rg);
+    const rg2=new THREE.Mesh(new THREE.CylinderGeometry(1,1,0.05,20),new THREE.MeshLambertMaterial({color:0xf4d35e}));
+    rg2.position.y=0.07;g.add(rg2);
+  }else if(t==="tramp"){
+    [[-0.8,-0.8],[0.8,-0.8],[-0.8,0.8],[0.8,0.8]].forEach(p=>box(0.09,0.7,0.09,p[0],0.35,p[1],darkTrim));
+    const mat2=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,0.1,16),darkTrim);
+    mat2.position.y=0.75;g.add(mat2);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(1.3,0.16,8,18),new THREE.MeshLambertMaterial({color:0x1b98e0}));
+    rim.rotation.x=Math.PI/2;rim.position.y=0.8;g.add(rim);
+    TRAMPS.push({g,x,z,y:y+0.85});
+  }else if(t==="pool"){
+    /* an in-ground pool: white rim flush with the lawn, blue water inside */
+    const rimM=new THREE.MeshLambertMaterial({color:0xf4f7fb});
+    box(7,0.3,0.5,0,0.15,-2.75,rimM);box(7,0.3,0.5,0,0.15,2.75,rimM);
+    box(0.5,0.3,6,-3.25,0.15,0,rimM);box(0.5,0.3,6,3.25,0.15,0,rimM);
+    const wat=new THREE.Mesh(new THREE.BoxGeometry(6,0.22,5),new THREE.MeshLambertMaterial({color:0x1b98e0,transparent:true,opacity:0.8}));
+    wat.position.y=0.11;g.add(wat);
+    /* a little ladder */
+    [[-0.3],[0.3]].forEach(p=>box(0.05,0.7,0.05,3.3,0.35,p[0],hubMat));
+    box(0.05,0.05,0.7,3.3,0.55,0,hubMat);
+  }else if(t==="fountain"){
+    const bas=new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.9,0.6,14),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
+    bas.position.y=0.3;g.add(bas);
+    const wt=new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,0.1,14),new THREE.MeshLambertMaterial({color:0x3fd0ff,transparent:true,opacity:0.85}));
+    wt.position.y=0.62;g.add(wt);
+    const col=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,1.2,10),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
+    col.position.y=1.2;g.add(col);
+    const spray=new THREE.Mesh(new THREE.ConeGeometry(0.5,0.9,10),new THREE.MeshLambertMaterial({color:0x9fd8ff,transparent:true,opacity:0.6}));
+    spray.position.y=2.1;g.add(spray);
+  }else if(t==="bbq"){
+    box(1.1,0.5,0.7,0,0.85,0,darkTrim);
+    [[-0.4,-0.25],[0.4,-0.25],[-0.4,0.25],[0.4,0.25]].forEach(p=>box(0.06,0.65,0.06,p[0],0.3,p[1],darkTrim));
+    for(let i=0;i<5;i++)box(1,0.02,0.04,0,1.12,-0.24+i*0.12,hubMat);
+    const fl=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.25,7),new THREE.MeshBasicMaterial({color:0xff7f11}));
+    fl.position.set(0.2,1.24,0);g.add(fl);
+  }else if(t==="bench"){
+    box(1.9,0.12,0.55,0,0.5,0,wood2);
+    box(1.9,0.6,0.12,0,0.95,-0.26,wood2);
+    [[-0.8],[0.8]].forEach(p=>box(0.12,0.5,0.5,p[0],0.25,0,darkTrim));
+    chairs.push({g,x,z,yaw:r||0,y:y+0.6});
+  }else if(t==="tree"){
+    makeTree(0,0,1+((Math.abs(Math.round(x+z))%4)*0.2),g,0);
+  }else if(t==="flower"){
+    const cols=[0xff5d8f,0xf4d35e,0xef476f,0x9b5de5,0xffffff];
+    for(let i=0;i<5;i++){
+      const a=i/5*Math.PI*2,fx=Math.cos(a)*0.5,fz=Math.sin(a)*0.5;
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.45),new THREE.MeshLambertMaterial({color:0x2f7a3c}));
+      st.position.set(fx,0.28,fz);g.add(st);
+      const bl=new THREE.Mesh(new THREE.SphereGeometry(0.12,7,6),new THREE.MeshLambertMaterial({color:cols[i]}));
+      bl.position.set(fx,0.56,fz);g.add(bl);
+    }
+  }else if(t==="swing"){
+    box(0.1,2.4,0.1,-1.2,1.2,0,darkTrim);box(0.1,2.4,0.1,1.2,1.2,0,darkTrim);
+    box(2.6,0.1,0.1,0,2.4,0,darkTrim);
+    [[-0.3],[0.3]].forEach(p=>box(0.03,1.5,0.03,p[0],1.6,0,hubMat));
+    box(0.75,0.06,0.3,0,0.85,0,wood2);
+    chairs.push({g,x,z,yaw:r||0,y:y+0.85});
+  }
+  return g;
+}
+/* default furniture: a bed, three chairs and a table in the great hall */
+function mansionItems(id){
+  if(!MFURN.has(id))MFURN.set(id,[
+    {t:"bed",dx:-30,dz:-20,r:0},
+    {t:"chair",dx:-33,dz:10,r:Math.PI},{t:"chair",dx:-30,dz:10,r:Math.PI},{t:"chair",dx:-27,dz:10,r:Math.PI},
+    {t:"table",dx:-30,dz:6.6,r:0}
+  ]);
+  return MFURN.get(id);
+}
+function buildMansionFurniture(man){
+  if(man.furnG){man.g.remove(man.furnG);disposeGroup(man.furnG);man.furnG=null;}
+  const items=mansionItems(man.id);
+  const fg=new THREE.Group();man.g.add(fg);man.furnG=fg;
+  for(const it of items){
+    const wx=man.x+it.dx,wz=man.z+it.dz;
+    const inside=Math.abs(it.dx)<49&&Math.abs(it.dz)<37;
+    const fy=inside?man.baseY+0.3:terrainH(wx,wz)+0.12;
+    buildFurnPiece(it.t,wx,wz,fy,it.r||0,fg,man);
+  }
+}
+/* ---------- the T editor: buy & place furniture in your mansion + garden ---------- */
+const MEDIT={on:false,man:null,sel:null,tool:"place",rot:0};
+function renderMeditBar(){
+  const w=$("meditItems");w.innerHTML="";
+  FURN.forEach(f=>{
+    const b=document.createElement("button");
+    b.className="fitem"+(MEDIT.sel===f.t&&MEDIT.tool==="place"?" on":"");
+    b.innerHTML="<span class='fe'>"+f.e+"</span><span class='fn'>"+f.n+"</span><span class='fp'>"+(f.out?"\u{1F33F} ":"")+"$"+fmtMoney(f.p)+"</span>";
+    b.onclick=()=>{MEDIT.sel=f.t;MEDIT.tool="place";renderMeditBar();
+      toast((f.out?"\u{1F33F} Garden item — click the LAWN":"\u{1F3E0} Indoor item — click the FLOOR")+" to place your "+f.n+" ($"+fmtMoney(f.p)+")");};
+    w.appendChild(b);
+  });
+  $("meditRemove").classList.toggle("on",MEDIT.tool==="remove");
+}
+function openMansionEdit(man){
+  MEDIT.on=true;MEDIT.man=man;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
+  renderMeditBar();
+  $("meditBar").classList.add("show");
+  toast("\u{1F6E0} MANSION EDITOR — pick an item below, then click where to put it. R rotates, T (or ✅ Done) exits.");
+}
+function closeMansionEdit(){
+  MEDIT.on=false;MEDIT.man=null;
+  $("meditBar").classList.remove("show");
+  toast("\u{1F3F0} Mansion saved — enjoy your home!");
+  saveGame();
+}
+$("meditDone").onclick=()=>closeMansionEdit();
+$("meditRotate").onclick=()=>{MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — next item faces a new way");};
+$("meditRemove").onclick=()=>{MEDIT.tool=MEDIT.tool==="remove"?"place":"remove";renderMeditBar();
+  toast(MEDIT.tool==="remove"?"\u{1F5D1} REMOVE mode — click an item to sell it back (full refund)":"Placing items again.");};
+/* click on the ground to place / remove */
+function meditGroundPoint(e,y){
+  const ndc=new THREE.Vector2((e.clientX/innerWidth)*2-1,-(e.clientY/innerHeight)*2+1);
+  const rc=new THREE.Raycaster();rc.setFromCamera(ndc,camera);
+  if(Math.abs(rc.ray.direction.y)<1e-4)return null;
+  const t=(y-rc.ray.origin.y)/rc.ray.direction.y;
+  if(t<0)return null;
+  return rc.ray.origin.clone().addScaledVector(rc.ray.direction,t);
+}
+addEventListener("mousedown",e=>{
+  if(!MEDIT.on||e.button!==0||e.target!==renderer.domElement)return;
+  const man=MEDIT.man;
+  const pt=meditGroundPoint(e,man.baseY+0.3);
+  if(!pt)return;
+  const dx=pt.x-man.x,dz=pt.z-man.z;
+  if(Math.abs(dx)>49||Math.abs(dz)>49.5){toast("That's outside your mansion's block!");return;}
+  const items=mansionItems(man.id);
+  if(MEDIT.tool==="remove"){
+    let bi=-1,bd=3;
+    items.forEach((it,i)=>{const d=Math.hypot(it.dx-dx,it.dz-dz);if(d<bd){bd=d;bi=i;}});
+    if(bi<0){toast("Click closer to an item to remove it.");return;}
+    const it=items.splice(bi,1)[0];
+    const def=furnDef(it.t);
+    if(def){MONEY.v+=def.p;updateMoneyUI();}
+    buildMansionFurniture(man);saveGame();
+    toast("\u{1F5D1} "+(def?def.n+" sold back for $"+fmtMoney(def.p):"Removed")+"!");
+    return;
+  }
+  const def=furnDef(MEDIT.sel);
+  if(!def){toast("Pick an item from the shop bar first!");return;}
+  const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
+  if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside the mansion!");return;}
+  if(def.out&&Math.abs(dz)<39){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn in FRONT of (or behind) the mansion!");return;}
+  if(MONEY.v<def.p){toast("\u{1F4B0} The "+def.n+" costs $"+fmtMoney(def.p)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
+  MONEY.v-=def.p;updateMoneyUI();profileSave();
+  items.push({t:def.t,dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot});
+  buildMansionFurniture(man);saveGame();
+  toast("✅ "+def.n+" placed! ($"+fmtMoney(def.p)+")");
+});
+/* ================= PIANOS: play them yourself + MIDI + the concert crowd ================= */
+const PIANO={open:false,cur:null,midi:false};
+const PKEY_START=60;   // C4 — two octaves on screen
+const PKEYMAP={a:60,w:61,s:62,e:63,d:64,f:65,t:66,g:67,y:68,h:69,u:70,j:71,k:72,o:73,l:74,p:75,";":76};
+function pianoFreq(m){return 440*Math.pow(2,(m-69)/12);}
+function playPianoNote(midi,vel){
+  ensureAudio();
+  if(!audioCtx||!SND.sound)return;
+  const t=audioCtx.currentTime,v=(vel===undefined?0.8:vel);
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(0.16*v,t+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0008,t+1.6);
+  g.connect(audioCtx.destination);
+  [[1,"triangle",1],[2,"sine",0.35],[3,"sine",0.12]].forEach(([mult,type,amt])=>{
+    const o=audioCtx.createOscillator(),og=audioCtx.createGain();
+    o.type=type;o.frequency.value=pianoFreq(midi)*mult;og.gain.value=amt;
+    o.connect(og);og.connect(g);o.start(t);o.stop(t+1.7);
+  });
+  /* light up the key on screen */
+  const el=document.querySelector('#pianoKeys [data-m="'+midi+'"]');
+  if(el){el.classList.add("on");clearTimeout(el._x);el._x=setTimeout(()=>el.classList.remove("on"),180);}
+}
+function buildPianoKeys(){
+  const w=$("pianoKeys");
+  if(w.dataset.done)return;w.dataset.done=1;
+  const isBlack=m=>[1,3,6,8,10].includes(m%12);
+  const whites=[];
+  for(let m=PKEY_START;m<=PKEY_START+24;m++)if(!isBlack(m))whites.push(m);
+  whites.forEach(m=>{
+    const k=document.createElement("div");k.className="pkey";k.dataset.m=m;
+    k.addEventListener("pointerdown",e=>{e.preventDefault();playPianoNote(m);});
+    w.appendChild(k);
+  });
+  const ww=100/whites.length;
+  for(let m=PKEY_START;m<=PKEY_START+24;m++){
+    if(!isBlack(m))continue;
+    const below=whites.filter(x=>x<m).length;   // black key sits between white below-1 and below
+    const k=document.createElement("div");k.className="pkeyb";k.dataset.m=m;
+    k.style.left=(below*ww-ww*0.3)+"%";k.style.width=(ww*0.6)+"%";
+    k.addEventListener("pointerdown",e=>{e.preventDefault();e.stopPropagation();playPianoNote(m);});
+    w.appendChild(k);
+  }
+}
+function initMidi(){
+  if(PIANO.midi||!navigator.requestMIDIAccess)return;
+  PIANO.midi=true;
+  navigator.requestMIDIAccess().then(acc=>{
+    const hook=inp=>{inp.onmidimessage=msg=>{
+      const[st,note,vel]=msg.data;
+      if((st&0xf0)===0x90&&vel>0&&PIANO.open)playPianoNote(note,vel/127);
+    };};
+    acc.inputs.forEach(hook);
+    acc.onstatechange=e=>{if(e.port&&e.port.type==="input"&&e.port.state==="connected")hook(e.port);};
+    if([...acc.inputs.values()].length)toast("\u{1F3B9} MIDI keyboard connected — play away!");
+  }).catch(()=>{});
+}
+function openPiano(p){
+  PIANO.open=true;PIANO.cur=p;
+  buildPianoKeys();initMidi();
+  $("pianoCrowd").style.display=p.hall?"":"none";
+  $("pianoModal").classList.add("open");
+}
+$("pianoClose").onclick=()=>{PIANO.open=false;$("pianoModal").classList.remove("open");};
+/* the concert crowd: they walk in through the door and sit down on the seats */
+const CROWD=[];
+$("pianoCrowd").onclick=()=>{
+  const p=PIANO.cur;
+  if(!p||!p.hall)return;
+  if(p.crowded){toast("\u{1F3AD} The crowd is already seated — play them a song!");return;}
+  p.crowded=true;
+  const hall=p.hall;
+  hall.seats.forEach((s,i)=>{
+    const m=makePerson(0.95);
+    m.position.set(hall.entrance.x+(Math.random()-0.5)*8,hall.baseY,hall.entrance.z+Math.random()*6);
+    p.g.parent.add(m);
+    CROWD.push({m,tx:s.x,tz:s.z,ty:hall.baseY,yaw:s.yaw,state:"walk",delay:i*0.35*Math.random()*2});
+  });
+  toast("\u{1F3AD} Here they come! A whole crowd walks in to hear you play...");
+};
+function updateCrowd(dt){
+  const now=performance.now();
+  for(let i=CROWD.length-1;i>=0;i--){
+    const c=CROWD[i];
+    if(offScene(c.m)){CROWD.splice(i,1);continue;}
+    if(c.state==="sit")continue;
+    if(c.delay>0){c.delay-=dt;continue;}
+    const dx=c.tx-c.m.position.x,dz=c.tz-c.m.position.z,d=Math.hypot(dx,dz);
+    if(d<0.35){
+      c.m.position.set(c.tx,c.ty+0.6,c.tz);
+      c.m.rotation.y=c.yaw;
+      const L=c.m.userData.limbs;
+      L.lL.rotation.x=-1.5;L.rL.rotation.x=-1.5;L.lA.rotation.x=-0.4;L.rA.rotation.x=-0.4;
+      c.state="sit";
+      continue;
+    }
+    const yaw=Math.atan2(dx,dz);
+    c.m.rotation.y=yaw;
+    c.m.position.x+=Math.sin(yaw)*2*dt;
+    c.m.position.z+=Math.cos(yaw)*2*dt;
+    const a=Math.sin(now/160+i)*0.5;
+    const L=c.m.userData.limbs;
+    L.lL.rotation.x=a;L.rL.rotation.x=-a;L.lA.rotation.x=-a*0.7;L.rA.rotation.x=a*0.7;
+  }
+}
+/* ================= DUMPLING MUSEUM: see & buy the rainbow glitter dumpling ================= */
+const MUSEUM_PRICE=300;
+function nearMuseum(){
+  for(let i=museums.length-1;i>=0;i--){
+    const m=museums[i];
+    if(offScene(m.g)){museums.splice(i,1);continue;}
+    if(Math.abs(player.x-m.x)<11&&Math.abs(player.z-m.z)<9)return m;
+  }
+  return null;
+}
+function openMuseum(){
+  showDest("\u{1F3DB} Dumpling Museum — the RAINBOW GLITTER dumpling!",[
+    {label:"\u{1F308}✨ Buy a RAINBOW GLITTER dumpling — $"+MUSEUM_PRICE,value:"buy"},
+    {label:"\u{1F440} Just looking, thanks!",value:"no"}
+  ],v=>{
+    if(v!=="buy")return;
+    if(MONEY.v<MUSEUM_PRICE){toast("\u{1F4B0} It costs $"+MUSEUM_PRICE+" — you only have $"+fmtMoney(MONEY.v)+". Sell some dumplings first!");return;}
+    MONEY.v-=MUSEUM_PRICE;updateMoneyUI();profileSave();
+    DUMP.owned.push({color:"Rainbow",hex:RAINBOW_CSS,glitter:true});
+    renderDump();saveGame();
+    toast("\u{1F308}✨ A RAINBOW GLITTER DUMPLING is yours — the rarest dumpling, straight from the museum!");
+  });
+}
+function updateMuseums(dt){
+  for(let i=museums.length-1;i>=0;i--){
+    const m=museums[i];
+    if(offScene(m.g)){museums.splice(i,1);continue;}
+    m.dump.rotation.y+=dt*0.9;
+  }
 }
 /* ---------- your own world + saving (progress survives refresh) ---------- */
 const WORLD={name:"",ox:0,oz:0};
@@ -1552,6 +1923,7 @@ function saveGame(){
       unopened:DUMP.unopened,owned:DUMP.owned,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
+      mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
       world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
       own:[...OWN],paint:PAINT,fuel:FUEL.km
     }));
@@ -1565,6 +1937,7 @@ function loadGame(){
     DUMP.unopened=d.unopened||0;DUMP.owned=Array.isArray(d.owned)?d.owned:[];
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
+    (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
     if(d.world&&d.world.name){WORLD.name=d.world.name;WORLD.ox=d.world.ox||0;WORLD.oz=d.world.oz||0;}
     S.km=d.km||0;
     (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(n);});
@@ -1602,6 +1975,8 @@ function nearTerminal(){
 }
 function tryCall(){
   if(!player.onFoot&&!player.drive)return;
+  /* mansion editor open: T closes it */
+  if(MEDIT.on){closeMansionEdit();return;}
   /* inside a cave: T brings you back outside */
   if(CAVE.in){exitCave();return;}
   /* indoor stuff first: reception, beds, chairs */
@@ -1624,6 +1999,12 @@ function tryCall(){
     if(sh){openShop(sh);return;}
     const by=nearBuyer();
     if(by){openSell();return;}
+    /* the dumpling museum */
+    if(nearMuseum()){openMuseum();return;}
+    /* standing in YOUR mansion: T opens the editor */
+    const mn=nearMansion();
+    if(mn&&rentedAt(mn.id)){openMansionEdit(mn);return;}
+    if(mn){toast("\u{1F3F0} Buy this mansion first — press T at the RECEPTION out front ($"+fmtMoney(MANSION_PRICE)+")!");return;}
   }
   /* rocket stations work on BOTH worlds */
   const rp=nearestRocketPad(player.x,player.z);
@@ -1929,7 +2310,9 @@ function walkPlayer(dt){
       player.mesh.position.set(player.x,player.y,player.z);
       player.mesh.rotation.y=player.yaw;
       const L=player.limbs;
-      L.lL.rotation.x=1.5;L.rL.rotation.x=1.5;L.lA.rotation.x=-0.4;L.rA.rotation.x=-0.4;
+      /* legs bend FORWARD (negative X) — positive used to fold them backwards,
+         which made you look like you sat facing the wrong way */
+      L.lL.rotation.x=-1.5;L.rL.rotation.x=-1.5;L.lA.rotation.x=-0.4;L.rA.rotation.x=-0.4;
       return 0;
     }
   }
@@ -1973,6 +2356,14 @@ function walkPlayer(dt){
     if(player.y<=gh){player.y=gh;player.grounded=true;player.vy=0;}}
   else if(gh<player.y-1.3){player.grounded=false;player.vy=0;}   // stepped off a deck
   else player.y=gh;
+  /* trampolines: walk onto one and BOING — way higher than a normal jump */
+  if(player.grounded)for(let i=TRAMPS.length-1;i>=0;i--){
+    const tr=TRAMPS[i];
+    if(offScene(tr.g)){TRAMPS.splice(i,1);continue;}
+    if(Math.hypot(player.x-tr.x,player.z-tr.z)<1.5){
+      player.y=tr.y;player.vy=10.5;player.grounded=false;break;
+    }
+  }
   player.mesh.position.set(player.x,player.y,player.z);
   player.mesh.rotation.y=player.yaw;
   player.walkT+=dt*(moving?sp:0);
@@ -2623,6 +3014,36 @@ function drawMap(){
         }
       }
     }
+    /* dumpling museums every ~1 km */
+    if(sc>=0.14){
+      const ui0=Math.floor((mapView.cx-halfW-600)/DMUS),ui1=Math.ceil((mapView.cx+halfW-440)/DMUS);
+      const uj0=Math.floor((mapView.cz-halfH-340)/DMUS),uj1=Math.ceil((mapView.cz+halfH-180)/DMUS);
+      for(let i=ui0;i<=ui1;i++)for(let j=uj0;j<=uj1;j++){
+        const s=museumSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#d16ba5",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#ffd0e8";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3DB}",px,py-9);
+        }
+      }
+    }
+    /* concert halls every ~2.4 km */
+    {
+      const ci0=Math.floor((mapView.cx-halfW-1570)/CHSP),ci1=Math.ceil((mapView.cx+halfW-1490)/CHSP);
+      const cj0=Math.floor((mapView.cz-halfH-1090)/CHSP),cj1=Math.ceil((mapView.cz+halfH-1010)/CHSP);
+      for(let i=ci0;i<=ci1;i++)for(let j=cj0;j<=cj1;j++){
+        const s=concertSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#6d28d9",7);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#e3c5ff";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3B5}",px,py-10);
+        }
+      }
+    }
     /* cave openings in the mountains */
     {
       const vi0=Math.floor((mapView.cx-halfW-760)/CVSP),vi1=Math.ceil((mapView.cx+halfW-720)/CVSP);
@@ -2798,6 +3219,14 @@ function mapEntries(q){
     ["\u{1F3F0} Nearest MEGA MANSION",()=>{
       switchWorld("earth");
       goNearest("\u{1F3F0} Nearest MEGA MANSION",nearestSpot(mansionSpot,MSP,1230,870,3),0,40);
+    }],
+    ["\u{1F3DB} Nearest dumpling museum",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3DB} Nearest dumpling museum",nearestSpot(museumSpot,DMUS,520,260,6),0,10);
+    }],
+    ["\u{1F3B5} Nearest concert hall",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3B5} Nearest concert hall",nearestSpot(concertSpot,CHSP,1530,1050,3),0,18);
     }],
     ["\u{1F95F} Nearest dumpling buyer",()=>{
       switchWorld("earth");
@@ -3142,10 +3571,12 @@ function updateHint(){
   else{
     if(CAVE.in){txt="\u{1F573}️ In the cave — grab the glowing crystals · press T to go back outside";showT=true;}
     else if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
+    else if(MEDIT.on){txt="\u{1F6E0} EDITING your mansion — click the floor/lawn to place items · R = rotate · T = done";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
-      const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2);
-      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"Your MEGA MANSION — press T at the reception":"\u{1F3F0} MEGA MANSION — press T to rent it (FREE!)"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T to rent a room");showT=true;}
+      const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
+      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T to BUY it ($"+fmtMoney(MANSION_PRICE)+")"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T to rent a room");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
+      else if(pn){txt="\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
         if(!rentedAt(bd.id))txt="A room's bed — rent it at the reception first";
         else if(!isNight())txt="Your bed — come back at night to sleep";
@@ -3155,7 +3586,15 @@ function updateHint(){
       else{
         const sh=nearShop();
         if(sh){txt=(sh.huge?"\u{1F6D2} MEGA MART":"\u{1F6D2} Shop")+" — press T to buy food";showT=true;}
-        else{const by=nearBuyer();if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}}
+        else if(nearMuseum()){txt="\u{1F3DB} DUMPLING MUSEUM — press T to see (and buy!) the rainbow glitter dumpling";showT=true;}
+        else{
+          const by=nearBuyer();
+          if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
+          else{
+            const mn=nearMansion();
+            if(mn&&rentedAt(mn.id)){txt="\u{1F6E0} Your mansion — press T to EDIT it (furniture + garden shop!)";showT=true;}
+          }
+        }
       }
     }
     if(!txt&&S.world==="earth"&&!CAVE.in){
@@ -3402,7 +3841,26 @@ const UPDATE_PAGES=[
 <li>Every wheel has a six-spoke rim, a center cap and a rim ring — and you can see them spin.</li>
 <li>Cars gained roof pillars around the glass cabin, license plates and door handles.</li></ul>
 <h4>\u{1F305} SOFTER LIGHT</h4><ul>
-<li>Soft-edged shadows (PCF soft shadow maps) make everything look less \"cut out\".</li></ul>`}
+<li>Soft-edged shadows (PCF soft shadow maps) make everything look less \"cut out\".</li></ul>`},
+{t:"Round 13 — Museums, concerts, pianos & YOUR mansion",h:`
+<h4>\u{1F3DB} DUMPLING MUSEUMS (one every ~1 km — on the map!)</h4><ul>
+<li>Walk in and admire the legendary <b>RAINBOW GLITTER dumpling</b> spinning in its glass case.</li>
+<li>Press <b>T</b> inside to buy one for <b>$300</b> — the rarest dumpling, guaranteed.</li></ul>
+<h4>\u{1F3B5} CONCERT HALLS (one every ~2.4 km — on the map!)</h4><ul>
+<li>A real stage with red curtains, spotlights, rows of seats and a <b>piano on the podium</b>.</li>
+<li>Press T at the piano, then hit <b>\u{1F3AD} Play piano</b> — a whole crowd walks in and sits down to hear you!</li></ul>
+<h4>\u{1F3B9} REAL PIANOS + MIDI</h4><ul>
+<li>Play with your mouse, your computer keyboard (A W S E D F T G Y H U J K...) or plug in a real <b>MIDI keyboard</b>!</li></ul>
+<h4>\u{1F3F0} MANSIONS ARE YOURS NOW — $2M</h4><ul>
+<li>The reception moved <b>outside</b>, in front of the entrance — a mansion costs <b>$2,000,000</b>.</li>
+<li>Every mansion got a <b>garden</b>: lawn, hedges, a stone path and flowers.</li></ul>
+<h4>\u{1F6E0} MANSION EDITOR (press T inside your mansion)</h4><ul>
+<li>A furniture shop appears at the bottom of your screen — click an item, then click where to put it. R rotates, \u{1F5D1} removes (full refund).</li>
+<li>Indoors: beds, chairs, couches, tables, closets, lamps, TVs, plants, rugs — and <b>pianos you can really play</b>.</li>
+<li>In the garden: <b>trampolines</b> (walk on = BOING!), <b>in-ground swimming pools</b>, fountains, BBQs, benches, swings, trees &amp; flowers.</li>
+<li>You can move or replace your bed and chairs too — everything is saved.</li></ul>
+<h4>\u{1FA91} SITTING FIXED</h4><ul>
+<li>You no longer sit facing the wrong way — legs bend forward like a real person.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -3455,6 +3913,7 @@ function frame(now){
     updateTrains(dt);updatePlanes(dt);updateBuses(dt);updateTraffic(dt);
     updatePeds(dt);updateAnimals(dt);updateDoors(dt);updateCollapses(dt);
     updateTrafficLights();updateGates(dt);
+    updateCrowd(dt);updateMuseums(dt);
     water.position.x=player.x;water.position.z=player.z;   // the sea follows you
     updateFish(dt);
     clouds.forEach(c=>{

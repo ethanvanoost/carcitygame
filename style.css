@@ -242,3 +242,21 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 #fuelBar{flex:1;height:8px;border-radius:5px;background:#1a2233;border:1px solid var(--line);overflow:hidden}
 #fuelFill{display:block;height:100%;width:100%;background:#4ade80;border-radius:4px}
 #fuelTxt{font-size:11px;color:var(--dim);white-space:nowrap}
+
+/* ---- Round 13: piano + mansion editor ---- */
+#pianoKeys{position:relative;height:160px;display:flex;margin:8px 0;user-select:none;-webkit-user-select:none;touch-action:none}
+.pkey{flex:1;background:#f7f9fc;border:1px solid #2a2f3a;border-radius:0 0 5px 5px;cursor:pointer}
+.pkey.on{background:#9fd8ff}
+.pkeyb{position:absolute;top:0;height:58%;background:#14161a;border:1px solid #000;border-radius:0 0 4px 4px;z-index:2;cursor:pointer}
+.pkeyb.on{background:#4a5670}
+#meditBar{position:fixed;left:0;right:0;bottom:0;z-index:45;display:none;flex-direction:column;gap:6px;background:rgba(13,17,26,.94);border-top:2px solid var(--acc2);padding:8px 10px}
+#meditBar.show{display:flex}
+#meditItems{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.fitem{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:76px;padding:7px 8px;border-radius:10px;border:1px solid var(--line);background:#141b2a;color:var(--ink);cursor:pointer;flex:0 0 auto}
+.fitem:hover{border-color:var(--acc2)}
+.fitem.on{border-color:#ffb02e;box-shadow:0 0 0 2px rgba(255,176,46,.4)}
+.fitem .fe{font-size:22px;line-height:1}
+.fitem .fn{font-size:11px;font-weight:700}
+.fitem .fp{font-size:10px;color:var(--dim)}
+#meditTools{display:flex;gap:8px;justify-content:center}
+#meditTools .btn.on{border-color:#ff5d5d;color:#ff8a8a}
