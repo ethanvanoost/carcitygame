@@ -839,10 +839,15 @@ function updateCave(){
   }
 }
 /* ---------- CITY NEWS: every TV in the game shows what's really happening ---------- */
-const NEWS=["Welcome to CITY NEWS — all the city's stories, LIVE!"];
+const NEWS=[{t:"Welcome to CITY NEWS — all the city's stories, LIVE!",ts:Date.now()}];
 function pushNews(t){
-  NEWS.push(t);
-  if(NEWS.length>8)NEWS.shift();
+  NEWS.push({t,ts:Date.now()});
+  if(NEWS.length>12)NEWS.shift();
+}
+/* every story stays available for 5 REAL minutes */
+function pruneNews(){
+  const now=Date.now();
+  for(let i=NEWS.length-1;i>=0;i--)if(now-NEWS[i].ts>300000)NEWS.splice(i,1);
 }
 const newsCv=document.createElement("canvas");newsCv.width=256;newsCv.height=136;
 const newsTex=new THREE.CanvasTexture(newsCv);
@@ -886,6 +891,7 @@ function setTvChannel(ch){
   if(ch==="3mm"){ensureTvVideo();newsMat.map=TV.videoTex;newsMat.color.set(0xffffff);playTvVideo();}
   else if(ch==="off"){newsMat.map=null;newsMat.color.set(0x05070a);}
   else{newsMat.map=newsTex;newsMat.color.set(0xffffff);}
+  if(ch==="soccer"&&SOC.idx<0)startSoccer(0);
   newsMat.needsUpdate=true;
 }
 function nearTv(){
@@ -896,12 +902,27 @@ function nearTv(){
   }
   return null;
 }
+function openNewsMenu(){
+  pruneNews();
+  const opts=[{label:"\u{1F4E1} LIVE — always show the NEWEST story",value:"auto"}];
+  NEWS.slice().reverse().slice(0,8).forEach(n=>{
+    opts.push({label:"\u{1F4F0} "+n.t.slice(0,48)+(n.t.length>48?"…":""),value:n});
+  });
+  opts.push({label:"❌ Cancel",value:"cancel"});
+  showDest("\u{1F4F0} CITY NEWS — pick a story (each stays 5 minutes)",opts,v=>{
+    if(v==="cancel")return;
+    TV.newsPick=v==="auto"?null:v;
+    setTvChannel("news");
+    toast(v==="auto"?"\u{1F4F0} LIVE mode — the newest story is always on screen!":"\u{1F4F0} That story stays on screen while it's fresh (5 min)!");
+  });
+}
 function openTvMenu(){
   showDest("\u{1F4FA} TV — pick a channel",[
     {label:"⛏ Channel 1 — 3 Minute Minecraft (3MM)",value:"3mm"},
-    {label:"\u{1F4F0} Channel 2 — CITY NEWS (live!)",value:"news"},
-    {label:"\u{1F525} Channel 3 — The Cozy Fireplace",value:"fire"},
-    {label:"\u{1F420} Channel 4 — The Aquarium",value:"aqua"},
+    {label:"\u{1F4F0} Channel 2 — CITY NEWS (pick a story!)",value:"news"},
+    {label:"⚽ Channel 3 — WORLD CUP soccer (7 matches!)",value:"soccer"},
+    {label:"\u{1F525} Channel 4 — The Cozy Fireplace",value:"fire"},
+    {label:"\u{1F420} Channel 5 — The Aquarium",value:"aqua"},
     {label:"⏻ Turn the TV OFF",value:"off"},
     {label:"❌ Cancel",value:"cancel"}
   ],v=>{
@@ -917,12 +938,134 @@ function openTvMenu(){
       });
       return;
     }
+    if(v==="news"){openNewsMenu();return;}
+    if(v==="soccer"){
+      const opts=WC.map((mt,i)=>({label:(i===6?"\u{1F3C6} FINAL: ":"▶ Match "+(i+1)+": ")+mt[0][0]+" ("+mt[0][2]+") vs "+mt[1][0]+" ("+mt[1][2]+")",value:i}));
+      if(SOC.idx>=0)opts.unshift({label:"\u{1F4FA} Keep watching the current match",value:"cur"});
+      opts.push({label:"❌ Cancel",value:"cancel"});
+      showDest("⚽ WORLD CUP — pick a match",opts,vi=>{
+        if(vi==="cancel")return;
+        if(vi!=="cur")startSoccer(vi);
+        setTvChannel("soccer");
+        toast("⚽\u{1F4FA} KICK-OFF! "+WC[SOC.idx][0][0]+" vs "+WC[SOC.idx][1][0]+" — when it ends, the next match starts!");
+      });
+      return;
+    }
     setTvChannel(v);
     toast(v==="off"?"\u{1F4FA}⏻ TV is OFF — good night!"
-      :v==="news"?"\u{1F4FA}\u{1F4F0} CITY NEWS — every story plays once, live!"
       :v==="fire"?"\u{1F525} The cozy fireplace channel... so warm."
       :"\u{1F420} The aquarium channel — blub blub!");
   });
+}
+/* ================= ⚽ THE WORLD CUP CHANNEL: 7 generated matches ================= */
+const WC=[
+  [["SPAIN","#c60b1e","LAMINE YAMAL"],["PORTUGAL","#0a5c36","RONALDO"]],
+  [["FRANCE","#0055a4","MBAPPÉ"],["ARGENTINA","#6faedb","MESSI"]],
+  [["BRAZIL","#ffdc02","NEYMAR"],["ENGLAND","#e8edf7","KANE"]],
+  [["GERMANY","#d9d9d9","MUSIALA"],["NETHERLANDS","#ff7f00","GAKPO"]],
+  [["SPAIN","#c60b1e","LAMINE YAMAL"],["FRANCE","#0055a4","MBAPPÉ"]],
+  [["ARGENTINA","#6faedb","MESSI"],["PORTUGAL","#0a5c36","RONALDO"]],
+  [["SPAIN","#c60b1e","LAMINE YAMAL"],["ARGENTINA","#6faedb","MESSI"]]
+];
+const SOC={idx:-1,t:0,score:[0,0],ball:{x:128,y:70,tx:128,ty:70},players:[],banner:"",bannerT:0,ft:false};
+function startSoccer(i){
+  SOC.idx=i;SOC.t=0;SOC.score=[0,0];SOC.banner="";SOC.bannerT=0;SOC.ft=false;
+  SOC.ball={x:128,y:72,tx:128,ty:72};
+  SOC.players=[];
+  for(let s=0;s<2;s++)for(let k=0;k<6;k++){
+    SOC.players.push({s,bx:s?160+(k%3)*28:40+(k%3)*28,by:48+Math.floor(k/3)*36,ph:Math.random()*7,star:k===1});
+  }
+}
+function cheer(){
+  if(!audioCtx||!SND.sound)return;
+  const t=audioCtx.currentTime,dur=0.8;
+  const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.sin(i/d.length*Math.PI);
+  const src=audioCtx.createBufferSource();src.buffer=buf;
+  const f=audioCtx.createBiquadFilter();f.type="bandpass";f.frequency.value=900;f.Q.value=0.5;
+  const g=audioCtx.createGain();g.gain.value=0.12;
+  src.connect(f);f.connect(g);g.connect(audioCtx.destination);src.start();
+}
+function drawSoccer(dt){
+  const mt=WC[SOC.idx],A=mt[0],B=mt[1];
+  SOC.t+=dt;
+  const minute=Math.min(90,Math.floor(SOC.t/150*90));
+  const now=performance.now();
+  /* the ball travels between players — and sometimes goes for GOAL */
+  const b=SOC.ball;
+  const bd=Math.hypot(b.tx-b.x,b.ty-b.y);
+  if(bd<3&&!SOC.ft){
+    if(b.goal!==undefined){
+      /* the shot arrived at a goal mouth! */
+      const scoringSide=b.goal;   // 0 = team A scored (right goal), 1 = team B
+      if(Math.random()<0.6){
+        SOC.score[scoringSide]++;
+        const T=scoringSide?B:A;
+        const scorer=Math.random()<0.65?T[2]:"No. "+(2+Math.floor(Math.random()*9));
+        SOC.banner="⚽ GOOOAL! "+scorer+" ("+T[0]+")";
+        SOC.bannerT=3.2;
+        cheer();
+      }else{SOC.banner="\u{1F9E4} SAVED!";SOC.bannerT=1.4;}
+      b.goal=undefined;
+      b.tx=128;b.ty=72;
+    }else if(Math.random()<0.22){
+      /* shoot! aim at a goal mouth */
+      const side=Math.random()<0.5?0:1;
+      b.goal=side;
+      b.tx=side?12:244;b.ty=62+Math.random()*20;
+    }else{
+      const p=SOC.players[Math.floor(Math.random()*SOC.players.length)];
+      b.tx=p.bx+Math.sin(now/700+p.ph)*8;
+      b.ty=p.by+Math.cos(now/900+p.ph)*7;
+    }
+  }
+  const bs=64*dt;
+  if(bd>0.5){b.x+=(b.tx-b.x)/bd*Math.min(bs,bd);b.y+=(b.ty-b.y)/bd*Math.min(bs,bd);}
+  /* full time → show the result, then the next match kicks off */
+  if(SOC.t>=150&&!SOC.ft){
+    SOC.ft=true;
+    SOC.banner="\u{1F3C1} FULL TIME "+SOC.score[0]+" - "+SOC.score[1];
+    SOC.bannerT=6;
+  }
+  if(SOC.ft&&SOC.bannerT<=0){startSoccer((SOC.idx+1)%WC.length);return;}
+  SOC.bannerT-=dt;
+  /* --- draw the match --- */
+  const c=newsCv.getContext("2d");
+  c.fillStyle="#1e7a34";c.fillRect(0,0,256,136);
+  for(let i=0;i<6;i++){c.fillStyle=i%2?"#1e8038":"#1c7431";c.fillRect(i*43,26,43,110);}
+  c.strokeStyle="rgba(255,255,255,.7)";c.lineWidth=1.5;
+  c.strokeRect(8,32,240,98);
+  c.beginPath();c.moveTo(128,32);c.lineTo(128,130);c.stroke();
+  c.beginPath();c.arc(128,81,16,0,7);c.stroke();
+  c.strokeRect(8,58,22,46);c.strokeRect(226,58,22,46);
+  /* players wiggle around their formation spots (the star wears a ring) */
+  for(const p of SOC.players){
+    const px=p.bx+Math.sin(now/700+p.ph)*8,py=p.by+Math.cos(now/900+p.ph)*7+26;
+    c.fillStyle=p.s?B[1]:A[1];
+    c.beginPath();c.arc(px,py,3.4,0,7);c.fill();
+    c.strokeStyle="#08131f";c.lineWidth=1;c.stroke();
+    if(p.star){c.strokeStyle="#ffd75e";c.lineWidth=1.4;c.beginPath();c.arc(px,py,5.4,0,7);c.stroke();}
+  }
+  /* the ball */
+  c.fillStyle="#ffffff";c.beginPath();c.arc(b.x,b.y+26,2.4,0,7);c.fill();
+  c.strokeStyle="#08131f";c.lineWidth=0.8;c.stroke();
+  /* scoreboard */
+  c.fillStyle="#08131f";c.fillRect(0,0,256,26);
+  c.fillStyle=A[1];c.fillRect(4,5,16,16);
+  c.fillStyle=B[1];c.fillRect(236,5,16,16);
+  c.fillStyle="#fff";c.font="bold 13px Segoe UI";c.textAlign="center";
+  c.fillText(A[0].slice(0,3)+"  "+SOC.score[0]+" - "+SOC.score[1]+"  "+B[0].slice(0,3),128,17);
+  c.font="bold 11px Segoe UI";c.textAlign="left";
+  c.fillStyle="#ffd75e";c.fillText((SOC.ft?"FT":minute+"'"),24,17);
+  c.textAlign="right";c.fillStyle="#9fd8ff";c.fillText(SOC.idx===6?"\u{1F3C6} FINAL":"WORLD CUP",232,17);
+  /* goal / full-time banner */
+  if(SOC.bannerT>0&&SOC.banner){
+    c.fillStyle="rgba(8,19,31,.85)";c.fillRect(0,56,256,30);
+    c.fillStyle="#ffd75e";c.font="bold 15px Segoe UI";c.textAlign="center";
+    c.fillText(SOC.banner,128,76);
+  }
+  newsTex.needsUpdate=true;
 }
 /* --- CITY NEWS: each story shows ONCE for 5 seconds, then B&W static --- */
 let _newsCur=null,_newsTimer=0,_staticT=0,_animT=0;
@@ -1008,17 +1151,16 @@ function updateTv(dt){
     return;
   }
   if(TV.channel==="off")return;
+  if(TV.channel==="soccer"){drawSoccer(dt);return;}
   if(TV.channel==="news"){
-    if(_newsCur!==null){
-      _newsTimer-=dt;
-      if(_newsTimer<=0)_newsCur=null;
+    pruneNews();
+    /* show the story you picked (while it's fresh), otherwise the newest one */
+    const cur=(TV.newsPick&&NEWS.includes(TV.newsPick))?TV.newsPick:(NEWS.length?NEWS[NEWS.length-1]:null);
+    if(cur!==_newsCur){
+      _newsCur=cur;
+      if(cur)drawHeadline(cur.t);
     }
-    if(_newsCur===null&&NEWS.length){
-      _newsCur=NEWS.shift();   // every story plays exactly ONCE
-      _newsTimer=5;
-      drawHeadline(_newsCur);
-    }
-    if(_newsCur===null){
+    if(!cur){
       _staticT-=dt;
       if(_staticT<=0){_staticT=0.12;drawStatic();}
     }
@@ -1195,8 +1337,8 @@ function updateEvents(dt){
   if(S.world!=="earth")return;
   EVENTS.timer-=dt;
   if(EVENTS.timer<=0){
-    EVENTS.timer=50+Math.random()*70;
-    if(EVENTS.list.length<4)spawnEvent();
+    EVENTS.timer=100+Math.random()*140;   // calmer city: events happen less often
+    if(EVENTS.list.length<3)spawnEvent();
   }
   const now=performance.now();
   for(let i=EVENTS.list.length-1;i>=0;i--){
@@ -6788,7 +6930,17 @@ const UPDATE_PAGES=[
 <li>Take a REAL player along in your passenger seat while working — <b>every job pays DOUBLE</b>!</li></ul>
 <h4>\u{1F54A} EVEN MORE REALISTIC</h4><ul>
 <li>Birds circle in the daytime sky · golden-hour sunlight turns warm and orange at sunrise & sunset.</li>
-<li>The camera <b>widens at speed</b> and the <b>wind rushes</b> louder the faster you go.</li></ul>`}
+<li>The camera <b>widens at speed</b> and the <b>wind rushes</b> louder the faster you go.</li></ul>`},
+{t:"Round 25 — ⚽ WORLD CUP on TV & pick-your-news",h:`
+<h4>⚽ NEW CHANNEL: WORLD CUP SOCCER</h4><ul>
+<li><b>7 matches</b> to choose from: Spain (LAMINE YAMAL) vs Portugal (RONALDO), France (MBAPPÉ) vs Argentina (MESSI), Brazil (NEYMAR) vs England (KANE), Germany (MUSIALA) vs Netherlands (GAKPO)... and the \u{1F3C6} <b>FINAL</b>!</li>
+<li>Live on your TV: a real animated pitch, both teams in their country colors, the star player with a golden ring, passes, shots, <b>SAVES and GOOOALS</b> with crowd cheers!</li>
+<li>90 minutes of match in ~2.5 real minutes — full time shows the result, then the next match kicks off automatically.</li></ul>
+<h4>\u{1F4F0} PICK YOUR NEWS</h4><ul>
+<li>Choosing the news channel now shows a <b>list of stories</b> — pick the one YOU want on screen, or \u{1F4E1} LIVE mode for the newest.</li>
+<li>Every story stays available for <b>5 real minutes</b> before it expires.</li></ul>
+<h4>\u{1F304} A CALMER CITY</h4><ul>
+<li>Random events (house fires, road construction, accidents, festivals) happen <b>less often</b> — special, not constant.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
