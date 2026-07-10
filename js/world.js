@@ -137,6 +137,25 @@ function nearestRocketPad(x,z){
 }
 /* the sea: big soft patches of open water (never downtown / airports) */
 function seaAt(x,z){return sstep(0.64,0.76,fbm(x/1500+71.3,z/1500+42.7));}
+/* ---- FERRY ISLANDS: real islands out in the deep sea, one candidate every ~2.2 km ---- */
+const ISP=2200;
+const _islCache=new Map();
+function islandSpot(i,j){
+  const k=i+","+j;
+  if(_islCache.has(k))return _islCache.get(k);
+  let s=null;
+  const x=i*ISP+900,z=j*ISP+1500;
+  if(seaAt(x,z)>0.9){
+    s={x,z};
+    for(const[ox,oz]of[[-95,0],[95,0],[0,-95],[0,95]])
+      if(seaAt(x+ox,z+oz)<0.7){s=null;break;}
+  }
+  _islCache.set(k,s);
+  return s;
+}
+function nearIsland(x,z){
+  return islandSpot(Math.round((x-900)/ISP),Math.round((z-1500)/ISP));
+}
 function moist(x,z){return fbm(x/900+51.7,z/900+23.9);}
 function biomeAt(x,z){const m=moist(x,z);return m<0.40?"desert":(m>0.60?"forest":"plains");}
 /* two-generation cache: when full, the old generation is dropped instead of
@@ -165,6 +184,18 @@ function baseH_(x,z){
   /* the sea: terrain dips below the water plane */
   const se=seaAt(x,z);
   if(se>0)h=h*(1-se)+se*-9;
+  /* islands rise back out of the deep sea: a soft dome with a sandy rim */
+  if(se>0.4){
+    const s=nearIsland(x,z);
+    if(s){
+      const d=Math.hypot(x-s.x,z-s.z);
+      if(d<85){
+        const t=1-d/85;
+        const ih=-1.2+t*t*(7+vnoise(x/26+9.1,z/26+4.7)*2);
+        if(ih>h)h=ih;
+      }
+    }
+  }
   h*=1-flatMask(x,z);
   return h;
 }
@@ -1497,6 +1528,124 @@ function buildConcertHall(x,z,rand,parent,baseY){
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
+/* ---------- FERRY ISLANDS: lighthouse, palms, crabs, beach shop & buried treasure ---------- */
+const islands=[];
+let _beachSign=null;
+function beachSignMat(){
+  if(_beachSign)return _beachSign;
+  const cv=document.createElement("canvas");cv.width=256;cv.height=64;
+  const c=cv.getContext("2d");c.fillStyle="#0e7490";c.fillRect(0,0,256,64);
+  c.fillStyle="#fff";c.font="bold 30px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3D6} BEACH SHOP",128,42);
+  _beachSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _beachSign;
+}
+function makePalm(x,z,parent,y,r){
+  const g=new THREE.Group();
+  const tm=new THREE.MeshLambertMaterial({color:0x8a6142});
+  /* a curved trunk from stacked, offset segments */
+  let px2=0,py=0,lean=(r()-0.5)*0.9;
+  for(let i=0;i<5;i++){
+    const seg=new THREE.Mesh(new THREE.CylinderGeometry(0.14-i*0.012,0.17-i*0.012,1.1,7),tm);
+    px2+=lean*0.24;py+=1;
+    seg.position.set(px2,py-0.5,0);
+    seg.rotation.z=-lean*0.24;
+    g.add(seg);
+  }
+  const fm=new THREE.MeshLambertMaterial({color:0x2f9e44,side:THREE.DoubleSide});
+  for(let i=0;i<6;i++){
+    const a=i/6*Math.PI*2;
+    const fr=new THREE.Mesh(new THREE.ConeGeometry(0.34,2.6,4),fm);
+    fr.scale.y=0.32;
+    fr.position.set(px2+Math.cos(a)*1.1,py+0.15,Math.sin(a)*1.1);
+    fr.rotation.z=Math.PI/2-Math.cos(a)*0.7;
+    fr.rotation.y=-a;
+    g.add(fr);
+  }
+  /* coconuts */
+  for(let i=0;i<3;i++){
+    const co=new THREE.Mesh(new THREE.SphereGeometry(0.13,7,6),tm);
+    co.position.set(px2+(r()-0.5)*0.5,py-0.15,(r()-0.5)*0.5);g.add(co);
+  }
+  g.position.set(x,y,z);
+  g.rotation.y=r()*6.28;
+  parent.add(g);
+}
+function makeCrab(){
+  const g=makeQuad(0xd7263d,0.3,0.16,0.34,0.1,0xc0392b);
+  [[-0.22],[0.22]].forEach(p=>{
+    const cl=new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6),new THREE.MeshLambertMaterial({color:0xd7263d}));
+    cl.scale.set(1,0.7,1.3);cl.position.set(p[0],0.14,0.24);g.add(cl);
+  });
+  return g;
+}
+function buildIsland(s,g){
+  const y0=terrainH(s.x,s.z);
+  /* LIGHTHOUSE on the hilltop: white-red striped tower + rotating light beam */
+  const lh=new THREE.Group();lh.position.set(s.x,y0,s.z);g.add(lh);
+  for(let i=0;i<5;i++){
+    const band=shadowBox(new THREE.Mesh(new THREE.CylinderGeometry(1.5-i*0.14,1.6-i*0.14,2.6,12),
+      new THREE.MeshLambertMaterial({color:i%2?0xd7263d:0xf4f7fb})));
+    band.position.y=1.3+i*2.6;lh.add(band);
+  }
+  const cab=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,1.6,10),glassMat);
+  cab.position.y=13.9;lh.add(cab);
+  const cap=shadowBox(new THREE.Mesh(new THREE.ConeGeometry(1.4,1.2,10),new THREE.MeshLambertMaterial({color:0xd7263d})));
+  cap.position.y=15.3;lh.add(cap);
+  const head=new THREE.Group();head.position.y=13.9;lh.add(head);
+  const lampBall=new THREE.Mesh(new THREE.SphereGeometry(0.5,10,10),new THREE.MeshBasicMaterial({color:0xfff2b0}));
+  head.add(lampBall);
+  [1,-1].forEach(d=>{
+    const beam=new THREE.Mesh(new THREE.ConeGeometry(2.2,26,8,1,true),
+      new THREE.MeshBasicMaterial({color:0xfff2b0,transparent:true,opacity:0.16,side:THREE.DoubleSide,depthWrite:false}));
+    beam.rotation.z=d*Math.PI/2;
+    beam.position.x=d*13;
+    head.add(beam);
+  });
+  const r=rng(Math.round(s.x*13+s.z*7)+3);
+  /* palm trees around the beach ring */
+  for(let i=0;i<9;i++){
+    const a=r()*Math.PI*2,d=34+r()*36;
+    const px2=s.x+Math.cos(a)*d,pz=s.z+Math.sin(a)*d;
+    const py=terrainH(px2,pz);
+    if(py>-0.4)makePalm(px2,pz,g,py,r);
+  }
+  /* beach chairs + parasol on the south beach */
+  for(let i=0;i<3;i++){
+    const bx=s.x-10+i*7,bz=s.z+48;
+    makeChair(bx,bz,Math.PI,g,terrainH(bx,bz));
+  }
+  const paraY=terrainH(s.x-3,s.z+50);
+  const pp=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,2.6),poleMat);
+  pp.position.set(s.x-3,paraY+1.3,s.z+50);g.add(pp);
+  const para=new THREE.Mesh(new THREE.ConeGeometry(2,0.8,10),new THREE.MeshLambertMaterial({color:0xff5d8f,side:THREE.DoubleSide}));
+  para.position.set(s.x-3,paraY+2.8,s.z+50);g.add(para);
+  /* crabs scuttle on the beach (penned in so they never swim away) */
+  for(let i=0;i<4;i++){
+    const an=regAnimal(makeCrab(),s.x+(r()-0.5)*60,s.z+(r()-0.5)*60,g,0.6);
+    an.pen={x:s.x,z:s.z,r:62};
+  }
+  /* the BEACH SHOP: coconut drinks + the island-only PEARL dumpling */
+  const shx=s.x+20,shz=s.z+40,shy=terrainH(shx,shz);
+  const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3,1.05,1.1),new THREE.MeshLambertMaterial({color:0x0e7490})));
+  ct.position.set(shx,shy+0.52,shz);g.add(ct);
+  const sroof=new THREE.Mesh(new THREE.BoxGeometry(3.6,0.14,1.8),new THREE.MeshLambertMaterial({color:0xf4d35e}));
+  sroof.position.set(shx,shy+2.4,shz);g.add(sroof);
+  [[-1.6],[1.6]].forEach(p=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.9),poleMat);pl.position.set(shx+p[0],shy+1.45,shz);g.add(pl);});
+  const pearl=new THREE.Mesh(new THREE.SphereGeometry(0.2,10,8),new THREE.MeshLambertMaterial({color:0xe9e4f7,emissive:0x9a90c0,emissiveIntensity:0.35}));
+  pearl.scale.y=0.75;pearl.position.set(shx,shy+1.25,shz);g.add(pearl);
+  const ssign=new THREE.Mesh(new THREE.PlaneGeometry(3.4,0.85),beachSignMat());
+  ssign.position.set(shx,shy+3,shz);g.add(ssign);
+  const keeper=makePerson(0.95,0x0e7490);keeper.position.set(shx,shy,shz-1.2);g.add(keeper);
+  /* the buried-treasure X on the west beach */
+  const xx=s.x-46,xz=s.z+14,xy=terrainH(xx,xz);
+  const xm=new THREE.MeshLambertMaterial({color:0x7a2c1a});
+  [[0.6],[-0.6]].forEach(p=>{
+    const bar=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.06,0.5),xm);
+    bar.position.set(xx,xy+0.16,xz);bar.rotation.y=p[0];g.add(bar);
+  });
+  islands.push({g,x:s.x,z:s.z,head,shop:{x:shx,z:shz},digX:{x:xx,z:xz}});
+}
 function hitBuilding(x,z,speed){
   if(S.world!=="earth")return false;   // no invisible Earth buildings on the Moon
   if(speed<8)return false;
@@ -1627,6 +1776,8 @@ function keepClear(x,z){
   if(mu&&Math.abs(x-mu.x)<16&&Math.abs(z-mu.z)<14)return true;
   const chh=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
   if(chh&&Math.abs(x-chh.x)<26&&Math.abs(z-chh.z)<22)return true;
+  const isl=nearIsland(x,z);
+  if(isl&&Math.hypot(x-isl.x,z-isl.z)<100)return true;   // islands get their own decor
   return false;
 }
 /* ---- drivable decks (parking garage floors + ramp) ---- */
@@ -1698,6 +1849,7 @@ function buildChunk(cx,cz){
     const mo=moist(x,z);
     if(Math.abs(x)<160&&Math.abs(z)<160)c=cCity.clone();
     else if(inAirport(x,z))c=cSand.clone();
+    else if(h>-1.4&&h<2.4&&seaAt(x,z)>0.55)c=new THREE.Color(0xe6d9a8);   // island beach sand
     else if(mo<0.40)c=cDesert.clone();
     else if(mo>0.60)c=cForest.clone();
     else c=cGrass.clone();
@@ -1992,6 +2144,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(mansion(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* FERRY ISLANDS: decor is built by the chunk that holds the island's center */
+  for(let i=Math.floor((x0-1000)/ISP);i<=Math.ceil((x1-800)/ISP);i++)
+  for(let j=Math.floor((z0-1600)/ISP);j<=Math.ceil((z1-1400)/ISP);j++){
+    const sp=islandSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildIsland(sp,g);
   }
   /* a DUMPLING MUSEUM every ~1 km */
   for(let i=Math.floor((x0-600)/DMUS);i<=Math.ceil((x1-440)/DMUS);i++)

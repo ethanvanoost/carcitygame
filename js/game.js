@@ -525,6 +525,7 @@ function dumpValue(d){
   if(d.color==="Rainbow")return d.glitter?250:30;
   if(d.color==="Gold")return d.glitter?20:30;
   if(d.color==="Pumpkin"||d.color==="Snowy")return d.glitter?150:40;   // seasonal specials
+  if(d.color==="Pearl")return d.glitter?180:60;                        // island exclusive
   return d.glitter?100:15;
 }
 /* little white stars sprinkled on every glitter dumpling */
@@ -2844,6 +2845,10 @@ function tryCall(){
     if(by){openSell();return;}
     /* the dumpling museum */
     if(nearMuseum()){openMuseum();return;}
+    /* island fun: the beach shop & the buried-treasure X */
+    if(nearIslandThing("shop",5)){openBeachShop();return;}
+    const dg=nearIslandThing("digX",3.5);
+    if(dg){digTreasureX(dg);return;}
     /* standing in YOUR mansion: T opens the editor. In someone ELSE's: the visitor menu */
     const mn=nearMansion();
     if(mn&&rentedAt(mn.id)){openMansionEdit(mn);return;}
@@ -3794,6 +3799,7 @@ function mapColor(x,z){
   if(Math.abs(x-curveXC(x,z))<7||Math.abs(z-curveZC(x,z))<7)return "#464b53";
   if(nearestRail(x,z).d<5)return "#6b7280";
   const h=baseH(x,z);
+  if(h>-1.4&&h<2.4&&seaAt(x,z)>0.55)return "#e6d9a8";  // island beaches
   if(h<-2.5)return "#1d6f9e";                          // the sea
   if(h>85)return "#e8ecef";
   if(h>34)return "#8d8577";
@@ -3969,6 +3975,21 @@ function drawMap(){
         if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
           c.fillStyle="#e3c5ff";c.font="bold 11px Segoe UI";c.textAlign="center";
           c.fillText("\u{1F3B5}",px,py-10);
+        }
+      }
+    }
+    /* ferry islands out in the sea */
+    {
+      const li0=Math.floor((mapView.cx-halfW-1000)/ISP),li1=Math.ceil((mapView.cx+halfW-800)/ISP);
+      const lj0=Math.floor((mapView.cz-halfH-1600)/ISP),lj1=Math.ceil((mapView.cz+halfH-1400)/ISP);
+      for(let i=li0;i<=li1;i++)for(let j=lj0;j<=lj1;j++){
+        const s=islandSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#0e7490",7);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#7fe0ff";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3DD}",px,py-9);
         }
       }
     }
@@ -4164,6 +4185,12 @@ function mapEntries(q){
       setupTreasure();
       $("mapModal").classList.remove("open");
       toast(TREASURE.found?"\u{1F3F4}‍☠️ You already found today's treasure — a new one appears tomorrow!":treasureHintText());
+    }],
+    ["\u{1F3DD} Nearest FERRY ISLAND",()=>{
+      switchWorld("earth");
+      const best=nearestSpot(islandSpot,ISP,900,1500,3);
+      if(best)chooseDest("\u{1F3DD} Ferry island — "+fmtDist(best.d)+" (or ride the ⛴ ferry!)",best.sp.x,best.sp.z+50,true);
+      else toast("No islands near here — drive toward the big blue sea on the map!");
     }],
     ["\u{1F3DB} Nearest dumpling museum",()=>{
       switchWorld("earth");
@@ -4584,6 +4611,21 @@ function updateHint(){
         if(!offScene(mc.g)&&Math.hypot(player.x-mc.x,player.z-mc.z)<6){txt="\u{1F319} Moon buggy — press F to drive!";showF=true;break;}
       }
     }
+    /* the ferry */
+    if(!txt&&S.world==="earth"){
+      const fy=nearFerry();
+      if(fy){
+        const onBoard=Math.abs(player.x-fy.x)<fy.fd.hw+0.5&&Math.abs(player.z-fy.z)<fy.fd.hd+0.5&&player.y>0.4;
+        if(onBoard&&!fy.docked)txt="⛴ Enjoy the crossing — the sea breeze is lovely!";
+        else if(fy.docked)txt="⛴ The ferry is DOCKED — walk or drive onto the deck before it leaves!";
+        else txt="⛴ The ferry is sailing — it docks here again in a moment.";
+      }
+    }
+    /* island hints */
+    if(!txt&&S.world==="earth"&&player.onFoot){
+      if(nearIslandThing("shop",5)){txt="\u{1F3D6} Beach shop — press T for coconut drinks & PEARL dumplings!";showT=true;}
+      else if(nearIslandThing("digX",3.5)){txt="⛏️ X marks the spot — press T to DIG!";showT=true;}
+    }
     /* treasure hunt: hot & cold */
     if(!txt&&S.world==="earth"&&!TREASURE.found&&TREASURE.key){
       const td=Math.hypot(player.x-TREASURE.x,player.z-TREASURE.z);
@@ -4599,6 +4641,171 @@ function updateHint(){
 }
 $("kT").onclick=()=>tryCall();
 $("kF").onclick=()=>tryEnterLeave();
+/* ================= FERRY ISLANDS: the car ferry & island fun ================= */
+const FERRIES=new Map();
+function ferryRoute(s){
+  /* find the nearest shore in a straight line — that's where the mainland pier goes */
+  for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){
+    for(let t=160;t<=1400;t+=40){
+      const px=s.x+dx*t,pz=s.z+dz*t;
+      if(seaAt(px,pz)<0.25&&baseH(px,pz)>0){
+        return{ax:s.x+dx*100,az:s.z+dz*100,bx:px-dx*30,bz:pz-dz*30,dx,dz};
+      }
+    }
+  }
+  return null;
+}
+function buildPier(fg,x,z,along){
+  const pg=new THREE.Group();fg.add(pg);
+  const w=along==="x"?14:6,d=along==="x"?6:14;
+  const top=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,0.3,d),new THREE.MeshLambertMaterial({color:0x8a6142})));
+  top.position.set(x,0.9,z);pg.add(top);
+  for(const ox of[-w/2+0.5,w/2-0.5])for(const oz of[-d/2+0.5,d/2-0.5]){
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,3.4),new THREE.MeshLambertMaterial({color:0x6f4e37}));
+    post.position.set(x+ox,-0.6,z+oz);pg.add(post);
+  }
+  decks.push({g:pg,x,z,hw:w/2,hd:d/2,tops:[1.05],ramp:null});
+}
+function buildFerry(s,key){
+  const route=ferryRoute(s);
+  if(!route){FERRIES.set(key,null);return;}
+  const g=new THREE.Group();scene.add(g);
+  const along=route.dx!==0?"x":"z";
+  buildPier(g,route.ax,route.az,along);
+  buildPier(g,route.bx,route.bz,along);
+  /* the ferry itself: hull, flat car deck, ramps, cabin & funnel */
+  const boat=new THREE.Group();g.add(boat);
+  const hull=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(9.6,1.5,21),new THREE.MeshPhongMaterial({color:0x1d4e89,shininess:60})));
+  hull.position.y=0.2;boat.add(hull);
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(9,0.2,20.4),new THREE.MeshLambertMaterial({color:0x9aa0a8}));
+  deck.position.y=1.0;boat.add(deck);
+  [[-1],[1]].forEach(p=>{
+    const ramp=new THREE.Mesh(new THREE.BoxGeometry(7,0.16,2.6),new THREE.MeshLambertMaterial({color:0x7d838c}));
+    ramp.position.set(0,0.9,p[0]*11.2);ramp.rotation.x=p[0]*0.12;boat.add(ramp);
+    const rail=new THREE.Mesh(new THREE.BoxGeometry(0.16,1,20),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
+    rail.position.set(p[0]*4.5,1.6,0);boat.add(rail);
+  });
+  const cab=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3.4,2.6,3.4),new THREE.MeshLambertMaterial({color:0xf4f7fb})));
+  cab.position.set(0,2.4,-7.5);boat.add(cab);
+  const cabGlass=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.9,3.5),glassMat);
+  cabGlass.position.set(0,3,-7.5);boat.add(cabGlass);
+  const fun=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.55,1.8,10),new THREE.MeshLambertMaterial({color:0xd7263d}));
+  fun.position.set(0,4.4,-7.5);boat.add(fun);
+  /* the deck is a REAL surface: drive your car aboard */
+  const fd={g,x:route.ax,z:route.az,hw:along==="x"?10.2:4.5,hd:along==="x"?4.5:10.2,tops:[1.1],ramp:null};
+  decks.push(fd);
+  let off=0;for(let i=0;i<key.length;i++)off+=key.charCodeAt(i);
+  const f={g,boat,key,route,along,fd,x:route.ax,z:route.az,px:route.ax,pz:route.az,off:(off%97)/97,docked:1};
+  FERRIES.set(key,f);
+}
+/* the ferry loop follows the shared clock: everyone sees it at the same spot */
+function ferryPhase(f){
+  const tm=CLOCK.day*1440+CLOCK.min;
+  return ((tm/20)+f.off)%1;   // one full round trip every 20 game minutes (~4 real min)
+}
+function updateFerries(dt){
+  /* make sure ferries exist for the islands around the player */
+  const ci=Math.round((player.x-900)/ISP),cj=Math.round((player.z-1500)/ISP);
+  for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){
+    const key=i+","+j;
+    if(FERRIES.has(key))continue;
+    const s=islandSpot(i,j);
+    if(s)buildFerry(s,key);else FERRIES.set(key,null);
+  }
+  for(const[key,f]of FERRIES){
+    if(!f)continue;
+    if(Math.hypot(f.x-player.x,f.z-player.z)>2800){
+      scene.remove(f.g);disposeGroup(f.g);FERRIES.delete(key);
+      const di=decks.indexOf(f.fd);if(di>=0)decks.splice(di,1);
+      continue;
+    }
+    /* where in the loop are we? dock A (island) → sail → dock B (shore) → sail back */
+    const p=ferryPhase(f),r=f.route;
+    let k,docked=0;
+    if(p<0.12){k=0;docked=1;}
+    else if(p<0.5){k=(p-0.12)/0.38;}
+    else if(p<0.62){k=1;docked=2;}
+    else{k=1-(p-0.62)/0.38;}
+    /* ease in & out of the docks */
+    const ke=k*k*(3-2*k);
+    f.px=f.x;f.pz=f.z;
+    f.x=r.ax+(r.bx-r.ax)*ke;
+    f.z=r.az+(r.bz-r.az)*ke;
+    f.docked=docked;
+    f.boat.position.set(f.x,0,f.z);
+    f.boat.rotation.y=f.along==="x"?Math.PI/2:0;
+    /* gentle bobbing on the waves */
+    f.boat.position.y=Math.sin(performance.now()/900+f.off*9)*0.08;
+    f.fd.x=f.x;f.fd.z=f.z;
+    /* everything standing on the deck sails along */
+    const mvx=f.x-f.px,mvz=f.z-f.pz;
+    if(mvx||mvz){
+      const onDeck=(ex,ez,ey)=>Math.abs(ex-f.x)<f.fd.hw+0.5&&Math.abs(ez-f.z)<f.fd.hd+0.5&&ey>0.4&&ey<3.5;
+      if(player.onFoot&&onDeck(player.x,player.z,player.y)){player.x+=mvx;player.z+=mvz;}
+      if(myVehicle&&onDeck(myVehicle.x,myVehicle.z,myVehicle.y)){
+        myVehicle.x+=mvx;myVehicle.z+=mvz;
+        myVehicle.mesh.position.set(myVehicle.x,myVehicle.y,myVehicle.z);
+        if(player.drive===myVehicle){player.x=myVehicle.x;player.z=myVehicle.z;}
+      }
+      if(PET.type&&PET.mesh&&onDeck(PET.x,PET.z,PET.mesh.position.y)){PET.x+=mvx;PET.z+=mvz;}
+    }
+  }
+}
+function nearFerry(){
+  for(const f of FERRIES.values()){
+    if(!f)continue;
+    if(Math.hypot(player.x-f.x,player.z-f.z)<26)return f;
+  }
+  return null;
+}
+/* lighthouse beams sweep around */
+function updateIslands(dt){
+  for(let i=islands.length-1;i>=0;i--){
+    const isl=islands[i];
+    if(offScene(isl.g)){islands.splice(i,1);continue;}
+    isl.head.rotation.y+=dt*1.1;
+  }
+}
+function nearIslandThing(list,r){
+  for(let i=islands.length-1;i>=0;i--){
+    const isl=islands[i];
+    if(offScene(isl.g)){islands.splice(i,1);continue;}
+    const t=isl[list];
+    if(t&&Math.hypot(player.x-t.x,player.z-t.z)<r)return isl;
+  }
+  return null;
+}
+function openBeachShop(){
+  showDest("\u{1F3D6} Beach shop — welcome to the island!",[
+    {label:"\u{1F965} Coconut drink — $15 (goes in your \u{1F392} backpack)",value:"coco"},
+    {label:"\u{1FAA9} PEARL dumpling — $35 (island exclusive!)",value:"pearl"},
+    {label:"❌ Just enjoying the beach",value:"cancel"}
+  ],v=>{
+    if(v==="coco"){
+      if(MONEY.v<15){toast("\u{1F4B0} That costs $15!");return;}
+      MONEY.v-=15;updateMoneyUI();saveGame();
+      MCD.pack.push(["\u{1F965} Coconut drink",30]);renderPack();
+      toast("\u{1F965} Fresh coconut drink in your backpack — press R to drink it!");
+    }else if(v==="pearl"){
+      if(MONEY.v<35){toast("\u{1F4B0} That costs $35!");return;}
+      MONEY.v-=35;updateMoneyUI();
+      DUMP.owned.push({color:"Pearl",hex:"#e9e4f7",glitter:Math.random()<0.08});
+      renderDump();saveGame();
+      toast("\u{1FAA9} A shimmering PEARL dumpling — you can ONLY get these on islands!");
+    }
+  });
+}
+function digTreasureX(isl){
+  const dkey="vc4dig:"+Math.round(isl.x)+","+Math.round(isl.z)+":"+new Date().toISOString().slice(0,10);
+  if(localStorage.getItem(dkey)){toast("\u{1F3D6} You already dug here today — the sand refills overnight!");return;}
+  try{localStorage.setItem(dkey,"1");}catch(e){}
+  addMoney(150);
+  if(Math.random()<0.25){
+    DUMP.owned.push({color:"Pearl",hex:"#e9e4f7",glitter:Math.random()<0.15});
+    renderDump();saveGame();
+    toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
+  }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
 /* ================= EFFECT SETTINGS (police, sounds, weather, quality) ================= */
 const SETTINGS={police:true,crash:true,honk:true,engine:true,siren:true,weather:true,quality:"med"};
 try{Object.assign(SETTINGS,JSON.parse(localStorage.getItem("vc4fx")||"{}"));}catch(e){}
@@ -5202,7 +5409,21 @@ const UPDATE_PAGES=[
 <h4>\u{1F41B} BUG FIXES</h4><ul>
 <li>Animals & people no longer twitch/spin at road edges — they turn smoothly and commit to a direction.</li>
 <li>Glitching/flickering roads fixed: every road layer got its own height.</li>
-<li>Faster: quality setting reduces load, fewer freeze spikes.</li></ul>`}
+<li>Faster: quality setting reduces load, fewer freeze spikes.</li></ul>`},
+{t:"Round 18 — FERRY ISLANDS \u{1F3DD}⛴",h:`
+<h4>\u{1F3DD} REAL ISLANDS IN THE SEA</h4><ul>
+<li>The deep sea now has <b>islands</b> — sandy beaches, palm trees with coconuts, beach chairs & parasols, and \u{1F980} crabs scuttling on the sand.</li>
+<li>Every island has a <b>LIGHTHOUSE</b> with a rotating light beam you can spot from the mainland at night.</li>
+<li>Cyan \u{1F3DD} markers on the map + a "Nearest FERRY ISLAND" quick button.</li></ul>
+<h4>⛴ THE CAR FERRY</h4><ul>
+<li>A real ferry sails between every island and the nearest shore — wooden piers on both sides.</li>
+<li><b>Walk or DRIVE YOUR CAR onto the deck</b> while it's docked, and sail across with it. The deck even bobs on the waves!</li>
+<li>The ferry runs on the shared clock: on a server, everyone sees it at the exact same spot.</li></ul>
+<h4>\u{1FAA9} PEARL DUMPLINGS (island exclusive!)</h4><ul>
+<li>The \u{1F3D6} beach shop sells shimmering <b>PEARL dumplings</b> ($35, worth $60 — glitter pearls $180!) and \u{1F965} coconut drinks.</li>
+<li>You can ONLY get pearls on islands — show them off on your mansion display table!</li></ul>
+<h4>⛏️ X MARKS THE SPOT</h4><ul>
+<li>Every island hides a buried-treasure <b>X</b> on the beach — press T to dig: $150 + a chance of a buried pearl. The sand refills every night!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -5258,6 +5479,7 @@ function frame(now){
     updatePeds(dt);updateAnimals(dt);updateDoors(dt);updateCollapses(dt);
     updateTrafficLights();updateGates(dt);
     updateCrowd(dt);updateMuseums(dt);
+    updateFerries(dt);updateIslands(dt);
     water.position.x=player.x;water.position.z=player.z;   // the sea follows you
     updateFish(dt);
     clouds.forEach(c=>{
