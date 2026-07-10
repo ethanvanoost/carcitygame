@@ -5192,10 +5192,17 @@ function nearUfo(){
   }
   return null;
 }
+const UFO_COOLDOWN=30*60*1000;   // after a robbery the vault re-locks for 30 real minutes
+function ufoKey(u){return "vc4ufo:"+Math.round(u.x)+","+Math.round(u.z);}
+function ufoLockLeft(u){
+  const ts=parseInt(localStorage.getItem(ufoKey(u)),10);
+  if(isNaN(ts))return 0;   // never robbed (or an old save): unlocked
+  return Math.max(0,UFO_COOLDOWN-(Date.now()-ts));
+}
 function openRobUfo(u){
-  const rkey="vc4ufo:"+Math.round(u.x)+","+Math.round(u.z)+":"+new Date().toISOString().slice(0,10);
-  if(localStorage.getItem(rkey)){
-    toast("\u{1F6F8} You already robbed this spaceship today — the aliens locked the vault!");
+  const left=ufoLockLeft(u);
+  if(left>0){
+    toast("\u{1F6F8}\u{1F512} The vault is LOCKED — the aliens reset it in "+Math.ceil(left/60000)+" minute"+(Math.ceil(left/60000)>1?"s":"")+"!");
     return;
   }
   showDest("\u{1F6F8} The alien spaceship...",[
@@ -5205,7 +5212,7 @@ function openRobUfo(u){
   ],v=>{
     if(v==="wave"){toast("\u{1F44B}\u{1F47D} The aliens wave back with all four fingers. Beep boop!");return;}
     if(v!=="rob")return;
-    try{localStorage.setItem(rkey,"1");}catch(e){}
+    try{localStorage.setItem(ufoKey(u),String(Date.now()));}catch(e){}
     addMoney(10000);
     DUMP.owned.push({color:"Alien",hex:"#7dff4f",glitter:Math.random()<0.08});
     renderDump();saveGame();
@@ -5904,7 +5911,7 @@ const UPDATE_PAGES=[
 <li>Glowing green <b>moon crystals</b> near every ship — walk into them for $100 each.</li></ul>
 <h4>\u{1F4B0} ROB THE SPACESHIP</h4><ul>
 <li>Press <b>T</b> at a spaceship: rob the vault for <b>$10,000</b> + a rare <b>ALIEN dumpling worth $1,000</b> (glitter aliens: $2,500!).</li>
-<li>But beware: the aliens get ANGRY and <b>chase you</b> — get caught and they zap back $5,000! One robbery per ship per day.</li></ul>
+<li>But beware: the aliens get ANGRY and <b>chase you</b> — get caught and they zap back $5,000! After a robbery the vault re-locks for <b>30 minutes</b>.</li></ul>
 <h4>\u{1F6AB} NO TELEPORTING</h4><ul>
 <li>The aliens JAM teleporters near their ships — the map's "\u{1F6F8} Nearest ALIEN spaceship" button only sets a <b>route</b>. Fly your rocket and follow the line: a true expedition!</li></ul>
 <h4>\u{1F698} RIDE ALONG WITH FRIENDS</h4><ul>
