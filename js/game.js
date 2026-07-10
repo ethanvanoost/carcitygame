@@ -4941,35 +4941,43 @@ $("kF").onclick=()=>tryEnterLeave();
 /* ================= FERRY ISLANDS: the car ferry & island fun ================= */
 const FERRIES=new Map();
 function ferryRoute(s){
-  /* find the nearest shore in a straight line — that's where the mainland pier goes */
+  /* find the nearest shore in a straight line — that's where the mainland pier goes.
+     The island's DRY land only reaches ~50 m from its center, so the island dock
+     sits at 70 m with a pier + boardwalk bridging the shallow water. */
   for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){
     for(let t=160;t<=1400;t+=40){
       const px=s.x+dx*t,pz=s.z+dz*t;
       if(seaAt(px,pz)<0.25&&baseH(px,pz)>0){
-        return{ax:s.x+dx*100,az:s.z+dz*100,bx:px-dx*30,bz:pz-dz*30,dx,dz};
+        return{ax:s.x+dx*70,az:s.z+dz*70,bx:px-dx*20,bz:pz-dz*20,dx,dz};
       }
     }
   }
   return null;
 }
-function buildPier(fg,x,z,along){
+function buildPier(fg,x,z,along,len,top){
+  len=len||14;top=top||1.05;
   const pg=new THREE.Group();fg.add(pg);
-  const w=along==="x"?14:6,d=along==="x"?6:14;
-  const top=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,0.3,d),new THREE.MeshLambertMaterial({color:0x8a6142})));
-  top.position.set(x,0.9,z);pg.add(top);
+  const w=along==="x"?len:4,d=along==="x"?4:len;
+  const topM=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,0.3,d),new THREE.MeshLambertMaterial({color:0x8a6142})));
+  topM.position.set(x,top-0.15,z);pg.add(topM);
   for(const ox of[-w/2+0.5,w/2-0.5])for(const oz of[-d/2+0.5,d/2-0.5]){
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,3.4),new THREE.MeshLambertMaterial({color:0x6f4e37}));
-    post.position.set(x+ox,-0.6,z+oz);pg.add(post);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,4.4),new THREE.MeshLambertMaterial({color:0x6f4e37}));
+    post.position.set(x+ox,top-2.2,z+oz);pg.add(post);
   }
-  decks.push({g:pg,x,z,hw:w/2,hd:d/2,tops:[1.05],ramp:null});
+  decks.push({g:pg,x,z,hw:w/2,hd:d/2,tops:[top],ramp:null});
 }
 function buildFerry(s,key){
   const route=ferryRoute(s);
   if(!route){FERRIES.set(key,null);return;}
   const g=new THREE.Group();scene.add(g);
   const along=route.dx!==0?"x":"z";
-  buildPier(g,route.ax,route.az,along);
-  buildPier(g,route.bx,route.bz,along);
+  const ux=route.dx,uz=route.dz;
+  /* ISLAND side: boardwalk from the beach (~42 m) out to the pier, pier to ~64 m,
+     ferry docks at 70 m — one continuous walk from the sand onto the deck */
+  buildPier(g,s.x+ux*47,s.z+uz*47,along,16,0.95);   // boardwalk over the shallows
+  buildPier(g,s.x+ux*58,s.z+uz*58,along,14,1.05);   // the pier
+  /* SHORE side: pier hugs the beach (dock 20 m out, pier reaches back to ~1 m) */
+  buildPier(g,route.bx+ux*12,route.bz+uz*12,along,14,1.05);
   /* the ferry itself: hull, flat car deck, ramps, cabin & funnel */
   const boat=new THREE.Group();g.add(boat);
   const hull=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(9.6,1.5,21),new THREE.MeshPhongMaterial({color:0x1d4e89,shininess:60})));
@@ -4995,10 +5003,12 @@ function buildFerry(s,key){
   const f={g,boat,key,route,along,fd,x:route.ax,z:route.az,px:route.ax,pz:route.az,off:(off%97)/97,docked:1};
   FERRIES.set(key,f);
 }
-/* the ferry loop follows the shared clock: everyone sees it at the same spot */
+/* the ferry loop follows the shared clock: everyone sees it at the same spot.
+   1 real second = 5 game minutes, so 1200 game minutes = a 4-REAL-MINUTE round trip
+   (the old value of 20 made the poor ferry cross the sea in 4 seconds!) */
 function ferryPhase(f){
   const tm=CLOCK.day*1440+CLOCK.min;
-  return ((tm/20)+f.off)%1;   // one full round trip every 20 game minutes (~4 real min)
+  return ((tm/1200)+f.off)%1;
 }
 function updateFerries(dt){
   /* make sure ferries exist for the islands around the player */
