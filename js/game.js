@@ -525,7 +525,8 @@ function dumpValue(d){
   if(d.color==="Rainbow")return d.glitter?250:30;
   if(d.color==="Gold")return d.glitter?20:30;
   if(d.color==="Pumpkin"||d.color==="Snowy")return d.glitter?150:40;   // seasonal specials
-  if(d.color==="Pearl")return d.glitter?180:60;                        // island exclusive
+  if(d.color==="Pearl")return d.glitter?90:25;                         // island exclusive (sells BELOW the $35 shop price!)
+  if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
 }
 /* little white stars sprinkled on every glitter dumpling */
@@ -652,8 +653,14 @@ $("dumpOpen").onclick=()=>{
   else{const c=DUMP_COLORS[Math.floor(Math.random()*DUMP_COLORS.length)];color=c[0];hex=c[1];}
   const glitter=Math.random()<0.08;   // rainbow + glitter = VERY rare
   DUMP.owned.push({color,hex,glitter});
-  if(color==="Rainbow"&&glitter)toast("\u{1F308}✨ NO WAY!!! A GLITTER RAINBOW DUMPLING — the rarest of all! ($250)");
-  else if(color==="Rainbow")toast("\u{1F308}\u{1F95F} WOW — a rare RAINBOW dumpling! ($30)");
+  if(color==="Rainbow"&&glitter){
+    toast("\u{1F308}✨ NO WAY!!! A GLITTER RAINBOW DUMPLING — the rarest of all! ($250)");
+    pushNews("\u{1F308}✨ BREAKING: "+mpName()+" just opened the LEGENDARY GLITTER RAINBOW dumpling — the rarest in the world!!");
+  }
+  else if(color==="Rainbow"){
+    toast("\u{1F308}\u{1F95F} WOW — a rare RAINBOW dumpling! ($30)");
+    pushNews("\u{1F308} "+mpName()+" opened a rare RAINBOW dumpling!");
+  }
   else if(color==="Gold")toast("\u{1F947}\u{1F95F} Shiny — a GOLD"+(glitter?" GLITTER":"")+" dumpling!");
   else toast(glitter?"✨\u{1F95F} WOW — a RARE GLITTER "+color+" dumpling!!":"\u{1F95F} You got a "+color+" dumpling!");
   renderDump();saveGame();
@@ -812,8 +819,82 @@ function updateCave(){
     }
   }
 }
-/* ---------- random events: road construction, accidents & festivals ---------- */
+/* ---------- CITY NEWS: every TV in the game shows what's really happening ---------- */
+const NEWS=["Welcome to CITY NEWS — all the city's stories, LIVE!"];
+function pushNews(t){
+  NEWS.push(t);
+  if(NEWS.length>8)NEWS.shift();
+}
+const newsCv=document.createElement("canvas");newsCv.width=256;newsCv.height=136;
+const newsTex=new THREE.CanvasTexture(newsCv);
+const newsMat=new THREE.MeshBasicMaterial({map:newsTex});
+KEEP.add(newsMat);KEEP.add(newsTex);
+let _newsI=0,_newsT=0;
+function updateNews(dt){
+  _newsT-=dt;
+  if(_newsT>0)return;
+  _newsT=3.2;
+  _newsI=(_newsI+1)%NEWS.length;
+  const c=newsCv.getContext("2d");
+  c.fillStyle="#08131f";c.fillRect(0,0,256,136);
+  c.fillStyle="#c0392b";c.fillRect(0,0,256,26);
+  c.fillStyle="#fff";c.font="bold 16px Segoe UI";c.textAlign="left";
+  c.fillText("\u{1F4FA} CITY NEWS · LIVE",8,19);
+  /* word-wrap the headline */
+  c.font="13px Segoe UI";c.fillStyle="#e8edf7";
+  const words=String(NEWS[_newsI]).split(" ");
+  let line="",y=48;
+  for(const w of words){
+    if((line+" "+w).length>32){c.fillText(line,8,y);y+=17;line=w;}
+    else line=line?line+" "+w:w;
+    if(y>110)break;
+  }
+  if(line&&y<=110)c.fillText(line,8,y);
+  /* ticker */
+  c.fillStyle="#1a2438";c.fillRect(0,118,256,18);
+  c.fillStyle="#ffd75e";c.font="bold 11px Segoe UI";
+  c.fillText("BREAKING · story "+(_newsI+1)+" / "+NEWS.length+" · stay tuned...",8,131);
+  newsTex.needsUpdate=true;
+}
+/* ---------- random events: construction, accidents (+ambulance), fires (+fire truck) & festivals ---------- */
 const EVENTS={list:[],timer:25};
+/* an emergency vehicle that drives in and parks at the scene */
+function addResponder(e,kind,delay){
+  const mesh=buildEmergencyMesh(kind);
+  const a=Math.random()*Math.PI*2;
+  const r={kind,mesh,x:e.x+Math.sin(a)*220,z:e.z+Math.cos(a)*220,
+    ox:(Math.random()-0.5)*10,oz:8+Math.random()*4,state:"drive",delay:delay||0};
+  mesh.position.set(r.x,terrainH(r.x,r.z),r.z);
+  mesh.visible=false;
+  e.g.add(mesh);
+  e.resp=r;
+}
+function updateResponder(e,dt,now){
+  const r=e.resp;
+  if(!r)return;
+  if(r.delay>0){r.delay-=dt;return;}
+  r.mesh.visible=true;
+  if(r.state==="drive"){
+    const tx=e.x+r.ox,tz=e.z+r.oz;
+    const dx=tx-r.x,dz=tz-r.z,d=Math.hypot(dx,dz);
+    if(d<3){
+      r.state="parked";
+      if(r.kind==="fire")toast("\u{1F692} The fire truck arrived — water ON!");
+      else if(r.kind==="ambulance")toast("\u{1F691} The ambulance is on scene — the patients are in good hands!");
+    }else{
+      const yaw=Math.atan2(dx,dz);
+      r.x+=dx/d*17*dt;r.z+=dz/d*17*dt;
+      r.mesh.rotation.set(0,yaw,0);
+      if(r.mesh.userData.wheels)for(const w of r.mesh.userData.wheels)w.spin.rotation.x+=17/w.r*dt;
+    }
+    r.mesh.position.set(r.x,terrainH(r.x,r.z),r.z);
+  }
+  if(r.mesh.userData.lights){
+    const on=Math.floor(now/160)%2===0;
+    r.mesh.userData.lights[0].visible=on;
+    r.mesh.userData.lights[1].visible=!on;
+  }
+}
 function eventSpeedCap(x,z){
   let cap=Infinity;
   for(const e of EVENTS.list)if(e.cap&&Math.hypot(x-e.x,z-e.z)<e.zone)cap=Math.min(cap,e.cap);
@@ -828,9 +909,41 @@ function eventRoadPoint(){
   return axis==="z"?{x:line+off,z:along,axis}:{x:along,z:line+off,axis};
 }
 function spawnEvent(forceType){
-  const type=forceType||["construction","accident","festival"][Math.floor(Math.random()*3)];
+  const type=forceType||["construction","accident","festival","fire"][Math.floor(Math.random()*4)];
   const g=new THREE.Group();
   const e={type,g,life:150,x:0,z:0};
+  if(type==="fire"){
+    /* a HOUSE FIRE: flames on a nearby building until the fire truck puts it out */
+    const cand=buildings.filter(b=>{
+      if(!b.alive||b.walkThru)return false;
+      const d=Math.hypot(b.x-player.x,b.z-player.z);
+      return d>70&&d<340;
+    });
+    if(!cand.length){disposeGroup(g);return;}
+    const b=cand[Math.floor(Math.random()*cand.length)];
+    e.x=b.x;e.z=b.z;e.gy=b.gy;e.fire=1;e.life=120;
+    e.flames=[];
+    const fr=[0xff7f11,0xffd166,0xd7263d];
+    for(let i=0;i<7;i++){
+      const fl=new THREE.Mesh(new THREE.ConeGeometry(0.5+Math.random()*0.5,1.6+Math.random()*1.6,6),
+        new THREE.MeshBasicMaterial({color:fr[i%3],transparent:true,opacity:0.9}));
+      fl.position.set(b.x+(Math.random()-0.5)*Math.min(7,b.w),b.gy+2+Math.random()*3.5,b.z+(Math.random()-0.5)*Math.min(6,b.d));
+      g.add(fl);e.flames.push(fl);
+    }
+    /* the water jet (hidden until the truck sprays) */
+    e.drops=[];
+    for(let i=0;i<12;i++){
+      const dr=new THREE.Mesh(new THREE.SphereGeometry(0.16,6,6),
+        new THREE.MeshBasicMaterial({color:0x6fc7ff,transparent:true,opacity:0.85}));
+      dr.visible=false;g.add(dr);e.drops.push(dr);
+    }
+    addResponder(e,"fire",3);
+    pushNews("\u{1F525} HOUSE FIRE near ("+Math.round(e.x)+", "+Math.round(e.z)+")! The fire truck is racing to the scene.");
+    toast("\u{1F525}\u{1F692} A HOUSE caught FIRE near ("+Math.round(e.x)+", "+Math.round(e.z)+") — the fire truck is on its way!");
+    scene.add(g);
+    EVENTS.list.push(e);
+    return;
+  }
   if(type==="construction"){
     const p=eventRoadPoint();e.x=p.x;e.z=p.z;e.zone=22;e.cap=8;
     const y=terrainH(p.x,p.z);
@@ -857,7 +970,10 @@ function spawnEvent(forceType){
     const pol=buildEmergencyMesh("police");
     pol.position.set(p.x+(p.axis==="z"?0:8),y,p.z+(p.axis==="z"?8:0));g.add(pol);
     e.lights=pol.userData.lights;
-    toast("\u{1F6A8} ACCIDENT on the road near ("+Math.round(e.x)+", "+Math.round(e.z)+") — police on site, drive slowly!");
+    /* the ambulance rushes in to help */
+    addResponder(e,"ambulance",4);
+    pushNews("\u{1F6A8} Accident near ("+Math.round(e.x)+", "+Math.round(e.z)+") — the ambulance is on its way, drive carefully!");
+    toast("\u{1F6A8} ACCIDENT on the road near ("+Math.round(e.x)+", "+Math.round(e.z)+") — police on site, ambulance incoming!");
   }else{
     /* festival: an off-road party — visit it on foot for +$50 */
     let fx=0,fz=0,ok=false;
@@ -888,6 +1004,7 @@ function spawnEvent(forceType){
       const pp=spawnPed(fx-5+Math.random()*10,fz+2+Math.random()*5,"wander");
       if(pp)e.peds.push(pp);
     }
+    pushNews("\u{1F389} A FESTIVAL is happening near ("+Math.round(fx)+", "+Math.round(fz)+") — free $50 for every visitor!");
     toast("\u{1F389} A FESTIVAL started near ("+Math.round(fx)+", "+Math.round(fz)+") — visit it on foot for $50!");
   }
   scene.add(g);
@@ -905,6 +1022,33 @@ function updateEvents(dt){
     const e=EVENTS.list[i];
     e.life-=dt;
     if(e.lights){const on=Math.floor(now/250)%2===0;e.lights[0].visible=on;e.lights[1].visible=!on;}
+    updateResponder(e,dt,now);
+    /* burning houses: flames flicker + smoke, until the fire truck sprays them out */
+    if(e.fire!==undefined&&e.fire>0){
+      e.flames.forEach((fl,fi)=>{
+        fl.scale.setScalar(Math.max(0.05,e.fire*(0.75+Math.sin(now/85+fi*2)*0.3)));
+      });
+      if(Math.random()<dt*5)puffSmoke(e.x+(Math.random()-0.5)*5,e.gy+6,e.z+(Math.random()-0.5)*5);
+      if(e.resp&&e.resp.state==="parked"){
+        /* WATER ON: an arc of drops from the truck's hose to the flames */
+        const r=e.resp;
+        e.fire=Math.max(0,e.fire-dt/9);
+        e.drops.forEach((dr,di)=>{
+          dr.visible=true;
+          const t=((now/700)+di/e.drops.length)%1;
+          const sx=r.x,sy=terrainH(r.x,r.z)+2.4,sz=r.z;
+          const tx=e.x,ty=e.gy+3,tz=e.z;
+          dr.position.set(sx+(tx-sx)*t,sy+(ty-sy)*t+Math.sin(t*Math.PI)*3.2,sz+(tz-sz)*t);
+        });
+        if(e.fire<=0){
+          e.flames.forEach(fl=>fl.visible=false);
+          e.drops.forEach(dr=>dr.visible=false);
+          e.life=Math.min(e.life,10);
+          pushNews("\u{1F692} The fire fighters put out the house fire near ("+Math.round(e.x)+", "+Math.round(e.z)+") — everyone is safe!");
+          if(Math.hypot(player.x-e.x,player.z-e.z)<260)toast("\u{1F692}\u{1F4A6} FIRE'S OUT! Great work by the fire fighters!");
+        }
+      }
+    }
     if(e.balloons){
       e.balloons.forEach((b,bi)=>{b.position.y=b.userData.y0+Math.sin(now/700+bi)*0.5;});
       if(!e.done&&player.onFoot&&Math.hypot(player.x-e.x,player.z-e.z)<10){
@@ -1639,7 +1783,8 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
   }else if(t==="tv"){
     box(1.6,0.5,0.5,0,0.25,0,darkTrim);
     box(2.2,1.25,0.12,0,1.2,0,darkTrim);
-    const scr=new THREE.Mesh(new THREE.PlaneGeometry(2,1.05),new THREE.MeshBasicMaterial({color:0x2e8bff}));
+    /* the TV really plays CITY NEWS — live stories from your world! */
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(2,1.05),newsMat);
     scr.position.set(0,1.2,0.07);g.add(scr);
   }else if(t==="plant"){
     const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.22,0.45,10),new THREE.MeshLambertMaterial({color:0xb8532b}));
@@ -2061,6 +2206,7 @@ function endConcert(p){
     if(p.hatBills)p.hatBills.visible=true;
     toast("\u{1F44F}\u{1F44F} BRAVO! The crowd claps and drops $"+tip+" in the \u{1F3A9} hat"
       +(real?" — "+real+" REAL player"+(real>1?"s":"")+" watched, tips x"+mult+"!":" on the way out — press T at the hat to collect it!"));
+    pushNews("\u{1F3B9} "+mpName()+" gave a concert — the crowd tipped $"+tip+"!");
   }else toast("\u{1F3B5} Concert over — nobody was in the seats this time.");
 }
 function updateCrowd(dt){
@@ -2846,7 +2992,8 @@ function tryCall(){
     /* the dumpling museum */
     if(nearMuseum()){openMuseum();return;}
     /* island fun: the beach shop & the buried-treasure X */
-    if(nearIslandThing("shop",5)){openBeachShop();return;}
+    const bsh=nearIslandThing("shop",5);
+    if(bsh){openBeachShop(bsh);return;}
     const dg=nearIslandThing("digX",3.5);
     if(dg){digTreasureX(dg);return;}
     /* standing in YOUR mansion: T opens the editor. In someone ELSE's: the visitor menu */
@@ -3176,6 +3323,18 @@ function walkPlayer(dt){
     if(Math.abs(nx-b.x)<b.w/2+0.4&&Math.abs(nz-b.z)<b.d/2+0.4){
       if(!(Math.abs(player.x-b.x)<b.w/2+0.4&&Math.abs(player.z-b.z)<b.d/2+0.4))blocked=true;
     }
+  }
+  /* REAL WALLS: walk-in buildings can only be entered/left through the doorway */
+  if(!blocked&&S.world==="earth"&&!CAVE.in)for(let i=shells.length-1;i>=0;i--){
+    const sh=shells[i];
+    if(offScene(sh.g)){shells.splice(i,1);continue;}
+    if(Math.abs(player.y-sh.y)>3.2)continue;   // only the ground floor has these walls
+    const inNow=Math.abs(player.x-sh.x)<sh.hw&&Math.abs(player.z-sh.z)<sh.hd;
+    const inNext=Math.abs(nx-sh.x)<sh.hw&&Math.abs(nz-sh.z)<sh.hd;
+    if(inNow===inNext)continue;
+    let atDoor=false;
+    for(const o of sh.open)if(Math.hypot(nx-o.x,nz-o.z)<o.r+0.5){atDoor=true;break;}
+    if(!atDoor){blocked=true;break;}
   }
   if(!blocked){player.x=nx;player.z=nz;}
   /* inside a hotel room you can't walk through the walls */
@@ -3540,6 +3699,7 @@ function endRace(win){
     addMoney(reward);
     ACH.flags.race=true;saveAch();
     toast("\u{1F3C6} FINISH in "+RACE.t.toFixed(1)+"s — you won $"+reward+"!");
+    pushNews("\u{1F3C1} "+mpName()+" won a checkpoint race in "+RACE.t.toFixed(1)+" seconds!");
   }else toast("\u{1F3C1} Race cancelled.");
 }
 /* ---------- MULTIPLAYER races: $100 entry, first to finish takes the pot ---------- */
@@ -3644,6 +3804,7 @@ function arrestPlayer(){
   ACC.on=false;$("accBtn").textContent="OFF";$("accBtn").classList.remove("on");
   teleportTo(WORLD.ox+6,WORLD.oz+6);
   toast("\u{1F694} BUSTED! You were arrested and released at spawn.");
+  pushNews("\u{1F694} "+mpName()+" was caught by the police after a wild chase!");
   arrestCd=6;
 }
 /* traffic */
@@ -4010,12 +4171,12 @@ function drawMap(){
     }
     /* live random events: construction, accidents & festivals */
     for(const e of EVENTS.list){
-      const col=e.type==="construction"?"#ffb02e":(e.type==="accident"?"#ff5c5c":"#f472b6");
+      const col=e.type==="construction"?"#ffb02e":(e.type==="accident"?"#ff5c5c":(e.type==="fire"?"#ff7f11":"#f472b6"));
       dot(e.x,e.z,col,6);
       const px=(e.x-mapView.cx)*sc+cv.width/2,py=-(e.z-mapView.cz)*sc+cv.height/2;
       if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
         c.fillStyle=col;c.font="bold 11px Segoe UI";c.textAlign="center";
-        c.fillText(e.type==="construction"?"\u{1F6A7}":(e.type==="accident"?"\u{1F6A8}":"\u{1F389}"),px,py-9);
+        c.fillText(e.type==="construction"?"\u{1F6A7}":(e.type==="accident"?"\u{1F6A8}":(e.type==="fire"?"\u{1F525}":"\u{1F389}")),px,py-9);
       }
     }
   }
@@ -4143,7 +4304,7 @@ function mapEntries(q){
   /* live random events, nearest first */
   EVENTS.list
     .map(e=>({e,d:Math.hypot(e.x-player.x,e.z-player.z),
-      label:e.type==="construction"?"\u{1F6A7} Road construction":(e.type==="accident"?"\u{1F6A8} Accident":"\u{1F389} Festival ($50!)")}))
+      label:e.type==="construction"?"\u{1F6A7} Road construction":(e.type==="accident"?"\u{1F6A8} Accident":(e.type==="fire"?"\u{1F525} House fire!":"\u{1F389} Festival ($50!)"))}))
     .filter(x=>!q||x.label.toLowerCase().includes(q))
     .sort((a,b)=>a.d-b.d)
     .forEach(({e,d,label})=>out.push({label:label+" — "+fmtDist(d),go:()=>chooseDest(label,e.x,e.z+12,true)}));
@@ -4775,13 +4936,43 @@ function nearIslandThing(list,r){
   }
   return null;
 }
-function openBeachShop(){
-  showDest("\u{1F3D6} Beach shop — welcome to the island!",[
-    {label:"\u{1F965} Coconut drink — $15 (goes in your \u{1F392} backpack)",value:"coco"},
+/* the 20-piece BEACH DUMPLING collection — only sold on islands */
+const BEACH_DUMPS=[
+  ["Coral","#ff7e67"],["Wave","#4fc3f7"],["Lagoon","#00bfa5"],["Sunset","#ff8a3d"],
+  ["Shell","#ffe9d6"],["Starfish","#ff5d5d"],["Palm","#2f9e44"],["Coconut","#8a6142"],
+  ["Sandy","#e6d9a8"],["Ocean","#1d6f9e"],["Seaweed","#3a5f0b"],["Dolphin","#9fb4c7"],
+  ["Sunrise","#ffd166"],["Tide","#5c7cfa"],["Reef","#e64980"],["Breeze","#c5f6fa"],
+  ["Shark","#66788a"],["Salty","#f1f3f5"],["Tropic","#94d82d"],["Captain","#364fc7"]
+];
+function beachCollectionCount(){
+  return BEACH_DUMPS.filter(b=>DUMP.owned.some(d=>d.color===b[0])).length;
+}
+function giveBeachDump(free){
+  const c=BEACH_DUMPS[Math.floor(Math.random()*BEACH_DUMPS.length)];
+  DUMP.owned.push({color:c[0],hex:c[1],glitter:Math.random()<0.08});
+  renderDump();saveGame();
+  toast((free?"\u{1F381} FREE mystery dumpling: ":"\u{1F41A} ")+"a "+c[0].toUpperCase()+" beach dumpling! Collection: "
+    +beachCollectionCount()+" / 20"+(beachCollectionCount()>=20?" — COMPLETE!! \u{1F389}":""));
+}
+function openBeachShop(isl){
+  const mystKey="vc4myst:"+Math.round(isl.x)+","+Math.round(isl.z)+":"+new Date().toISOString().slice(0,10);
+  const mystUsed=!!localStorage.getItem(mystKey);
+  showDest("\u{1F3D6} Beach shop — collection: "+beachCollectionCount()+" / 20 beach dumplings",[
+    {label:"\u{1F381} FREE mystery beach dumpling"+(mystUsed?" (come back tomorrow!)":" — 1 per island per day"),value:"myst"},
+    {label:"\u{1F41A} Beach dumpling — $35 (20 different ones to collect!)",value:"beach"},
     {label:"\u{1FAA9} PEARL dumpling — $35 (island exclusive!)",value:"pearl"},
+    {label:"\u{1F965} Coconut drink — $15 (goes in your \u{1F392} backpack)",value:"coco"},
     {label:"❌ Just enjoying the beach",value:"cancel"}
   ],v=>{
-    if(v==="coco"){
+    if(v==="myst"){
+      if(mystUsed){toast("\u{1F381} You already got today's free mystery dumpling here — visit another island or come back tomorrow!");return;}
+      try{localStorage.setItem(mystKey,"1");}catch(e){}
+      giveBeachDump(true);
+    }else if(v==="beach"){
+      if(MONEY.v<35){toast("\u{1F4B0} That costs $35!");return;}
+      MONEY.v-=35;updateMoneyUI();
+      giveBeachDump(false);
+    }else if(v==="coco"){
       if(MONEY.v<15){toast("\u{1F4B0} That costs $15!");return;}
       MONEY.v-=15;updateMoneyUI();saveGame();
       MCD.pack.push(["\u{1F965} Coconut drink",30]);renderPack();
@@ -4934,6 +5125,7 @@ async function claimTreasure(){
   toast(first
     ?"\u{1F3F4}‍☠️\u{1F947} YOU FOUND TODAY'S TREASURE FIRST — $2,000!! A new one appears tomorrow!"
     :"\u{1F3F4}‍☠️ Treasure found! Another player got here first — still $250 for you!");
+  pushNews("\u{1F3F4}‍☠️ "+mpName()+" dug up today's hidden treasure"+(first?" FIRST — $2,000!":"!"));
 }
 function treasureHintText(){
   const dx=TREASURE.x-player.x,dz=TREASURE.z-player.z,d=Math.hypot(dx,dz);
@@ -5423,7 +5615,26 @@ const UPDATE_PAGES=[
 <li>The \u{1F3D6} beach shop sells shimmering <b>PEARL dumplings</b> ($35, worth $60 — glitter pearls $180!) and \u{1F965} coconut drinks.</li>
 <li>You can ONLY get pearls on islands — show them off on your mansion display table!</li></ul>
 <h4>⛏️ X MARKS THE SPOT</h4><ul>
-<li>Every island hides a buried-treasure <b>X</b> on the beach — press T to dig: $150 + a chance of a buried pearl. The sand refills every night!</li></ul>`}
+<li>Every island hides a buried-treasure <b>X</b> on the beach — press T to dig: $150 + a chance of a buried pearl. The sand refills every night!</li></ul>`},
+{t:"Round 19 — Beach dumpling collection & REAL walls",h:`
+<h4>\u{1F41A} 20 BEACH DUMPLINGS TO COLLECT</h4><ul>
+<li>The island beach shop now sells <b>beach dumplings</b> — 20 different ones: Coral, Wave, Lagoon, Sunset, Shell, Starfish, Palm, Coconut, Sandy, Ocean, Seaweed, Dolphin, Sunrise, Tide, Reef, Breeze, Shark, Salty, Tropic and Captain!</li>
+<li>\u{1F381} A <b>FREE mystery beach dumpling</b> — one per island per day. Island-hop to fill your collection!</li>
+<li>The shop shows your progress: collect all <b>20 / 20</b>!</li></ul>
+<h4>\u{1F4B0} MONEY GLITCH FIXED</h4><ul>
+<li>Pearl (and beach) dumplings now sell for $25 — <b>below</b> the $35 shop price, so buying-and-selling no longer prints money. Glitter ones still sell for $90!</li></ul>
+<h4>\u{1F9F1} REAL WALLS</h4><ul>
+<li>You can't walk through the walls of shops, MEGA MARTs, museums, concert halls, mansions and hotel lobbies anymore — use the door like a normal person!</li></ul>`},
+{t:"Round 20 — House fires, ambulances & LIVE TV news",h:`
+<h4>\u{1F525}\u{1F692} HOUSE FIRES + FIRE TRUCKS</h4><ul>
+<li>New random event: a house catches <b>FIRE</b> — flickering flames and smoke pouring from the roof (\u{1F525} on the map).</li>
+<li>A <b>fire truck races to the scene</b>, parks, and sprays a real arc of water onto the flames until the fire is out.</li></ul>
+<h4>\u{1F691} AMBULANCES AT ACCIDENTS</h4><ul>
+<li>Every accident now gets an <b>ambulance</b> that drives in with flashing lights and takes care of the patients.</li></ul>
+<h4>\u{1F4FA} LIVE CITY NEWS ON YOUR TV</h4><ul>
+<li>The TV in your mansion <b>actually broadcasts the news</b> — real, live stories from your world:</li>
+<li>\u{1F389} festivals starting · \u{1F6A8} accidents · \u{1F525} house fires (and when they're put out) · \u{1F308}✨ players opening rainbow glitter dumplings · \u{1F3F4}‍☠️ treasure finds · \u{1F3C1} race wins · \u{1F3B9} concerts · \u{1F694} police arrests!</li>
+<li>Headlines rotate every few seconds with a proper news banner and ticker. Buy a TV ($800) in the mansion editor and stay informed!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -5495,7 +5706,7 @@ function frame(now){
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
-  updateWeather(dt);updateTreasure(dt);updateAch(dt);
+  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateNews(dt);
   updateChunks(player.x,player.z);
   updateLandmarks(player.x,player.z);
   updateCamera(dt);

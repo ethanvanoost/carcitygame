@@ -746,6 +746,9 @@ function regBuilding(x,z,w,d,parts,gy){
 }
 /* interactive hotel furniture (reception desks, beds, chairs, rooms) */
 const hotelDesks=[],hotelBeds=[],chairs=[],hotelRooms=[],roomExits=[];
+/* walk-in buildings register their WALLS here: you can only pass at the doorways */
+const shells=[];
+function regShell(g,x,z,hw,hd,y,open){shells.push({g,x,z,hw,hd,y,open});}
 function makeChair(cx,cz,yaw,parent,baseY){
   const cm=new THREE.MeshLambertMaterial({color:0x8a4f2d});
   const seat=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.1,0.6),cm);
@@ -863,6 +866,7 @@ function apartment(x,z,rand,parent,baseY){
   esign.position.set(ex,RY+1.9,ez+0.4);parent.add(esign);
   roomExits.push({g:parent,x:ex,z:ez,y:RY,id,outX:x-1,outZ:z+d/2+2,outY:baseY});
   hotelDesks.push({g:parent,x:dx,z:dz+1,id,y:baseY,room:{x,z,ry:RY}});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x-1,z:z+d/2,r:1.8}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
@@ -956,6 +960,7 @@ function shop(x,z,rand,parent,baseY){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(9,2.2),shopSignMat(name));
   sign.position.set(x,baseY+h+1.6,z+d/2+0.05);parent.add(sign);
   shops.push({g:parent,x,z,huge:false});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x-1.15,z:z+d/2,r:1.9}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
@@ -1030,6 +1035,7 @@ function hugeShop(x,z,rand,parent,baseY){
   sign2.position.set(x-w/2-0.1,baseY+h+4,z);sign2.rotation.y=-Math.PI/2;parent.add(sign2);
   for(let i=0;i<3;i++)spawnQueue.push([x-20+rand()*40,z+d/2+4+rand()*5]);
   shops.push({g:parent,x,z,huge:true});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x-25,z:z+d/2,r:3.6},{x:x+25,z:z+d/2,r:3.6}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
@@ -1168,6 +1174,7 @@ function mansion(x,z,rand,parent,baseY){
       bl.position.set(fx,fy+0.66,fz);parent.add(bl);
     }
   }
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x,z:z+d/2,r:4.6}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   const man={g:parent,x,z,id,baseY,tableG:null,furnG:null};
   mansions.push(man);
@@ -1447,6 +1454,7 @@ function buildMuseum(x,z,rand,parent,baseY){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.4),museumSignMat());
   sign.position.set(x,baseY+h+1.7,z+d/2+0.05);parent.add(sign);
   museums.push({g:parent,x,z,dump});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x-1.15,z:z+d/2,r:1.9}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
@@ -1525,6 +1533,7 @@ function buildConcertHall(x,z,rand,parent,baseY){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(18,3.4),chSignMat());
   sign.position.set(x,baseY+h+2.2,z+d/2+0.06);parent.add(sign);
   concertHalls.push({g:parent,x,z});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x-4.5,z:z+d/2,r:5.6}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
 }
