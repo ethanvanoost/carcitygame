@@ -267,6 +267,7 @@ $("musTgl").onclick=()=>{
 };
 /* spawn / start */
 function goSpawn(){
+  endRide(true);
   switchWorld("earth");
   const sx=WORLD.ox+6,sz=WORLD.oz+6;
   player.inRocket=false;
@@ -2640,7 +2641,7 @@ function mpMakeLabel(name){
 }
 function mpApply(k,d){
   if(!d||typeof d.x!=="number"||typeof d.z!=="number")return;
-  const kind=d.f?"foot":(d.v==="moto"||d.v==="bike"?d.v:"car");
+  const kind=d.f?"foot":(d.v==="seat"?"seat":(d.v==="moto"||d.v==="bike"?d.v:"car"));
   const col=typeof d.c==="number"?(d.c&0xffffff):0x3fd0ff;
   const nm=typeof d.n==="string"?d.n.slice(0,16):"player";
   const av=typeof d.av==="string"?d.av:"";
@@ -2649,11 +2650,17 @@ function mpApply(k,d){
   if(!o){
     const g=new THREE.Group();
     const avObj=parseAv(av);
-    const body=kind==="foot"?makePerson(1,avObj?avObj.shirt:col,avObj):buildVehicleMesh(kind,col);
+    const body=(kind==="foot"||kind==="seat")?makePerson(1,avObj?avObj.shirt:col,avObj):buildVehicleMesh(kind,col);
+    if(kind==="seat"){
+      /* a passenger sitting in someone's car */
+      const L=body.userData.limbs;
+      L.lL.rotation.x=-1.5;L.rL.rotation.x=-1.5;L.lA.rotation.x=-0.5;L.rA.rotation.x=-0.5;
+      body.position.y=0.42;
+    }
     if(body.userData&&body.userData.riderMesh)body.userData.riderMesh.visible=true;
     g.add(body);
     const lbl=mpMakeLabel(nm);
-    lbl.position.y=kind==="foot"?2.7:3.1;g.add(lbl);
+    lbl.position.y=(kind==="foot"||kind==="seat")?2.7:3.1;g.add(lbl);
     scene.add(g);
     o={g,kind,color:col,name:nm,av,k,x:d.x,z:d.z,y:d.y||0,yaw:d.r||0};
     MP.others.set(k,o);
@@ -2691,8 +2698,8 @@ function mpTick(dt){
     x:Math.round(src.x*10)/10,z:Math.round(src.z*10)/10,y:Math.round((src.y||0)*10)/10,
     r:Math.round((src.yaw||0)*100)/100,
     f:player.onFoot?1:0,
-    v:player.drive?player.drive.type:"car",
-    c:paintOf(S.selected),
+    v:RIDE.on?"seat":(player.drive?player.drive.type:"car"),
+    c:RIDE.on?AVATAR.shirt:paintOf(S.selected),
     av:avString(),
     t:Date.now()};
   const sig=[d.x,d.z,d.y,d.r,d.f,d.v,d.n,d.av].join("|");
@@ -3075,6 +3082,8 @@ function arrivalPeople(x,z){
 /* ---------- enter / leave ---------- */
 function tryEnterLeave(){
   SIT.on=false;   // stand up before getting into anything
+  /* riding shotgun in another player's car: F hops out */
+  if(RIDE.on){endRide();return;}
   /* rocket first: leaving */
   if(player.inRocket){
     if(rocket.state==="piloted"){
@@ -3175,6 +3184,11 @@ function tryEnterLeave(){
     player.drive=myVehicle;player.onFoot=false;player.mesh.visible=false;
     if(myVehicle.mesh.userData.riderMesh)myVehicle.mesh.userData.riderMesh.visible=true;
     return;
+  }
+  /* ...or hop into ANOTHER PLAYER's car as a passenger! */
+  if(player.onFoot){
+    const r=nearRideableCar();
+    if(r){startRide(r.k,r.o);return;}
   }
 }
 function landOnFootOrVehicle(){
@@ -3922,6 +3936,10 @@ function updateTraffic(dt){
 const FPS={frames:0,t:0,val:0};
 function camTargetInfo(){
   if(player.inRocket)return{x:rocket.x,y:rocket.y+9,z:rocket.z,yaw:rocket.yaw||0,d:46,h:16};
+  if(RIDE.on){
+    const o=MP.others.get(RIDE.key);
+    if(o)return{x:o.x,y:o.y+1,z:o.z,yaw:o.yaw,d:13,h:5};
+  }
   if(player.inTrain){const t=player.train;return{x:t.g.position.x,y:t.g.position.y+3,z:t.z,yaw:t.g.rotation.y+(t.speed<0?Math.PI:0),d:26,h:10};}
   if(player.inPlane){const p=player.planeRef;return{x:p.x,y:p.y+2,z:p.z,yaw:p.yaw,d:30,h:12};}
   if(player.inBus){const b=player.bus;return{x:b.g.position.x,y:b.g.position.y+2,z:b.g.position.z,yaw:b.yaw,d:20,h:8};}
@@ -4657,6 +4675,7 @@ function updateCompass(){
   c.beginPath();c.moveTo(R,4);c.lineTo(R-5,13);c.lineTo(R+5,13);c.closePath();c.fill();
 }
 function teleportTo(x,z){
+  endRide(true);
   /* the aliens JAM teleporters near their spaceships — you must travel there yourself */
   if(S.world==="moon"){
     const ci=Math.round((x-3300)/UFOSP),cj=Math.round((z-6600)/UFOSP);
@@ -4678,7 +4697,7 @@ function teleportTo(x,z){
 function switchWorld(w){
   if(S.world===w)return;
   S.world=w;
-  SIT.on=false;
+  SIT.on=false;endRide(true);
   /* the whole streamed world is rebuilt for the new planet */
   for(const[k,g]of chunks){if(g!=="pending")disposeChunk(g);}
   chunks.clear();buildQueue.length=0;
@@ -4804,6 +4823,10 @@ function updateHint(){
   else if(player.inTrain){txt=S.admin?"Driving the train (admin) — F to get off":"Riding the train — F to get off";showF=true;}
   else if(player.inPlane){const p=player.planeRef;txt=p.state==="piloted"?"Flying (admin controls)":"On the plane";showF=true;}
   else if(player.inBus){txt="On the bus — F to get off when stopped";showF=true;}
+  else if(RIDE.on){
+    const o=MP.others.get(RIDE.key);
+    txt="\u{1F698} Riding along with "+(o?o.name:"a friend")+" — press F to hop out";showF=true;
+  }
   else{
     if(CAVE.in){txt="\u{1F573}️ In the cave — grab the glowing crystals · press T to go back outside";showT=true;}
     else if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
@@ -4869,6 +4892,10 @@ function updateHint(){
     for(const p of planes)if(p.state==="parked"&&Math.hypot(player.x-p.x,player.z-p.z)<16){txt="Plane parked — press F to board!";showF=true;}
     for(const b of buses){const bp=busPos(b);if(b.state==="waiting"&&Math.hypot(player.x-bp.x,player.z-bp.z)<12){txt="Bus waiting — press F to board!";showF=true;}}
     if(!txt&&player.onFoot&&myVehicle&&Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)<5){txt="Press F to get in your "+(S.selected?S.selected.name:"vehicle");showF=true;}
+    if(!txt&&player.onFoot){
+      const rr=nearRideableCar();
+      if(rr){txt="\u{1F698} "+rr.o.name+"'s "+(rr.o.kind==="moto"?"motorcycle":"car")+" — press F to hop in the PASSENGER seat!";showF=true;}
+    }
     }
     if(!txt&&S.world==="moon"){
       const uf=nearUfo();
@@ -5105,6 +5132,56 @@ function digTreasureX(isl){
     renderDump();saveGame();
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
+/* ================= RIDE ALONG: hop into another player's car as a PASSENGER ================= */
+const RIDE={on:false,key:null,px:0,pz:0};
+function nearRideableCar(){
+  let best=null,bd=4.5;
+  for(const[k,o]of MP.others){
+    if(o.kind!=="car"&&o.kind!=="moto")continue;
+    const d=Math.hypot(player.x-o.x,player.z-o.z);
+    if(d<bd){bd=d;best={k,o};}
+  }
+  return best;
+}
+function startRide(k,o){
+  RIDE.on=true;RIDE.key=k;RIDE.px=o.x;RIDE.pz=o.z;
+  player.onFoot=false;player.drive=null;
+  MP.lastSig="";   // broadcast the new seat right away
+  toast("\u{1F698}\u{1F44B} You hopped into "+o.name+"'s passenger seat — enjoy the ride! (F = hop out)");
+}
+function endRide(silent){
+  if(!RIDE.on)return;
+  const o=MP.others.get(RIDE.key);
+  RIDE.on=false;RIDE.key=null;
+  player.onFoot=true;player.mesh.visible=true;
+  if(o){
+    const right=o.yaw+Math.PI/2;
+    player.x=o.x+Math.sin(right)*2.4;
+    player.z=o.z+Math.cos(right)*2.4;
+  }
+  player.y=Math.max(terrainH(player.x,player.z),deckYAt(player.x,player.z,player.y));
+  player.grounded=true;player.vy=0;
+  MP.lastSig="";
+  if(!silent)toast("\u{1F44B} You hopped out — thanks for the ride!");
+}
+function updateRide(dt){
+  const o=MP.others.get(RIDE.key);
+  if(!o){endRide(true);toast("\u{1F698} The driver left — you're back on your feet!");return 0;}
+  /* sit on the passenger side of their car */
+  const right=o.yaw+Math.PI/2;
+  player.x=o.x+Math.sin(right)*0.72;
+  player.z=o.z+Math.cos(right)*0.72;
+  player.y=o.y+0.42;
+  player.yaw=o.yaw;
+  player.mesh.visible=true;
+  player.mesh.position.set(player.x,player.y,player.z);
+  player.mesh.rotation.y=o.yaw;
+  const L=player.limbs;
+  L.lL.rotation.x=-1.5;L.rL.rotation.x=-1.5;L.lA.rotation.x=-0.5;L.rA.rotation.x=-0.5;
+  const sp=Math.hypot(o.x-RIDE.px,o.z-RIDE.pz)/Math.max(dt,0.001);
+  RIDE.px=o.x;RIDE.pz=o.z;
+  return Math.min(sp,140);
 }
 /* ================= ALIENS ON THE MOON: spaceships you can ROB ================= */
 function nearUfo(){
@@ -5829,7 +5906,10 @@ const UPDATE_PAGES=[
 <li>Press <b>T</b> at a spaceship: rob the vault for <b>$10,000</b> + a rare <b>ALIEN dumpling worth $1,000</b> (glitter aliens: $2,500!).</li>
 <li>But beware: the aliens get ANGRY and <b>chase you</b> — get caught and they zap back $5,000! One robbery per ship per day.</li></ul>
 <h4>\u{1F6AB} NO TELEPORTING</h4><ul>
-<li>The aliens JAM teleporters near their ships — the map's "\u{1F6F8} Nearest ALIEN spaceship" button only sets a <b>route</b>. Fly your rocket and follow the line: a true expedition!</li></ul>`}
+<li>The aliens JAM teleporters near their ships — the map's "\u{1F6F8} Nearest ALIEN spaceship" button only sets a <b>route</b>. Fly your rocket and follow the line: a true expedition!</li></ul>
+<h4>\u{1F698} RIDE ALONG WITH FRIENDS</h4><ul>
+<li>Walk up to another player's car (or motorcycle) and press <b>F</b> — you hop into the <b>passenger seat</b> and ride wherever they drive!</li>
+<li>They see you sitting in the car, name tag and all. Press F anytime to hop out.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -5866,6 +5946,7 @@ function frame(now){
   else if(player.inTrain)speedMS=Math.abs(player.train.speed);
   else if(player.inPlane)speedMS=Math.abs(player.planeRef.speed);
   else if(player.inBus)speedMS=Math.abs(player.bus.speed);
+  else if(RIDE.on)speedMS=updateRide(dt);
   else if(player.drive){
     const mcdBusy=player.drive===myVehicle&&MCD.phase!=="idle";
     speedMS=mcdBusy?Math.abs(myVehicle.speed)
