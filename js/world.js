@@ -1811,6 +1811,92 @@ function deckYAt(x,z,y){
   return best;
 }
 let parkedCarBuilder=null; // set later (needs vehicle mesh builder)
+/* ---- ALIEN SPACESHIPS: one every ~1000 km on the MOON — a real expedition! ---- */
+const UFOSP=1000000;
+const ufos=[];
+function ufoSpot(i,j){
+  const x=i*UFOSP+3300,z=j*UFOSP+6600;
+  if(rocketPadDist(x,z)<130)return null;
+  return{x,z};
+}
+function makeAlien(){
+  const g=new THREE.Group();
+  const gm=new THREE.MeshLambertMaterial({color:0x7dff4f});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.32,9,8),gm);
+  body.scale.set(0.8,1.15,0.7);body.position.y=0.75;body.castShadow=true;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.34,10,9),gm);
+  head.scale.set(1,1.25,0.95);head.position.y=1.5;g.add(head);
+  /* huge black alien eyes */
+  const em=new THREE.MeshLambertMaterial({color:0x0a0a12});
+  [[-0.14],[0.14]].forEach(p=>{
+    const e=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,7),em);
+    e.scale.set(0.8,1.4,0.6);e.position.set(p[0],1.56,0.26);g.add(e);
+  });
+  /* antennae with glowing tips */
+  [[-0.12],[0.12]].forEach(p=>{
+    const st=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.4),gm);
+    st.position.set(p[0],2.05,0);st.rotation.z=-p[0]*1.4;g.add(st);
+    const tip=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),new THREE.MeshBasicMaterial({color:0x7dff4f}));
+    tip.position.set(p[0]*2.2,2.25,0);g.add(tip);
+  });
+  /* skinny arms & legs */
+  [[-0.3],[0.3]].forEach(p=>{
+    const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.04,0.6),gm);
+    arm.position.set(p[0],0.85,0);arm.rotation.z=p[0]*1.2;g.add(arm);
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.05,0.5),gm);
+    leg.position.set(p[0]*0.4,0.25,0);g.add(leg);
+  });
+  return g;
+}
+function buildUfo(s,g){
+  const y=moonH(s.x,s.z);
+  const u=new THREE.Group();u.position.set(s.x,y,s.z);g.add(u);
+  const metal=new THREE.MeshPhongMaterial({color:0x9aa4b2,shininess:90,specular:0xaaaaaa});
+  /* the saucer on landing legs */
+  const saucer=shadowBox(new THREE.Mesh(new THREE.SphereGeometry(7.5,18,10),metal));
+  saucer.scale.y=0.28;saucer.position.y=3.4;u.add(saucer);
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(3,14,10,0,Math.PI*2,0,Math.PI/2),
+    new THREE.MeshPhongMaterial({color:0x7dff4f,transparent:true,opacity:0.5,emissive:0x2f6a1f,shininess:100}));
+  dome.position.y=5;u.add(dome);
+  for(let i=0;i<3;i++){
+    const a=i/3*Math.PI*2;
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.22,3.4),metal);
+    leg.position.set(Math.cos(a)*5,1.6,Math.sin(a)*5);
+    leg.rotation.z=Math.cos(a)*0.35;leg.rotation.x=-Math.sin(a)*0.35;u.add(leg);
+    const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.8,0.2,8),metal);
+    foot.position.set(Math.cos(a)*5.8,0.1,Math.sin(a)*5.8);u.add(foot);
+  }
+  /* a ramp down + blinking rim lights */
+  const ramp=new THREE.Mesh(new THREE.BoxGeometry(2,0.14,5),metal);
+  ramp.position.set(0,1.6,7);ramp.rotation.x=0.5;u.add(ramp);
+  const lights=[];
+  for(let i=0;i<10;i++){
+    const a=i/10*Math.PI*2;
+    const l=new THREE.Mesh(new THREE.SphereGeometry(0.26,7,7),
+      new THREE.MeshBasicMaterial({color:i%2?0x7dff4f:0xff5d8f}));
+    l.position.set(Math.cos(a)*7.1,3.4,Math.sin(a)*7.1);u.add(l);
+    lights.push(l);
+  }
+  /* the alien crew, out for a moonwalk */
+  const aliens=[];
+  for(let i=0;i<4;i++){
+    const m=makeAlien();
+    const a={m,x:s.x+(Math.random()-0.5)*24,z:s.z+10+(Math.random()-0.5)*14,yaw:Math.random()*7,t:0};
+    m.position.set(a.x,moonH(a.x,a.z),a.z);
+    g.add(m);
+    aliens.push(a);
+  }
+  /* glowing green moon crystals near the ship — grab them for money! */
+  const crystals=[];
+  for(let i=0;i<3;i++){
+    const a=i*2.2+0.8,d=16+i*5;
+    const cx=s.x+Math.sin(a)*d,cz=s.z+Math.cos(a)*d;
+    const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.7),new THREE.MeshBasicMaterial({color:0x7dff4f}));
+    cr.position.set(cx,moonH(cx,cz)+0.9,cz);g.add(cr);
+    crystals.push({mesh:cr,x:cx,z:cz,got:false});
+  }
+  ufos.push({g,x:s.x,z:s.z,lights,aliens,crystals,angry:0,loot:false});
+}
 /* ---- moon chunks: yellow-gray dust, holes, rocks — no roads, no buildings ---- */
 const moonRockMat=keep(new THREE.MeshLambertMaterial({color:0x8f8a80}));
 function buildMoonChunk(cx,cz){
@@ -1836,6 +1922,14 @@ function buildMoonChunk(cx,cz){
     const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS,s=0.4+r()*1.7;
     const rock=shadowBox(new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),moonRockMat));
     rock.position.set(x,moonH(x,z)+s*0.4,z);rock.rotation.set(r()*3,r()*3,r()*3);g.add(rock);
+  }
+  /* an ALIEN SPACESHIP every ~1000 km */
+  for(let i=Math.floor((ox-CS/2-3400)/UFOSP);i<=Math.ceil((ox+CS/2-3200)/UFOSP);i++)
+  for(let j=Math.floor((oz-CS/2-6700)/UFOSP);j<=Math.ceil((oz+CS/2-6500)/UFOSP);j++){
+    const sp=ufoSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<ox-CS/2||sp.x>=ox+CS/2||sp.z<oz-CS/2||sp.z>=oz+CS/2)continue;
+    buildUfo(sp,g);
   }
   scene.add(g);
   return g;

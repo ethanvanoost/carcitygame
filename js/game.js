@@ -526,6 +526,7 @@ function dumpValue(d){
   if(d.color==="Gold")return d.glitter?20:30;
   if(d.color==="Pumpkin"||d.color==="Snowy")return d.glitter?150:40;   // seasonal specials
   if(d.color==="Pearl")return d.glitter?90:25;                         // island exclusive (sells BELOW the $35 shop price!)
+  if(d.color==="Alien")return d.glitter?2500:1000;                     // robbed from the moon aliens!
   if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
 }
@@ -3016,7 +3017,12 @@ function tryCall(){
     else toast("The rocket is busy right now.");
     return;
   }
-  if(S.world==="moon"){toast("Find a rocket station to fly back down!");return;}
+  if(S.world==="moon"){
+    const u=nearUfo();
+    if(u){openRobUfo(u);return;}
+    toast("Find a rocket station to fly back down!");
+    return;
+  }
   const st=nearStationInfo();
   if(st){
     let best=null;
@@ -4041,6 +4047,22 @@ function drawMap(){
       }
     }
   }
+  /* alien spaceships (moon only, one every ~1000 km) */
+  if(S.world==="moon"){
+    const halfW=cv.width/2/sc,halfH=cv.height/2/sc;
+    const ui0=Math.floor((mapView.cx-halfW-3300)/UFOSP),ui1=Math.ceil((mapView.cx+halfW-3300)/UFOSP);
+    const uj0=Math.floor((mapView.cz-halfH-6600)/UFOSP),uj1=Math.ceil((mapView.cz+halfH-6600)/UFOSP);
+    for(let i=ui0;i<=ui1;i++)for(let j=uj0;j<=uj1;j++){
+      const s=ufoSpot(i,j);
+      if(!s)continue;
+      dot(s.x,s.z,"#7dff4f",7);
+      const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+      if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+        c.fillStyle="#b6ff9e";c.font="bold 11px Segoe UI";c.textAlign="center";
+        c.fillText("\u{1F6F8}",px,py-9);
+      }
+    }
+  }
   /* shops: every MEGA MART (deterministic grid), plus nearby loaded small shops */
   if(S.world==="earth"){
     const halfW=cv.width/2/sc,halfH=cv.height/2/sc;
@@ -4413,6 +4435,22 @@ function mapEntries(q){
       if(Math.abs(player.x-MHX)<Math.abs(player.z-MHZ))chooseDest("\u{1F6E3}️ Mega Highway",MHX,player.z,true);
       else chooseDest("\u{1F6E3}️ Mega Highway",player.x,MHZ,true);
     }],
+    ["\u{1F6F8} Nearest ALIEN spaceship (moon!)",()=>{
+      if(S.world!=="moon"){toast("\u{1F6F8} The alien spaceships are on the MOON — take a \u{1F680} rocket up first!");return;}
+      const ci=Math.round((player.x-3300)/UFOSP),cj=Math.round((player.z-6600)/UFOSP);
+      let best=null;
+      for(let i2=ci-1;i2<=ci+1;i2++)for(let j2=cj-1;j2<=cj+1;j2++){
+        const s=ufoSpot(i2,j2);
+        if(!s)continue;
+        const d=Math.hypot(s.x-player.x,s.z-player.z);
+        if(!best||d<best.d)best={s,d};
+      }
+      if(!best){toast("\u{1F6F8} No spaceship signals nearby...");return;}
+      /* NO teleporting to the aliens — they jam it! Route only. */
+      setRoute(best.s.x,best.s.z);
+      $("mapModal").classList.remove("open");
+      toast("\u{1F6F8} Signal locked: "+fmtDist(best.d)+" away! Teleporters are JAMMED near the aliens — fly the rocket yourself and follow the route!");
+    }],
     ["\u{1F319} Go to the MOON",()=>{
       switchWorld("moon");
       teleportTo(2400,2400);   // land right at a moon rocket station
@@ -4619,6 +4657,16 @@ function updateCompass(){
   c.beginPath();c.moveTo(R,4);c.lineTo(R-5,13);c.lineTo(R+5,13);c.closePath();c.fill();
 }
 function teleportTo(x,z){
+  /* the aliens JAM teleporters near their spaceships — you must travel there yourself */
+  if(S.world==="moon"){
+    const ci=Math.round((x-3300)/UFOSP),cj=Math.round((z-6600)/UFOSP);
+    const s=ufoSpot(ci,cj);
+    if(s&&Math.hypot(x-s.x,z-s.z)<400){
+      setRoute(s.x,s.z);
+      toast("\u{1F6F8}\u{26A1} ZZZT! The aliens JAM your teleporter — follow the route and travel there yourself!");
+      return;
+    }
+  }
   SIT.on=false;
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   player.x=x;player.z=z;player.vy=0;
@@ -4821,6 +4869,12 @@ function updateHint(){
     for(const p of planes)if(p.state==="parked"&&Math.hypot(player.x-p.x,player.z-p.z)<16){txt="Plane parked — press F to board!";showF=true;}
     for(const b of buses){const bp=busPos(b);if(b.state==="waiting"&&Math.hypot(player.x-bp.x,player.z-bp.z)<12){txt="Bus waiting — press F to board!";showF=true;}}
     if(!txt&&player.onFoot&&myVehicle&&Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)<5){txt="Press F to get in your "+(S.selected?S.selected.name:"vehicle");showF=true;}
+    }
+    if(!txt&&S.world==="moon"){
+      const uf=nearUfo();
+      if(uf)
+        txt=uf.angry>0?"\u{1F47D} THE ALIENS ARE ANGRY — RUN!!":"\u{1F6F8} An ALIEN SPACESHIP — press T to rob it ($10K + alien dumpling)... if you dare!";
+      if(uf)showT=uf.angry<=0;
     }
     if(!txt&&S.world==="moon"&&player.onFoot){
       for(const mc of moonCars){
@@ -5051,6 +5105,82 @@ function digTreasureX(isl){
     renderDump();saveGame();
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
+/* ================= ALIENS ON THE MOON: spaceships you can ROB ================= */
+function nearUfo(){
+  for(let i=ufos.length-1;i>=0;i--){
+    const u=ufos[i];
+    if(offScene(u.g)){ufos.splice(i,1);continue;}
+    if(Math.hypot(player.x-u.x,player.z-u.z)<15)return u;
+  }
+  return null;
+}
+function openRobUfo(u){
+  const rkey="vc4ufo:"+Math.round(u.x)+","+Math.round(u.z)+":"+new Date().toISOString().slice(0,10);
+  if(localStorage.getItem(rkey)){
+    toast("\u{1F6F8} You already robbed this spaceship today — the aliens locked the vault!");
+    return;
+  }
+  showDest("\u{1F6F8} The alien spaceship...",[
+    {label:"\u{1F4B0} ROB IT! ($10,000 + an ALIEN dumpling... if you dare)",value:"rob"},
+    {label:"\u{1F44B} Just wave at the aliens",value:"wave"},
+    {label:"❌ Back away slowly",value:"cancel"}
+  ],v=>{
+    if(v==="wave"){toast("\u{1F44B}\u{1F47D} The aliens wave back with all four fingers. Beep boop!");return;}
+    if(v!=="rob")return;
+    try{localStorage.setItem(rkey,"1");}catch(e){}
+    addMoney(10000);
+    DUMP.owned.push({color:"Alien",hex:"#7dff4f",glitter:Math.random()<0.08});
+    renderDump();saveGame();
+    u.angry=22;u.loot=true;
+    pushNews("\u{1F6F8} BREAKING: "+mpName()+" robbed an alien spaceship on the MOON — $10,000 and an ALIEN dumpling!");
+    toast("\u{1F4B0}\u{1F47D} YOU ROBBED THE ALIENS — $10,000 + an ALIEN dumpling ($1K)! Now RUN, they're chasing you!!");
+  });
+}
+function updateUfos(dt){
+  if(S.world!=="moon")return;
+  const now=performance.now();
+  for(let i=ufos.length-1;i>=0;i--){
+    const u=ufos[i];
+    if(offScene(u.g)){ufos.splice(i,1);continue;}
+    /* blinking rim lights */
+    u.lights.forEach((l,li)=>{l.visible=Math.floor(now/240+li)%2===0;});
+    /* crystals spin — walk into one for $100 */
+    for(const cr of u.crystals){
+      if(cr.got)continue;
+      cr.mesh.rotation.y+=dt*1.6;
+      if(player.onFoot&&Math.hypot(player.x-cr.x,player.z-cr.z)<2.2){
+        cr.got=true;cr.mesh.visible=false;
+        addMoney(100);
+        toast("\u{1F48E} A glowing MOON CRYSTAL — +$100!");
+      }
+    }
+    /* the alien crew: wander around the ship, CHASE you after a robbery */
+    u.angry=Math.max(0,u.angry-dt);
+    for(const a of u.aliens){
+      a.t-=dt;
+      if(u.angry>0){
+        const dx=player.x-a.x,dz=player.z-a.z,d=Math.hypot(dx,dz);
+        if(d<2.2&&u.loot){
+          u.loot=false;
+          MONEY.v=Math.max(0,MONEY.v-5000);updateMoneyUI();saveGame();
+          toast("\u{1F47D} An alien CAUGHT you and zapped back $5,000! You keep the dumpling — now GO!");
+        }
+        if(d>1&&d<90){
+          a.yaw=Math.atan2(dx,dz);
+          a.x+=dx/d*5.2*dt;a.z+=dz/d*5.2*dt;
+        }
+      }else{
+        if(a.t<=0){a.t=2+Math.random()*3;a.yaw+=(Math.random()-0.5)*2.5;}
+        const nx=a.x+Math.sin(a.yaw)*1.2*dt,nz=a.z+Math.cos(a.yaw)*1.2*dt;
+        if(Math.hypot(nx-u.x,nz-u.z)<28){a.x=nx;a.z=nz;}
+        else{a.yaw+=Math.PI/2+Math.random();a.t=2;}
+      }
+      /* aliens hop-float in the low gravity */
+      a.m.position.set(a.x,moonH(a.x,a.z)+Math.abs(Math.sin(now/300+a.x))*0.25,a.z);
+      a.m.rotation.y=a.yaw;
+    }
+  }
 }
 /* ================= EFFECT SETTINGS (police, sounds, weather, quality) ================= */
 const SETTINGS={police:true,crash:true,honk:true,engine:true,siren:true,weather:true,quality:"med"};
@@ -5689,7 +5819,17 @@ const UPDATE_PAGES=[
 <h4>\u{1F4FA} LIVE CITY NEWS ON YOUR TV</h4><ul>
 <li>The TV in your mansion <b>actually broadcasts the news</b> — real, live stories from your world:</li>
 <li>\u{1F389} festivals starting · \u{1F6A8} accidents · \u{1F525} house fires (and when they're put out) · \u{1F308}✨ players opening rainbow glitter dumplings · \u{1F3F4}‍☠️ treasure finds · \u{1F3C1} race wins · \u{1F3B9} concerts · \u{1F694} police arrests!</li>
-<li>Headlines rotate every few seconds with a proper news banner and ticker. Buy a TV ($800) in the mansion editor and stay informed!</li></ul>`}
+<li>Headlines rotate every few seconds with a proper news banner and ticker. Buy a TV ($800) in the mansion editor and stay informed!</li></ul>`},
+{t:"Round 21 — \u{1F47D} ALIENS ON THE MOON",h:`
+<h4>\u{1F6F8} ALIEN SPACESHIPS (one every ~1000 km!)</h4><ul>
+<li>Somewhere on the endless Moon, alien saucers have landed: shiny metal, a glowing green dome, blinking rim lights and a landing ramp.</li>
+<li>A crew of \u{1F47D} little green aliens with big black eyes moonwalks around the ship.</li>
+<li>Glowing green <b>moon crystals</b> near every ship — walk into them for $100 each.</li></ul>
+<h4>\u{1F4B0} ROB THE SPACESHIP</h4><ul>
+<li>Press <b>T</b> at a spaceship: rob the vault for <b>$10,000</b> + a rare <b>ALIEN dumpling worth $1,000</b> (glitter aliens: $2,500!).</li>
+<li>But beware: the aliens get ANGRY and <b>chase you</b> — get caught and they zap back $5,000! One robbery per ship per day.</li></ul>
+<h4>\u{1F6AB} NO TELEPORTING</h4><ul>
+<li>The aliens JAM teleporters near their ships — the map's "\u{1F6F8} Nearest ALIEN spaceship" button only sets a <b>route</b>. Fly your rocket and follow the line: a true expedition!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -5756,7 +5896,7 @@ function frame(now){
       if(player.z-c.position.z>800)c.position.z+=1600;
     });
   }
-  updateRocket(dt);
+  updateRocket(dt);updateUfos(dt);
   updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
