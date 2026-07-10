@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -322,6 +322,11 @@
     <h2>&#127929; Piano</h2>
     <div style="font-size:13px;color:var(--dim);margin-bottom:8px">Click the keys, use your computer keyboard (<kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd> <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd>...) or plug in a real MIDI keyboard!</div>
     <div id="pianoKeys"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" id="midiBtn" style="flex:1">&#128193; Play a .MID file</button>
+      <button class="btn" id="midiStop" style="flex:1;display:none">&#9209; Stop MIDI</button>
+    </div>
+    <input type="file" id="midiFile" accept=".mid,.midi" style="display:none">
     <button class="btn warn" id="pianoCrowd" style="width:100%;margin-top:10px;display:none">&#127917; Play piano &mdash; call the crowd!</button>
     <button class="btn close" id="pianoClose">Close</button>
   </div>
@@ -333,6 +338,7 @@
     <button class="btn" id="meditRotate">&#128260; Rotate</button>
     <button class="btn" id="meditRemove">&#128465; Remove</button>
     <button class="btn" id="meditShop">&#128722; Dumpling shop</button>
+    <button class="btn" id="meditOrder">&#127828; Order food</button>
     <button class="btn" id="meditBook">&#128214; Guest book</button>
     <button class="btn warn" id="meditDone">&#9989; Done</button>
   </div>
@@ -435,9 +441,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=38"></script>
-<script src="js/world.js?v=38"></script>
-<script src="js/vehicles.js?v=38"></script>
-<script src="js/game.js?v=38"></script>
+<script src="js/core.js?v=39"></script>
+<script src="js/world.js?v=39"></script>
+<script src="js/vehicles.js?v=39"></script>
+<script src="js/game.js?v=39"></script>
 </body>
 </html>

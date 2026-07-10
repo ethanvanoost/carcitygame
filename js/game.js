@@ -447,6 +447,16 @@ function renderMcdOrder(){
 }
 $("mcdDone").onclick=()=>{
   $("mcdModal").classList.remove("open");
+  if(MCD.delivery){
+    /* ordering from HOME: a courier brings it to your door */
+    MCD.delivery=false;
+    if(MCD.order.length){
+      const cost=MCD.order.reduce((s,it)=>s+it[1],0)+10;
+      startOrder(ORDER.pend,MCD.order.slice(),0,cost,"\u{1F354} McDrive order");
+    }else toast("No order — maybe later!");
+    MCD.order=[];
+    return;
+  }
   if(MCD.order.length){MCD.phase="tofood";toast("\u{1F697} Driving to the pickup window...");}
   else{MCD.phase="idle";MCD.cd=12;toast("No order — drive on!");}
 };
@@ -1519,6 +1529,8 @@ function tryFurniture(){
     toast("\u{1FA91} Sitting down — press T (or walk) to stand up.");
     return true;
   }
+  /* standing in YOUR apartment room: order food to your door! */
+  if(player.onFoot&&myRoomHere()){openOrderMenu();return true;}
   return false;
 }
 /* ================= JOBS: taxi, food delivery & tow truck ================= */
@@ -2174,6 +2186,7 @@ function closeMansionEdit(){
 $("meditBook").onclick=()=>{
   if(MEDIT.man)readGuestbook(MEDIT.man.id,"your");
 };
+$("meditOrder").onclick=()=>openOrderMenu();
 $("meditShop").onclick=()=>{
   const man=MEDIT.man;
   if(!man)return;
@@ -2333,6 +2346,95 @@ function openPiano(p){
   reallyOpenPiano(p);
 }
 $("pianoClose").onclick=()=>{PIANO.open=false;$("pianoModal").classList.remove("open");};
+/* ---------- upload a .MID file and the piano PLAYS it, live ---------- */
+function parseMidi(buf){
+  const d=new DataView(buf);
+  let p=0;
+  function str(n){let s="";for(let i=0;i<n;i++)s+=String.fromCharCode(d.getUint8(p++));return s;}
+  function u32(){const v=d.getUint32(p);p+=4;return v;}
+  function u16(){const v=d.getUint16(p);p+=2;return v;}
+  function vlq(){let v=0;for(;;){const b=d.getUint8(p++);v=(v<<7)|(b&0x7f);if(!(b&0x80))return v;}}
+  if(str(4)!=="MThd")throw new Error("not midi");
+  u32();u16();
+  const ntrk=u16(),div=u16();
+  const raw=[],tempos=[{tick:0,us:500000}];
+  for(let t=0;t<ntrk;t++){
+    if(str(4)!=="MTrk")break;
+    const len=u32(),end=p+len;
+    let tick=0,run=0;
+    while(p<end){
+      tick+=vlq();
+      let st=d.getUint8(p);
+      if(st&0x80){p++;run=st;}else st=run;
+      const type=st&0xf0,chan=st&0x0f;
+      if(type===0x90){
+        const note=d.getUint8(p++),vel=d.getUint8(p++);
+        if(vel>0&&chan!==9&&note>=21&&note<=108)raw.push({tick,note,vel});   // skip drums
+      }
+      else if(type===0x80||type===0xa0||type===0xb0||type===0xe0)p+=2;
+      else if(type===0xc0||type===0xd0)p+=1;
+      else if(st===0xff){
+        const mt=d.getUint8(p++),ln=vlq();
+        if(mt===0x51&&ln===3)tempos.push({tick,us:(d.getUint8(p)<<16)|(d.getUint8(p+1)<<8)|d.getUint8(p+2)});
+        p+=ln;
+      }
+      else if(st===0xf0||st===0xf7)p+=vlq();
+      else break;
+    }
+    p=end;
+  }
+  /* ticks → seconds, following every tempo change */
+  tempos.sort((a,b)=>a.tick-b.tick);
+  raw.sort((a,b)=>a.tick-b.tick);
+  const out=[];
+  let curT=0,curTick=0,us=500000,ti=0;
+  for(const e of raw){
+    while(ti<tempos.length&&tempos[ti].tick<=e.tick){
+      curT+=(tempos[ti].tick-curTick)*us/div/1e6;
+      curTick=tempos[ti].tick;us=tempos[ti].us;ti++;
+    }
+    out.push({time:curT+(e.tick-curTick)*us/div/1e6,note:e.note,vel:e.vel});
+  }
+  return out;
+}
+const MIDIPLAY={events:null,idx:0,start:0,on:false};
+$("midiBtn").onclick=()=>$("midiFile").click();
+$("midiFile").addEventListener("change",e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const ev=parseMidi(rd.result);
+      if(!ev.length)throw new Error("empty");
+      MIDIPLAY.events=ev;MIDIPLAY.idx=0;MIDIPLAY.start=performance.now();MIDIPLAY.on=true;
+      $("midiStop").style.display="";
+      ensureAudio();
+      toast("\u{1F3B9}\u{1F4C2} Now playing YOUR song: "+f.name+" ("+ev.length+" notes) — the concert piano performs it live!");
+    }catch(err){toast("❌ That doesn't look like a valid .MID file!");}
+  };
+  rd.readAsArrayBuffer(f);
+  e.target.value="";
+});
+$("midiStop").onclick=()=>{
+  MIDIPLAY.on=false;
+  $("midiStop").style.display="none";
+  toast("⏹ MIDI stopped.");
+};
+function updateMidi(){
+  if(!MIDIPLAY.on)return;
+  const t=(performance.now()-MIDIPLAY.start)/1000;
+  let played=0;
+  while(MIDIPLAY.idx<MIDIPLAY.events.length&&MIDIPLAY.events[MIDIPLAY.idx].time<=t){
+    const e=MIDIPLAY.events[MIDIPLAY.idx++];
+    if(played<12){playPianoNote(e.note,Math.min(1,e.vel/127));played++;}
+  }
+  if(MIDIPLAY.idx>=MIDIPLAY.events.length){
+    MIDIPLAY.on=false;
+    $("midiStop").style.display="none";
+    toast("\u{1F3B9} Your MIDI song finished — \u{1F44F}\u{1F44F}!");
+  }
+}
 /* the concert crowd: they walk in through the door and sit down on the seats */
 const CROWD=[];
 $("pianoCrowd").onclick=async()=>{
@@ -3156,6 +3258,8 @@ function tryCall(){
       return;
     }
   }
+  /* the delivery courier at your door: pay & pick up */
+  if(player.onFoot&&tryPickupOrder())return;
   /* shops: walk inside and press T to buy food; buyers: sell dumplings */
   if(player.onFoot&&S.world==="earth"){
     const sh=nearShop();
@@ -3476,6 +3580,19 @@ function driveVehicle(v,dt){
   v.mesh.rotateX(-pitch);v.mesh.rotateZ(v.roll);
   headLight.intensity=isNight()?1.1:0;
   headLight.position.set(v.x+Math.sin(v.yaw)*6,v.y+1.6,v.z+Math.cos(v.yaw)*6);
+  /* realistic lights: brake lights flare red, reverse glows white, beams at night */
+  if(v.mesh.userData.tails){
+    const braking=(thr<0&&v.speed>0.5)||spaceInput();
+    const reversing=v.speed<-0.5;
+    v.mesh.userData.tails.forEach(t=>{
+      t.material.color.set(reversing?0xffffff:(braking?0xff4040:0x8a1420));
+      t.scale.setScalar(braking||reversing?1.5:1);
+    });
+  }
+  if(v.mesh.userData.beams){
+    const on=isNight();
+    v.mesh.userData.beams.forEach(b=>b.visible=on);
+  }
   player.x=v.x;player.z=v.z;player.y=v.y;
   return Math.abs(v.speed);
 }
@@ -4089,6 +4206,7 @@ function updateTraffic(dt){
     c.mesh.position.set(p.x,y,p.z);
     c.mesh.rotation.set(0,laneYaw,0);
     c.mesh.rotateX(-slopePitch(p.x,p.z,laneYaw,1.8));   // follow the hill, don't stay flat
+    if(c.mesh.userData.beams){const bOn=isNight();c.mesh.userData.beams.forEach(b=>b.visible=bOn);}
     if(c.mesh.userData.wheels)for(const w of c.mesh.userData.wheels)w.spin.rotation.x+=sp/w.r*dt;
     /* player collision nudge */
     if(!player.onFoot&&player.drive&&Math.hypot(p.x-player.x,p.z-player.z)<3.4){
@@ -5000,7 +5118,9 @@ function updateHint(){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
       if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
+      else if(ORDER.active&&ORDER.stage==="waiting"&&Math.hypot(player.x-ORDER.x,player.z-ORDER.z)<6){txt="\u{1F6F5} Your "+ORDER.label+" — press T to pay $"+fmtMoney(ORDER.cost)+" & take it!";showT=true;}
       else if(nearTv()){txt="\u{1F4FA} The TV — press T to pick a channel (Minecraft, news, fireplace...)";showT=true;}
+      else if(myRoomHere()){txt="\u{1F6F5} Your room — press T to ORDER FOOD to your door!";showT=true;}
       else if(pn&&pn.hat&&(pn.hatMoney||0)>0&&Math.hypot(player.x-pn.hat.x,player.z-pn.hat.z)<2.4){txt="\u{1F3A9} The hat is full — press T to collect $"+pn.hatMoney+"!";showT=true;}
       else if(pn){txt=pn.crowded?"\u{1F3B9} Your concert is ON — press T at the piano, then \u{1F51A} End the concert":"\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
@@ -5308,6 +5428,148 @@ function digTreasureX(isl){
     renderDump();saveGame();
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
+/* ================= HOME FOOD DELIVERY: order to your mansion or apartment ================= */
+const ORDER={active:false,stage:null,items:[],dumps:0,cost:0,tx:0,tz:0,mesh:null,x:0,z:0,lx:0,lz:0,wait:0,label:"",pend:null};
+function myRoomHere(){
+  for(let i=hotelRooms.length-1;i>=0;i--){
+    const r=hotelRooms[i];
+    if(offScene(r.g)){hotelRooms.splice(i,1);continue;}
+    if(Math.abs(player.y-r.ry)<2&&Math.abs(player.x-r.x)<r.hw+0.5&&Math.abs(player.z-r.z)<r.hd+0.5){
+      const rent=RENT.list.find(e=>Math.abs(e.x-r.x)<3&&Math.abs(e.z-r.z)<3);
+      if(rent)return r;
+    }
+  }
+  return null;
+}
+function homeSpotForOrder(){
+  if(MEDIT.on&&MEDIT.man)return{x:MEDIT.man.x-2,z:MEDIT.man.z+47};   // the mansion's front path
+  const rm=myRoomHere();
+  if(rm)return{x:rm.x-1,z:rm.z+rm.hd+4};                              // outside the apartment door
+  return null;
+}
+function openOrderMenu(){
+  if(ORDER.active){toast("\u{1F6F5} Your order is already on its way — listen for the \u{1F514} doorbell!");return;}
+  const spot=homeSpotForOrder();
+  if(!spot){toast("\u{1F6F5} Order from inside YOUR home (apartment room or mansion)!");return;}
+  ORDER.pend=spot;
+  showDest("\u{1F6F5} Order food to your home",[
+    {label:"\u{1F354} McDrive — burgers, nuggets, drinks & fries",value:"mcd"},
+    {label:"\u{1F6D2} MEGA MART — food boxes",value:"mart"},
+    {label:"\u{1F95F} Squishy Dumplings — pick an amount ($12 each)",value:"dump"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    if(v==="mcd"){
+      MCD.delivery=true;MCD.order=[];renderMcdOrder();
+      $("mcdModal").classList.add("open");
+      toast("\u{1F354} Pick your food, then hit ✅ Done — a courier brings it to your door (+$10 delivery)!");
+      return;
+    }
+    if(v==="mart"){
+      showDest("\u{1F6D2} MEGA MART boxes",[
+        {label:"\u{1F34E} Fruit box — $30 (4 kinds of fruit)",value:"fruit"},
+        {label:"\u{1F950} Breakfast box — $40 (bread, milk, eggs, croissant)",value:"brk"},
+        {label:"\u{1F36A} Snack box — $25 (chocolate, cookies, cake, ice cream)",value:"snack"},
+        {label:"❌ Cancel",value:"cancel"}
+      ],b=>{
+        if(b==="cancel")return;
+        const boxes={
+          fruit:[["\u{1F34E} Apple",12],["\u{1F34C} Banana",11],["\u{1F347} Grapes",12],["\u{1F353} Strawberries",13]],
+          brk:[["\u{1F35E} Bread",22],["\u{1F95B} Milk",14],["\u{1F95A} Eggs",16],["\u{1F950} Croissant",15]],
+          snack:[["\u{1F36B} Chocolate",14],["\u{1F36A} Cookies",12],["\u{1F382} Cake",28],["\u{1F366} Ice cream",16]]
+        };
+        startOrder(spot,boxes[b],0,{fruit:30,brk:40,snack:25}[b],"\u{1F6D2} MEGA MART box");
+      });
+      return;
+    }
+    const s=prompt("How many Squishy Dumplings do you want?\n(1 - 50, $12 each + $10 delivery)","5");
+    let n=parseInt(s,10);
+    if(!(n>0)){if(s!==null)toast("Type a number like 5!");return;}
+    n=Math.min(50,n);
+    startOrder(spot,[],n,n*12+10,"\u{1F95F} "+n+" Squishy Dumplings");
+  });
+}
+function startOrder(spot,items,dumps,cost,label){
+  ORDER.active=true;ORDER.stage="driving";
+  ORDER.items=items;ORDER.dumps=dumps;ORDER.cost=cost;ORDER.label=label;
+  ORDER.tx=spot.x;ORDER.tz=spot.z;
+  const a=Math.random()*Math.PI*2;
+  ORDER.x=spot.x+Math.sin(a)*230;ORDER.z=spot.z+Math.cos(a)*230;
+  if(ORDER.mesh){scene.remove(ORDER.mesh);disposeGroup(ORDER.mesh);}
+  ORDER.mesh=buildVehicleMesh("moto",0xff5d8f);
+  if(ORDER.mesh.userData.riderMesh)ORDER.mesh.userData.riderMesh.visible=true;
+  ORDER.mesh.position.set(ORDER.x,terrainH(ORDER.x,ORDER.z),ORDER.z);
+  scene.add(ORDER.mesh);
+  toast("\u{1F6F5} Order placed: "+ORDER.label+" — $"+fmtMoney(cost)+" (pay at the door). The courier is on the way!");
+}
+function dingdong(){
+  ensureAudio();
+  if(!audioCtx||!SND.sound)return;
+  const t=audioCtx.currentTime;
+  [[660,0],[524,0.4]].forEach(([f,off])=>{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type="sine";o.frequency.value=f;
+    g.gain.setValueAtTime(0,t+off);
+    g.gain.linearRampToValueAtTime(0.25,t+off+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,t+off+0.9);
+    o.connect(g);g.connect(audioCtx.destination);
+    o.start(t+off);o.stop(t+off+1);
+  });
+}
+function leaveOrder(){
+  ORDER.stage="leaving";
+  const a=Math.random()*7;
+  ORDER.lx=ORDER.x+Math.sin(a)*280;ORDER.lz=ORDER.z+Math.cos(a)*280;
+}
+function endOrder(){
+  ORDER.active=false;ORDER.stage=null;
+  if(ORDER.mesh){scene.remove(ORDER.mesh);disposeGroup(ORDER.mesh);ORDER.mesh=null;}
+}
+function tryPickupOrder(){
+  if(!ORDER.active||ORDER.stage!=="waiting")return false;
+  if(Math.hypot(player.x-ORDER.x,player.z-ORDER.z)>4.5)return false;
+  if(MONEY.v<ORDER.cost){
+    toast("\u{1F4B0} The courier wants $"+fmtMoney(ORDER.cost)+" — you only have $"+fmtMoney(MONEY.v)+"!");
+    return true;
+  }
+  MONEY.v-=ORDER.cost;updateMoneyUI();
+  ORDER.items.forEach(it=>MCD.pack.push(it));
+  if(ORDER.dumps){DUMP.unopened+=ORDER.dumps;renderDump();}
+  renderPack();saveGame();
+  toast("\u{1F389} Paid $"+fmtMoney(ORDER.cost)+" — "+ORDER.label+" is yours! "
+    +(ORDER.dumps?"Open them in the \u{1F95F} Dumplings menu!":"The food is in your \u{1F392} backpack (press R to eat)."));
+  leaveOrder();
+  return true;
+}
+function updateOrder(dt){
+  if(!ORDER.active||S.world!=="earth")return;
+  const m=ORDER.mesh;
+  if(ORDER.stage==="driving"||ORDER.stage==="leaving"){
+    const tx=ORDER.stage==="driving"?ORDER.tx:ORDER.lx;
+    const tz=ORDER.stage==="driving"?ORDER.tz:ORDER.lz;
+    const dx=tx-ORDER.x,dz=tz-ORDER.z,d=Math.hypot(dx,dz);
+    if(d<3){
+      if(ORDER.stage==="driving"){
+        ORDER.stage="waiting";ORDER.wait=180;
+        dingdong();
+        setRoute(ORDER.x,ORDER.z);
+        toast("\u{1F514} DING DONG! Your "+ORDER.label+" is at the front door — go out, pay & pick it up!");
+      }else{endOrder();return;}
+    }else{
+      const yaw=Math.atan2(dx,dz);
+      ORDER.x+=dx/d*15*dt;ORDER.z+=dz/d*15*dt;
+      m.rotation.set(0,yaw,0);
+      for(const w of m.userData.wheels)w.spin.rotation.x+=15/w.r*dt;
+    }
+    m.position.set(ORDER.x,terrainH(ORDER.x,ORDER.z),ORDER.z);
+  }else if(ORDER.stage==="waiting"){
+    ORDER.wait-=dt;
+    if(ORDER.wait<=0){
+      toast("\u{1F6F5} The courier waited and waited... and drove off with your "+ORDER.label+"!");
+      leaveOrder();
+    }
+  }
 }
 /* ================= RIDE ALONG: hop into another player's car as a PASSENGER ================= */
 const RIDE={on:false,key:null,px:0,pz:0};
@@ -6102,7 +6364,21 @@ const UPDATE_PAGES=[
 <li><b>⏻ Turn the TV OFF</b> when it's bedtime.</li></ul>
 <h4>\u{1F4F0} SMARTER NEWS</h4><ul>
 <li>News stories don't repeat anymore — each story plays exactly <b>once, for 5 seconds</b>.</li>
-<li>No news? The TV shows real black &amp; white <b>static</b>, just like an old telly.</li></ul>`}
+<li>No news? The TV shows real black &amp; white <b>static</b>, just like an old telly.</li></ul>`},
+{t:"Round 23 — Food delivery, YOUR music at concerts & next-level looks",h:`
+<h4>\u{1F6F5} ORDER FOOD TO YOUR HOME</h4><ul>
+<li>In your apartment room (press T) or mansion (T → \u{1F354} Order food): choose <b>McDrive</b> (the full menu!), <b>MEGA MART boxes</b> or <b>Squishy Dumplings by amount</b> ($12 each).</li>
+<li>A courier on a pink moped drives to your front door and <b>\u{1F514} RINGS THE DOORBELL</b> — go out, pay, and take your order!</li>
+<li>Take too long (3 minutes) and the courier drives off with your food...</li></ul>
+<h4>\u{1F3B9}\u{1F4C2} PLAY YOUR OWN .MID FILES</h4><ul>
+<li>At any piano: <b>\u{1F4C2} Play a .MID file</b> — upload a real MIDI song and the piano performs it live, tempo changes and all!</li>
+<li>Combine it with a concert: call the crowd, play your favourite song, collect the tips. ⏹ Stop anytime.</li></ul>
+<h4>\u{1F306} NEXT-LEVEL GRAPHICS</h4><ul>
+<li>A real <b>gradient sky dome</b>: deep blue overhead melting into a glowing horizon — sunsets are now stunning.</li>
+<li>The sea <b>glints in the sunlight</b> (real specular water).</li>
+<li><b>Realistic car lights</b>: brake lights flare bright red, reverse lights glow white, and at night every car (traffic too!) casts visible <b>headlight beams</b>.</li>
+<li>Cars got <b>interiors</b>: seats and a steering wheel you can see through the glass.</li>
+<li>All of it is light on the GPU — smooth on the ⚡ Fast setting too.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -6159,7 +6435,7 @@ function frame(now){
     updatePeds(dt);updateAnimals(dt);updateDoors(dt);updateCollapses(dt);
     updateTrafficLights();updateGates(dt);
     updateCrowd(dt);updateMuseums(dt);
-    updateFerries(dt);updateIslands(dt);
+    updateFerries(dt);updateIslands(dt);updateOrder(dt);
     water.position.x=player.x;water.position.z=player.z;   // the sea follows you
     updateFish(dt);
     clouds.forEach(c=>{
@@ -6175,7 +6451,7 @@ function frame(now){
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
-  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateTv(dt);
+  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateTv(dt);updateMidi();
   updateChunks(player.x,player.z);
   updateLandmarks(player.x,player.z);
   updateCamera(dt);

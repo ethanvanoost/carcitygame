@@ -32,8 +32,32 @@ function buildVehicleMesh(type,color,top){
     const ws=new THREE.Mesh(new THREE.PlaneGeometry(1.8,0.72),glassMat);ws.position.set(0,1.28,0.95);ws.rotation.x=-0.55;g.add(ws);
     [[-2.32,0x23262b],[2.32,0x23262b]].forEach(p=>{const b=new THREE.Mesh(new THREE.BoxGeometry(2.16,0.22,0.24),darkTrim);b.position.set(0,0.42,p[0]);g.add(b);});
     const grille=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.2,0.06),darkTrim);grille.position.set(0,0.72,2.32);g.add(grille);
-    [[-0.72],[0.72]].forEach(p=>{const h=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.16,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));h.position.set(p[0],0.82,2.33);g.add(h);
-      const t=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0xd7263d}));t.position.set(p[0],0.82,-2.33);g.add(t);});
+    g.userData.tails=[];g.userData.beams=[];
+    [[-0.72],[0.72]].forEach(p=>{
+      const h=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.16,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));
+      h.position.set(p[0],0.82,2.33);g.add(h);
+      /* tail lights: dim when cruising, BRIGHT red when braking, white in reverse */
+      const t=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0x8a1420}));
+      t.position.set(p[0],0.82,-2.33);g.add(t);
+      g.userData.tails.push(t);
+      /* visible headlight BEAMS at night */
+      const beam=new THREE.Mesh(new THREE.ConeGeometry(1.5,10,10,1,true),
+        new THREE.MeshBasicMaterial({color:0xfff2b0,transparent:true,opacity:0.09,depthWrite:false,side:THREE.DoubleSide}));
+      beam.rotation.x=-Math.PI/2;
+      beam.position.set(p[0],0.8,7.3);
+      beam.visible=false;g.add(beam);
+      g.userData.beams.push(beam);
+    });
+    /* a real interior: two seats and a steering wheel, visible through the glass */
+    const seatM=new THREE.MeshLambertMaterial({color:0x2a2f3a});
+    [[-0.45],[0.45]].forEach(p=>{
+      const seat=new THREE.Mesh(new THREE.BoxGeometry(0.58,0.22,0.6),seatM);
+      seat.position.set(p[0],1.04,-0.4);g.add(seat);
+      const back=new THREE.Mesh(new THREE.BoxGeometry(0.58,0.5,0.14),seatM);
+      back.position.set(p[0],1.32,-0.72);g.add(back);
+    });
+    const sw=new THREE.Mesh(new THREE.TorusGeometry(0.17,0.035,6,14),darkTrim);
+    sw.position.set(-0.45,1.18,0.3);sw.rotation.x=-0.55;g.add(sw);
     [[-1.02],[1.02]].forEach(p=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.12,0.24),mat);m.position.set(p[0],1.22,0.75);g.add(m);});
     /* roof pillars framing the glass cabin */
     [[-0.9,0.85],[0.9,0.85],[-0.92,-1.32],[0.92,-1.32]].forEach(p=>{

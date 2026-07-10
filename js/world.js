@@ -62,10 +62,27 @@ const clouds=[];
 }
 const skyDay=new THREE.Color(0x8ec9f0),skyNight=new THREE.Color(0x0a1028),skyDusk=new THREE.Color(0xf2a35e);
 const fogDay=new THREE.Color(0x9fd0f0),fogNight=new THREE.Color(0x0c1226);
+/* a real gradient SKY DOME: deep blue overhead melting into a bright horizon —
+   sunsets now glow like the real thing instead of one flat color */
+const skyDome=(function(){
+  const mat=new THREE.ShaderMaterial({
+    side:THREE.BackSide,fog:false,depthWrite:false,
+    uniforms:{top:{value:new THREE.Color(0x6fb4e8)},bot:{value:new THREE.Color(0xe8f2fa)}},
+    vertexShader:"varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}",
+    fragmentShader:"uniform vec3 top;uniform vec3 bot;varying vec3 vP;void main(){float h=normalize(vP).y*0.5+0.5;gl_FragColor=vec4(mix(bot,top,pow(max(h,0.0),0.55)),1.0);}"
+  });
+  const m=new THREE.Mesh(new THREE.SphereGeometry(2400,20,14),mat);
+  m.renderOrder=-10;m.frustumCulled=false;
+  scene.add(m);
+  return m;
+})();
 function updateSky(px,pz){
   if(S.world==="moon"){
     /* no atmosphere: black sky, stars always out, Earth hangs above */
     scene.background=new THREE.Color(0x04060f);
+    skyDome.position.set(px,0,pz);
+    skyDome.material.uniforms.top.value.set(0x03040c);
+    skyDome.material.uniforms.bot.value.set(0x0a0f1e);
     scene.fog.color.set(0x04060f);scene.fog.near=900;scene.fog.far=2600;
     stars.material.opacity=0.95;
     sun.intensity=1.25;hemi.intensity=0.4;
@@ -92,6 +109,12 @@ function updateSky(px,pz){
   hemi.intensity=0.25+dayness*0.7;
   const sky=skyNight.clone().lerp(skyDay,dayness).lerp(skyDusk,duskness*0.55);
   scene.background=sky;
+  /* the gradient dome: darker zenith, glowing horizon (orange at dusk) */
+  skyDome.position.set(px,0,pz);
+  skyDome.material.uniforms.top.value.copy(sky).multiplyScalar(0.8);
+  skyDome.material.uniforms.bot.value.copy(sky)
+    .lerp(new THREE.Color(0xfff1d6),0.35+duskness*0.45)
+    .lerp(skyDusk,duskness*0.4);
   scene.fog.color.copy(fogNight.clone().lerp(fogDay,dayness));
   stars.material.opacity=THREE.MathUtils.clamp(1-dayness*1.8,0,0.95);
   sunBall.visible=sy>-0.08;moonBall.visible=sy<0.12;
@@ -369,7 +392,7 @@ const lotMat=(function(){
   return keep(new THREE.MeshLambertMaterial({map:t,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
 })();
 /* ---- the sea surface: one big water plane that follows the player ---- */
-const waterMat=keep(new THREE.MeshLambertMaterial({color:0x1d6f9e,transparent:true,opacity:0.72}));
+const waterMat=keep(new THREE.MeshPhongMaterial({color:0x1d6f9e,transparent:true,opacity:0.72,shininess:140,specular:0x9fd0e8}));
 const water=new THREE.Mesh(new THREE.PlaneGeometry(3200,3200),waterMat);
 water.rotation.x=-Math.PI/2;water.position.y=-1.25;scene.add(water);
 /* ---- tunnels: grey tubes where roads pass through mountains ---- */
