@@ -4563,6 +4563,61 @@ function updateMini(dt){
   c.fill();c.strokeStyle="#fff";c.lineWidth=1.6;c.stroke();
   c.restore();
 }
+/* ---------- the compass: shows where north, east, south & west are ---------- */
+const COMPASS={on:localStorage.getItem("vc4compass")==="1"};
+$("bCompass").onclick=()=>{
+  COMPASS.on=!COMPASS.on;
+  try{localStorage.setItem("vc4compass",COMPASS.on?"1":"0");}catch(e){}
+  $("bCompass").classList.toggle("on",COMPASS.on);
+  toast(COMPASS.on?"\u{1F9ED} Compass ON — the red needle always points NORTH!":"\u{1F9ED} Compass OFF");
+};
+$("bCompass").classList.toggle("on",COMPASS.on);
+function updateCompass(){
+  const el=$("compass");
+  if(!COMPASS.on||S.mode!=="game"){el.style.display="none";return;}
+  el.style.display="block";
+  const yaw=playerYaw();   // your heading: 0 = north (+z), east = +x
+  const cv=$("compassCv"),c=cv.getContext("2d"),R=66;
+  c.clearRect(0,0,132,132);
+  /* dial */
+  c.beginPath();c.arc(R,R,60,0,7);
+  c.fillStyle="rgba(13,17,26,.85)";c.fill();
+  c.lineWidth=3;c.strokeStyle="#2a3550";c.stroke();
+  /* tick marks every 30 degrees, rotating with your heading */
+  for(let i=0;i<12;i++){
+    const a=i*Math.PI/6-yaw;
+    c.strokeStyle=i%3===0?"#4a5670":"#2a3550";
+    c.lineWidth=i%3===0?2.5:1.5;
+    c.beginPath();
+    c.moveTo(R+Math.sin(a)*52,R-Math.cos(a)*52);
+    c.lineTo(R+Math.sin(a)*58,R-Math.cos(a)*58);
+    c.stroke();
+  }
+  /* N / E / S / W rotate so the direction you FACE is at the top */
+  const dirs=[["N",0,"#ff5d5d"],["E",Math.PI/2,"#e8edf7"],["S",Math.PI,"#e8edf7"],["W",Math.PI*1.5,"#e8edf7"]];
+  c.font="bold 17px Segoe UI";c.textAlign="center";c.textBaseline="middle";
+  for(const[t,d,col]of dirs){
+    const a=d-yaw;
+    c.fillStyle=col;
+    c.fillText(t,R+Math.sin(a)*40,R-Math.cos(a)*40);
+  }
+  /* the needle: red half always points NORTH, white half south */
+  const na=-yaw;
+  c.beginPath();
+  c.moveTo(R+Math.sin(na)*30,R-Math.cos(na)*30);
+  c.lineTo(R+Math.sin(na+2.6)*7,R-Math.cos(na+2.6)*7);
+  c.lineTo(R+Math.sin(na-2.6)*7,R-Math.cos(na-2.6)*7);
+  c.closePath();c.fillStyle="#ff5d5d";c.fill();
+  c.beginPath();
+  c.moveTo(R-Math.sin(na)*30,R+Math.cos(na)*30);
+  c.lineTo(R+Math.sin(na+2.6)*7,R-Math.cos(na+2.6)*7);
+  c.lineTo(R+Math.sin(na-2.6)*7,R-Math.cos(na-2.6)*7);
+  c.closePath();c.fillStyle="#e8edf7";c.fill();
+  c.beginPath();c.arc(R,R,3.4,0,7);c.fillStyle="#ffb02e";c.fill();
+  /* your own arrow at the top: you always look "up" */
+  c.fillStyle="#3fd0ff";
+  c.beginPath();c.moveTo(R,4);c.lineTo(R-5,13);c.lineTo(R+5,13);c.closePath();c.fill();
+}
 function teleportTo(x,z){
   SIT.on=false;
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
@@ -5733,7 +5788,7 @@ function frame(now){
   if(FPS.t>=0.5){FPS.val=Math.round(FPS.frames/FPS.t);FPS.frames=0;FPS.t=0;}
   $("fpsCoord").textContent=(FPS.val?FPS.val:"–")+" fps · \u{1F4CD} "+Math.round(player.x)+", "+Math.round(player.z);
   updateHint();
-  updateNav();updateRace(dt);updateMini(dt);updateHeld();
+  updateNav();updateRace(dt);updateMini(dt);updateHeld();updateCompass();
   mpTick(dt);
   autoSave(dt);
   renderer.render(scene,camera);
