@@ -831,20 +831,92 @@ const newsCv=document.createElement("canvas");newsCv.width=256;newsCv.height=136
 const newsTex=new THREE.CanvasTexture(newsCv);
 const newsMat=new THREE.MeshBasicMaterial({map:newsTex});
 KEEP.add(newsMat);KEEP.add(newsTex);
-let _newsI=0,_newsT=0;
-function updateNews(dt){
-  _newsT-=dt;
-  if(_newsT>0)return;
-  _newsT=3.2;
-  _newsI=(_newsI+1)%NEWS.length;
+/* ================= THE TV: real channels! ================= */
+const TVS=[];   // every placed TV
+const TV3MM=[
+  "100% Lossless Simple Kelp Farm! [3MM] - Tainro (720p).mp4",
+  "How to Build a Starter House in Minecraft [3MM] - Tainro (720p).mp4",
+  "How to Build a Water Elevator in Minecraft! [3MM] - Tainro (720p).mp4",
+  "How to Use a Conduit in Minecraft! [3MM] - Tainro (720p).mp4",
+  "How to Use a Lectern in Minecraft! [3MM] - Tainro (720p).mp4",
+  "Let's Grow Some Food! [3MM] - Tainro (720p).mp4",
+  "Minecraft Super Simple Item Sorter! [3MM] - Tainro (720p).mp4",
+  "Simple Cobblestone Generator! [3MM] - Tainro (720p).mp4"
+];
+const TV={channel:"news",idx:0,videoEl:null,videoTex:null};
+function tvVideoName(i){return TV3MM[i].replace(" [3MM] - Tainro (720p).mp4","");}
+function ensureTvVideo(){
+  if(TV.videoEl)return;
+  const v=document.createElement("video");
+  v.playsInline=true;v.setAttribute("playsinline","");
+  v.addEventListener("ended",()=>{
+    TV.idx=(TV.idx+1)%TV3MM.length;   // when a video ends, the next one plays
+    playTvVideo();
+    toast("\u{1F4FA} Next up: "+tvVideoName(TV.idx));
+  });
+  TV.videoEl=v;
+  TV.videoTex=new THREE.VideoTexture(v);
+  KEEP.add(TV.videoTex);
+}
+function playTvVideo(){
+  ensureTvVideo();
+  TV.videoEl.src="Videos/3MM/"+encodeURIComponent(TV3MM[TV.idx]);
+  TV.videoEl.play().catch(()=>{});
+}
+function setTvChannel(ch){
+  TV.channel=ch;
+  if(ch!=="3mm"&&TV.videoEl)TV.videoEl.pause();
+  if(ch==="3mm"){ensureTvVideo();newsMat.map=TV.videoTex;newsMat.color.set(0xffffff);playTvVideo();}
+  else if(ch==="off"){newsMat.map=null;newsMat.color.set(0x05070a);}
+  else{newsMat.map=newsTex;newsMat.color.set(0xffffff);}
+  newsMat.needsUpdate=true;
+}
+function nearTv(){
+  for(let i=TVS.length-1;i>=0;i--){
+    const t=TVS[i];
+    if(offScene(t.g)){TVS.splice(i,1);continue;}
+    if(Math.abs(player.y-t.y)<3&&Math.hypot(player.x-t.x,player.z-t.z)<3.2)return t;
+  }
+  return null;
+}
+function openTvMenu(){
+  showDest("\u{1F4FA} TV — pick a channel",[
+    {label:"⛏ Channel 1 — 3 Minute Minecraft (3MM)",value:"3mm"},
+    {label:"\u{1F4F0} Channel 2 — CITY NEWS (live!)",value:"news"},
+    {label:"\u{1F525} Channel 3 — The Cozy Fireplace",value:"fire"},
+    {label:"\u{1F420} Channel 4 — The Aquarium",value:"aqua"},
+    {label:"⏻ Turn the TV OFF",value:"off"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    if(v==="3mm"){
+      const opts=TV3MM.map((f,i)=>({label:"▶ "+tvVideoName(i),value:i}));
+      opts.push({label:"❌ Cancel",value:"cancel"});
+      showDest("⛏ 3 Minute Minecraft — pick a video",opts,vi=>{
+        if(vi==="cancel")return;
+        TV.idx=vi;
+        setTvChannel("3mm");
+        toast("\u{1F4FA}⛏ Now playing: "+tvVideoName(vi)+" — when it ends, the next video starts!");
+      });
+      return;
+    }
+    setTvChannel(v);
+    toast(v==="off"?"\u{1F4FA}⏻ TV is OFF — good night!"
+      :v==="news"?"\u{1F4FA}\u{1F4F0} CITY NEWS — every story plays once, live!"
+      :v==="fire"?"\u{1F525} The cozy fireplace channel... so warm."
+      :"\u{1F420} The aquarium channel — blub blub!");
+  });
+}
+/* --- CITY NEWS: each story shows ONCE for 5 seconds, then B&W static --- */
+let _newsCur=null,_newsTimer=0,_staticT=0,_animT=0;
+function drawHeadline(t){
   const c=newsCv.getContext("2d");
   c.fillStyle="#08131f";c.fillRect(0,0,256,136);
   c.fillStyle="#c0392b";c.fillRect(0,0,256,26);
   c.fillStyle="#fff";c.font="bold 16px Segoe UI";c.textAlign="left";
   c.fillText("\u{1F4FA} CITY NEWS · LIVE",8,19);
-  /* word-wrap the headline */
   c.font="13px Segoe UI";c.fillStyle="#e8edf7";
-  const words=String(NEWS[_newsI]).split(" ");
+  const words=String(t).split(" ");
   let line="",y=48;
   for(const w of words){
     if((line+" "+w).length>32){c.fillText(line,8,y);y+=17;line=w;}
@@ -852,11 +924,101 @@ function updateNews(dt){
     if(y>110)break;
   }
   if(line&&y<=110)c.fillText(line,8,y);
-  /* ticker */
   c.fillStyle="#1a2438";c.fillRect(0,118,256,18);
   c.fillStyle="#ffd75e";c.font="bold 11px Segoe UI";
-  c.fillText("BREAKING · story "+(_newsI+1)+" / "+NEWS.length+" · stay tuned...",8,131);
+  c.fillText("BREAKING NEWS · live from your world",8,131);
   newsTex.needsUpdate=true;
+}
+function drawStatic(){
+  /* no news right now: black & white square static, like a real old TV */
+  const c=newsCv.getContext("2d");
+  for(let y=0;y<136;y+=8)for(let x=0;x<256;x+=8){
+    const v=Math.random()<0.45?8:Math.floor(120+Math.random()*135);
+    c.fillStyle="rgb("+v+","+v+","+v+")";
+    c.fillRect(x,y,8,8);
+  }
+  newsTex.needsUpdate=true;
+}
+/* --- the generated channels: fireplace & aquarium --- */
+const aquaFish=[];
+for(let i=0;i<5;i++)aquaFish.push({x:Math.random()*256,y:30+i*20,sp:12+Math.random()*22,dir:Math.random()<0.5?1:-1,col:["#ff7f11","#f4d35e","#ff5d8f","#4fc3f7","#94d82d"][i]});
+function drawFireplace(){
+  const c=newsCv.getContext("2d");
+  c.fillStyle="#160c06";c.fillRect(0,0,256,136);
+  c.fillStyle="#4a3728";c.fillRect(48,104,160,14);   // logs
+  c.fillStyle="#5a4430";c.fillRect(70,96,120,10);
+  for(let i=0;i<14;i++){
+    const x=70+Math.random()*116,h=18+Math.random()*52,w=8+Math.random()*14;
+    c.fillStyle=["#ff7f11","#ffd166","#d7263d","#ff9e3d"][i%4];
+    c.beginPath();
+    c.moveTo(x-w/2,104);c.quadraticCurveTo(x,104-h*1.3,x+w/2,104);
+    c.closePath();c.fill();
+  }
+  for(let i=0;i<6;i++){c.fillStyle="#ffd166";c.fillRect(80+Math.random()*100,30+Math.random()*60,2,2);}
+  newsTex.needsUpdate=true;
+}
+function drawAquarium(){
+  const c=newsCv.getContext("2d");
+  const gr=c.createLinearGradient(0,0,0,136);
+  gr.addColorStop(0,"#0e4d78");gr.addColorStop(1,"#062b47");
+  c.fillStyle=gr;c.fillRect(0,0,256,136);
+  c.fillStyle="#2f9e44";
+  for(const wx of[30,120,215]){c.fillRect(wx,96,5,40);c.fillRect(wx+8,106,4,30);}
+  for(const f of aquaFish){
+    c.save();
+    c.translate(f.x,f.y+Math.sin(performance.now()/400+f.x)*4);
+    c.scale(f.dir,1);
+    c.fillStyle=f.col;
+    c.beginPath();c.ellipse(0,0,11,6,0,0,7);c.fill();
+    c.beginPath();c.moveTo(-10,0);c.lineTo(-17,-5);c.lineTo(-17,5);c.closePath();c.fill();
+    c.fillStyle="#08131f";c.beginPath();c.arc(5,-1.5,1.6,0,7);c.fill();
+    c.restore();
+  }
+  c.fillStyle="rgba(255,255,255,.5)";
+  for(let i=0;i<5;i++)c.beginPath(),c.arc((i*53+performance.now()/40)%256,(136-(performance.now()/14+i*40)%136),2,0,7),c.fill();
+  newsTex.needsUpdate=true;
+}
+function updateTv(dt){
+  /* video sound follows how close you stand to a TV */
+  if(TV.channel==="3mm"&&TV.videoEl){
+    let d=1e9;
+    for(let i=TVS.length-1;i>=0;i--){
+      const t=TVS[i];
+      if(offScene(t.g)){TVS.splice(i,1);continue;}
+      d=Math.min(d,Math.hypot(player.x-t.x,player.z-t.z));
+    }
+    TV.videoEl.volume=SND.sound?Math.max(0,Math.min(0.75,1.1-d/26)):0;
+    return;
+  }
+  if(TV.channel==="off")return;
+  if(TV.channel==="news"){
+    if(_newsCur!==null){
+      _newsTimer-=dt;
+      if(_newsTimer<=0)_newsCur=null;
+    }
+    if(_newsCur===null&&NEWS.length){
+      _newsCur=NEWS.shift();   // every story plays exactly ONCE
+      _newsTimer=5;
+      drawHeadline(_newsCur);
+    }
+    if(_newsCur===null){
+      _staticT-=dt;
+      if(_staticT<=0){_staticT=0.12;drawStatic();}
+    }
+    return;
+  }
+  _animT-=dt;
+  if(_animT>0)return;
+  _animT=0.1;
+  if(TV.channel==="fire")drawFireplace();
+  else if(TV.channel==="aqua"){
+    for(const f of aquaFish){
+      f.x+=f.sp*f.dir*0.1;
+      if(f.x>270){f.dir=-1;f.x=270;}
+      if(f.x<-14){f.dir=1;f.x=-14;}
+    }
+    drawAquarium();
+  }
 }
 /* ---------- random events: construction, accidents (+ambulance), fires (+fire truck) & festivals ---------- */
 const EVENTS={list:[],timer:25};
@@ -1332,6 +1494,8 @@ function tryFurniture(){
       return true;
     }
   }
+  /* the TV: pick a channel */
+  if(nearTv()){openTvMenu();return true;}
   /* pianos: sit down and play (computer keyboard or a real MIDI keyboard) */
   const pn=nearFurn(pianos,4.5);
   if(pn){openPiano(pn);return true;}
@@ -1785,9 +1949,10 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
   }else if(t==="tv"){
     box(1.6,0.5,0.5,0,0.25,0,darkTrim);
     box(2.2,1.25,0.12,0,1.2,0,darkTrim);
-    /* the TV really plays CITY NEWS — live stories from your world! */
+    /* a REAL TV: press T next to it to pick a channel */
     const scr=new THREE.Mesh(new THREE.PlaneGeometry(2,1.05),newsMat);
     scr.position.set(0,1.2,0.07);g.add(scr);
+    TVS.push({g,x,z,y});
   }else if(t==="plant"){
     const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.22,0.45,10),new THREE.MeshLambertMaterial({color:0xb8532b}));
     pot.position.y=0.22;g.add(pot);
@@ -4835,6 +5000,7 @@ function updateHint(){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
       if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
+      else if(nearTv()){txt="\u{1F4FA} The TV — press T to pick a channel (Minecraft, news, fireplace...)";showT=true;}
       else if(pn&&pn.hat&&(pn.hatMoney||0)>0&&Math.hypot(player.x-pn.hat.x,player.z-pn.hat.z)<2.4){txt="\u{1F3A9} The hat is full — press T to collect $"+pn.hatMoney+"!";showT=true;}
       else if(pn){txt=pn.crowded?"\u{1F3B9} Your concert is ON — press T at the piano, then \u{1F51A} End the concert":"\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
@@ -5926,7 +6092,17 @@ const UPDATE_PAGES=[
 <li>The aliens JAM teleporters near their ships — the map's "\u{1F6F8} Nearest ALIEN spaceship" button only sets a <b>route</b>. Fly your rocket and follow the line: a true expedition!</li></ul>
 <h4>\u{1F698} RIDE ALONG WITH FRIENDS</h4><ul>
 <li>Walk up to another player's car (or motorcycle) and press <b>F</b> — you hop into the <b>passenger seat</b> and ride wherever they drive!</li>
-<li>They see you sitting in the car, name tag and all. Press F anytime to hop out.</li></ul>`}
+<li>They see you sitting in the car, name tag and all. Press F anytime to hop out.</li></ul>`},
+{t:"Round 22 — A REAL TV with channels & videos \u{1F4FA}",h:`
+<h4>\u{1F4FA} PRESS T AT YOUR TV — PICK A CHANNEL!</h4><ul>
+<li><b>⛏ Channel 1 — 3 Minute Minecraft (3MM)</b>: 8 real videos! Pick one and watch it ON the TV in your mansion — when it ends, the next one plays automatically. The sound gets louder as you walk closer.</li>
+<li><b>\u{1F4F0} Channel 2 — CITY NEWS</b>: live stories from your world.</li>
+<li><b>\u{1F525} Channel 3 — The Cozy Fireplace</b>: crackling animated flames.</li>
+<li><b>\u{1F420} Channel 4 — The Aquarium</b>: fish, seaweed and bubbles.</li>
+<li><b>⏻ Turn the TV OFF</b> when it's bedtime.</li></ul>
+<h4>\u{1F4F0} SMARTER NEWS</h4><ul>
+<li>News stories don't repeat anymore — each story plays exactly <b>once, for 5 seconds</b>.</li>
+<li>No news? The TV shows real black &amp; white <b>static</b>, just like an old telly.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -5999,7 +6175,7 @@ function frame(now){
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
-  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateNews(dt);
+  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateTv(dt);
   updateChunks(player.x,player.z);
   updateLandmarks(player.x,player.z);
   updateCamera(dt);
