@@ -325,6 +325,7 @@ function garageSetMesh(){
   if(GAR.mesh){GAR.room.remove(GAR.mesh);disposeGroup(GAR.mesh);}
   const m=buildVehicleMesh(GAR.v.type,GAR.color,GAR.v.top);
   if(m.userData.riderMesh)m.userData.riderMesh.visible=false;
+  applyCustom(m,GAR.v,custOf(GAR.v.name));
   m.position.set(0,GAR.cy+0.38,0);
   GAR.room.add(m);GAR.mesh=m;
 }
@@ -345,6 +346,8 @@ function openGarage(v){
   $("garName").textContent=EMOJI[v.type]+" "+v.name;
   $("garInfo").textContent=TYPE_LABEL[v.type]+" · top speed "+Math.round(uConv(v.top))+" "+uLabel()+" · pick a paint color, then hit DRIVE!";
   S.mode="garage";
+  $("garCustom").style.display=v.type==="car"?"flex":"none";
+  cuUI();
   $("garSell").style.display=DEFAULT_OWNED.includes(v.name)?"none":"";
   $("menu").style.display="none";
   $("hud").classList.remove("show");
@@ -394,7 +397,9 @@ function startGame(v){
   if(myVehicle)scene.remove(myVehicle.mesh);
   const sx=resume?rx:WORLD.ox+6,sz=resume?rz:WORLD.oz+6;
   S.everPlayed=true;S.lastPlayWorld=WORLD.name;
-  const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);scene.add(mesh);
+  const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);
+  applyCustom(mesh,v,custOf(v.name));
+  scene.add(mesh);
   myVehicle={mesh,type:v.type,top:v.top,x:sx,z:sz,yaw:Math.PI,speed:0,vy:0,y:0,grounded:true,roll:0};
   if(mesh.userData.riderMesh)mesh.userData.riderMesh.visible=true;
   player.drive=myVehicle;player.onFoot=false;
@@ -538,6 +543,8 @@ function dumpValue(d){
   if(d.color==="Pumpkin"||d.color==="Snowy")return d.glitter?150:40;   // seasonal specials
   if(d.color==="Pearl")return d.glitter?90:25;                         // island exclusive (sells BELOW the $35 shop price!)
   if(d.color==="Alien")return d.glitter?2500:1000;                     // robbed from the moon aliens!
+  if(d.color==="Lava")return d.glitter?300:120;                        // mined from a volcano crater
+  if(d.color==="Cloud")return d.glitter?240:80;                        // sky restaurant exclusive
   if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
 }
@@ -1633,8 +1640,9 @@ function updateJob(dt){
       jobTarget(dest.x,dest.z,"\u{1F696} Drop off — fare $"+JOB.fare);
       toast("\u{1F44B} Passenger aboard! Take them to the blue route's end for $"+JOB.fare+".");
     }else{
-      addMoney(JOB.fare);JOB.total+=JOB.fare;JOB.count++;
-      toast("\u{1F4B0} Fare paid: $"+JOB.fare+"! Passengers so far: "+JOB.count+". Next one is waiting...");
+      const cm=coopMult();
+      addMoney(JOB.fare*cm);JOB.total+=JOB.fare*cm;JOB.count++;
+      toast("\u{1F4B0} Fare paid: $"+(JOB.fare*cm)+(cm>1?" \u{1F91D} CO-OP x2!":"")+" Passengers so far: "+JOB.count+". Next one is waiting...");
       const p=jobRoadPoint(120,350);
       jobPassenger=makePerson(0.95);
       jobPassenger.position.set(p.x,terrainH(p.x,p.z),p.z);
@@ -1650,10 +1658,11 @@ function updateJob(dt){
       toast("\u{1F35F} Food loaded! Deliver 3 meals before the clock runs out — $40 each, $80 bonus for all 3!");
     }else{
       JOB.count++;
-      addMoney(40);JOB.total+=40;
+      const cm=coopMult();
+      addMoney(40*cm);JOB.total+=40*cm;
       if(JOB.count>=3){
-        addMoney(80);JOB.total+=80;
-        toast("\u{1F3C6} ALL 3 DELIVERED with "+Math.ceil(JOB.t)+"s left — +$80 bonus! Starting a new run...");
+        addMoney(80*cm);JOB.total+=80*cm;
+        toast("\u{1F3C6} ALL 3 DELIVERED with "+Math.ceil(JOB.t)+"s left — +$"+(80*cm)+" bonus"+(cm>1?" \u{1F91D} CO-OP x2!":"!")+" Starting a new run...");
         JOB.stage=0;JOB.t=300;
         const m=nearestSpot(function(i,j){return mcdSpot(i,j);},MCSP,46,90,5);
         if(m)jobTarget(m.sp.x,m.sp.z,"\u{1F354} Pick up the food");else endJob();
@@ -1677,8 +1686,9 @@ function updateJob(dt){
       jobTarget(t.x,t.z,"\u{1F69B} Tow the wreck to the garage");
       toast("\u{1F517} Wreck hooked up! Tow it to the garage (gas station) for $150.");
     }else{
-      addMoney(150);JOB.total+=150;JOB.count++;
-      toast("\u{1F4B0} Wreck delivered — +$150! Looking for the next accident...");
+      const cm=coopMult();
+      addMoney(150*cm);JOB.total+=150*cm;JOB.count++;
+      toast("\u{1F4B0} Wreck delivered — +$"+(150*cm)+(cm>1?" \u{1F91D} CO-OP x2":"")+"! Looking for the next accident...");
       let acc=EVENTS.list.find(e=>e.type==="accident");
       if(!acc){spawnEvent("accident");acc=EVENTS.list.find(e=>e.type==="accident");}
       if(acc){JOB.acc=acc;JOB.stage=0;jobTarget(acc.x,acc.z,"\u{1F69B} Drive to the accident");}
@@ -2908,7 +2918,7 @@ function mpMakeLabel(name){
 }
 function mpApply(k,d){
   if(!d||typeof d.x!=="number"||typeof d.z!=="number")return;
-  const kind=d.f?"foot":(d.v==="seat"?"seat":(d.v==="moto"||d.v==="bike"?d.v:"car"));
+  const kind=d.f?"foot":(d.v==="seat"?"seat":(d.v==="heli"?"heli":(d.v==="moto"||d.v==="bike"?d.v:"car")));
   const col=typeof d.c==="number"?(d.c&0xffffff):0x3fd0ff;
   const nm=typeof d.n==="string"?d.n.slice(0,16):"player";
   const av=typeof d.av==="string"?d.av:"";
@@ -2917,7 +2927,8 @@ function mpApply(k,d){
   if(!o){
     const g=new THREE.Group();
     const avObj=parseAv(av);
-    const body=(kind==="foot"||kind==="seat")?makePerson(1,avObj?avObj.shirt:col,avObj):buildVehicleMesh(kind,col);
+    const body=(kind==="foot"||kind==="seat")?makePerson(1,avObj?avObj.shirt:col,avObj)
+      :(kind==="heli"?buildHeliMesh(col):buildVehicleMesh(kind,col));
     if(kind==="seat"){
       /* a passenger sitting in someone's car */
       const L=body.userData.limbs;
@@ -2948,6 +2959,14 @@ function mpTick(dt){
     o.yaw+=dy*a;
     o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.yaw;
     o.g.visible=S.world==="earth";
+    /* spinning rotors on other players' helicopters */
+    if(o.kind==="heli"&&o.g.children[0].userData.rotor)o.g.children[0].userData.rotor.rotation.y+=dt*24;
+    /* the weekly champion wears a golden crown */
+    if(BOARD.top&&o.name===BOARD.top&&!o.crown){
+      o.crown=makeCrown();
+      o.crown.position.y=o.kind==="foot"?2.35:2.6;
+      o.g.add(o.crown);
+    }
   }
   if(S.mode==="game")$("worldTxt").textContent="\u{1F30D} "+(WORLD.name||"Default city")+" · \u{1F465} "+(MP.others.size+1);
   /* broadcast my own position ~5x per second (only when it changed) */
@@ -2965,7 +2984,7 @@ function mpTick(dt){
     x:Math.round(src.x*10)/10,z:Math.round(src.z*10)/10,y:Math.round((src.y||0)*10)/10,
     r:Math.round((src.yaw||0)*100)/100,
     f:player.onFoot?1:0,
-    v:RIDE.on?"seat":(player.drive?player.drive.type:"car"),
+    v:player.inHeli?"heli":(RIDE.on?"seat":(player.drive?player.drive.type:"car")),
     c:RIDE.on?AVATAR.shirt:paintOf(S.selected),
     av:avString(),
     t:Date.now()};
@@ -3273,6 +3292,24 @@ function tryCall(){
     if(bsh){openBeachShop(bsh);return;}
     const dg=nearIslandThing("digX",3.5);
     if(dg){digTreasureX(dg);return;}
+    /* the sky restaurant on the peaks */
+    if(nearSkyRest()){openSkyRest();return;}
+    /* mine LAVA dumplings from a (calm) volcano crater */
+    const vol=nearVolcanoCrater();
+    if(vol){
+      if(volcErupting()){toast("\u{1F30B}\u{1F4A5} IT'S ERUPTING — RUN FOR YOUR LIFE!");return;}
+      const lkey="vc4lava:"+Math.round(vol.x)+","+Math.round(vol.z);
+      const ts=parseInt(localStorage.getItem(lkey),10);
+      if(!isNaN(ts)&&Date.now()-ts<600000){
+        toast("\u{1F30B} The lava needs "+Math.ceil((600000-(Date.now()-ts))/60000)+" more minutes to cool — hang on!");
+        return;
+      }
+      try{localStorage.setItem(lkey,String(Date.now()));}catch(e){}
+      DUMP.owned.push({color:"Lava",hex:"#ff4400",glitter:Math.random()<0.1});
+      renderDump();saveGame();
+      toast("\u{1F30B}\u{1F95F} You scooped a molten LAVA dumpling ($120)! The crater refills in 10 minutes.");
+      return;
+    }
     /* standing in YOUR mansion: T opens the editor. In someone ELSE's: the visitor menu */
     const mn=nearMansion();
     if(mn&&rentedAt(mn.id)){openMansionEdit(mn);return;}
@@ -3353,6 +3390,25 @@ function tryEnterLeave(){
   SIT.on=false;   // stand up before getting into anything
   /* riding shotgun in another player's car: F hops out */
   if(RIDE.on){endRide();return;}
+  /* the helicopter: land & hop out, or hop in */
+  if(player.inHeli){
+    const gh=Math.max(terrainH(HELI.x,HELI.z),deckYAt(HELI.x,HELI.z,HELI.y));
+    if(HELI.y-gh<3.5){
+      HELI.y=gh;HELI.hs=0;
+      HELI.mesh.position.y=gh;HELI.mesh.rotation.x=0;
+      player.inHeli=false;
+      player.onFoot=true;player.mesh.visible=true;
+      player.x=HELI.x+3;player.z=HELI.z;
+      player.y=gh;player.grounded=true;player.vy=0;
+      toast("\u{1F681} Landed — smooth as butter!");
+    }else toast("\u{1F681} Get lower first — hold SHIFT to descend, then press F to land!");
+    return;
+  }
+  if(player.onFoot&&HELI.active&&Math.hypot(player.x-HELI.x,player.z-HELI.z)<6){
+    player.inHeli=true;player.onFoot=false;player.mesh.visible=false;player.drive=null;
+    toast("\u{1F681} Lift off! W/S = speed, A/D = turn, SPACE = up, SHIFT = down, F = land");
+    return;
+  }
   /* rocket first: leaving */
   if(player.inRocket){
     if(rocket.state==="piloted"){
@@ -4219,6 +4275,7 @@ function updateTraffic(dt){
 const FPS={frames:0,t:0,val:0};
 function camTargetInfo(){
   if(player.inRocket)return{x:rocket.x,y:rocket.y+9,z:rocket.z,yaw:rocket.yaw||0,d:46,h:16};
+  if(player.inHeli)return{x:HELI.x,y:HELI.y+3,z:HELI.z,yaw:HELI.yaw,d:17,h:7};
   if(RIDE.on){
     const o=MP.others.get(RIDE.key);
     if(o)return{x:o.x,y:o.y+1,z:o.z,yaw:o.yaw,d:13,h:5};
@@ -4462,6 +4519,36 @@ function drawMap(){
         }
       }
     }
+    /* volcano islands */
+    {
+      const wi0=Math.floor((mapView.cx-halfW-4350)/VOLC),wi1=Math.ceil((mapView.cx+halfW-4050)/VOLC);
+      const wj0=Math.floor((mapView.cz-halfH-7950)/VOLC),wj1=Math.ceil((mapView.cz+halfH-7650)/VOLC);
+      for(let i=wi0;i<=wi1;i++)for(let j=wj0;j<=wj1;j++){
+        const s=volcanoSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#c0392b",8);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#ff9e3d";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F30B}",px,py-10);
+        }
+      }
+    }
+    /* sky restaurants on the peaks */
+    if(sc>=0.1){
+      const ri0=Math.floor((mapView.cx-halfW-2700)/SRSP),ri1=Math.ceil((mapView.cx+halfW-2500)/SRSP);
+      const rj0=Math.floor((mapView.cz-halfH-1000)/SRSP),rj1=Math.ceil((mapView.cz+halfH-800)/SRSP);
+      for(let i=ri0;i<=ri1;i++)for(let j=rj0;j<=rj1;j++){
+        const s=skyRestSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#9fd8ff",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#dff1ff";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("☁️",px,py-9);
+        }
+      }
+    }
     /* ferry islands out in the sea */
     {
       const li0=Math.floor((mapView.cx-halfW-1000)/ISP),li1=Math.ceil((mapView.cx+halfW-800)/ISP);
@@ -4669,6 +4756,18 @@ function mapEntries(q){
       setupTreasure();
       $("mapModal").classList.remove("open");
       toast(TREASURE.found?"\u{1F3F4}‍☠️ You already found today's treasure — a new one appears tomorrow!":treasureHintText());
+    }],
+    ["\u{1F30B} Nearest VOLCANO island",()=>{
+      switchWorld("earth");
+      const best=nearestSpot(volcanoSpot,VOLC,4200,7800,3);
+      if(best)chooseDest("\u{1F30B} Volcano island — "+fmtDist(best.d)+" (mine LAVA dumplings!)",best.sp.x+140,best.sp.z,true);
+      else toast("No volcanoes near here — look for the big red \u{1F30B} dots when you zoom out!");
+    }],
+    ["☁️ Nearest SKY RESTAURANT",()=>{
+      switchWorld("earth");
+      const best=nearestSpot(skyRestSpot,SRSP,2600,900,4);
+      if(best)chooseDest("☁️ Sky Restaurant — "+fmtDist(best.d)+" (fly there with your \u{1F681}!)",best.sp.x,best.sp.z,true);
+      else toast("No mountain peaks tall enough nearby!");
     }],
     ["\u{1F3DD} Nearest FERRY ISLAND",()=>{
       switchWorld("earth");
@@ -4981,6 +5080,8 @@ function switchWorld(w){
   if(S.world===w)return;
   S.world=w;
   SIT.on=false;endRide(true);
+  if(player.inHeli){player.inHeli=false;player.onFoot=true;}
+  if(HELI.mesh)HELI.mesh.visible=w==="earth"&&HELI.active;
   /* the whole streamed world is rebuilt for the new planet */
   for(const[k,g]of chunks){if(g!=="pending")disposeChunk(g);}
   chunks.clear();buildQueue.length=0;
@@ -5106,6 +5207,9 @@ function updateHint(){
   else if(player.inTrain){txt=S.admin?"Driving the train (admin) — F to get off":"Riding the train — F to get off";showF=true;}
   else if(player.inPlane){const p=player.planeRef;txt=p.state==="piloted"?"Flying (admin controls)":"On the plane";showF=true;}
   else if(player.inBus){txt="On the bus — F to get off when stopped";showF=true;}
+  else if(player.inHeli){
+    txt="\u{1F681} Flying! W/S speed · A/D turn · SPACE up · SHIFT down — F to land";showF=true;
+  }
   else if(RIDE.on){
     const o=MP.others.get(RIDE.key);
     txt="\u{1F698} Riding along with "+(o?o.name:"a friend")+" — press F to hop out";showF=true;
@@ -5182,6 +5286,9 @@ function updateHint(){
       const rr=nearRideableCar();
       if(rr){txt="\u{1F698} "+rr.o.name+"'s "+(rr.o.kind==="moto"?"motorcycle":"car")+" — press F to hop in the PASSENGER seat!";showF=true;}
     }
+    if(!txt&&player.onFoot&&HELI.active&&Math.hypot(player.x-HELI.x,player.z-HELI.z)<7){txt="\u{1F681} Your helicopter — press F to FLY!";showF=true;}
+    if(!txt&&player.onFoot&&nearSkyRest()){txt="☁️ SKY RESTAURANT — press T for a meal above the clouds!";showT=true;}
+    if(!txt&&player.onFoot&&nearVolcanoCrater()){txt=volcErupting()?"\u{1F30B}\u{1F4A5} ERUPTION — GET AWAY!!":"\u{1F30B} The crater — press T to mine a LAVA dumpling!";showT=!volcErupting();}
     }
     if(!txt&&S.world==="moon"){
       const uf=nearUfo();
@@ -5428,6 +5535,289 @@ function digTreasureX(isl){
     renderDump();saveGame();
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
+/* ================= THE HELICOPTER: $500K, fly anywhere, land anywhere ================= */
+const HELI_PRICE=500000;
+const HELI={active:false,x:0,z:0,y:0,yaw:0,hs:0,mesh:null};
+function summonHeli(){
+  if(S.world!=="earth"){toast("\u{1F681} The helicopter stays on Earth — take a rocket up there!");return;}
+  if(!HELI.mesh){HELI.mesh=buildHeliMesh(0xd7263d);scene.add(HELI.mesh);}
+  HELI.active=true;HELI.hs=0;
+  HELI.x=player.x+9;HELI.z=player.z;HELI.yaw=player.yaw;
+  HELI.y=Math.max(terrainH(HELI.x,HELI.z),deckYAt(HELI.x,HELI.z,player.y+2));
+  HELI.mesh.visible=true;
+  HELI.mesh.position.set(HELI.x,HELI.y,HELI.z);
+  toast("\u{1F681} Your helicopter landed next to you — press F to hop in! (Space = up, Shift = down)");
+}
+$("bHeli").onclick=()=>{
+  if(S.mode!=="game"){toast("Start driving first!");return;}
+  if(OWN.has("Helicopter")){summonHeli();return;}
+  showDest("\u{1F681} Your own HELICOPTER?",[
+    {label:"\u{1F4B0} BUY — $"+fmtMoney(HELI_PRICE)+" · fly ANYWHERE, land ANYWHERE (even ☁️ Sky Restaurants!)",value:"buy"},
+    {label:"❌ Not yet",value:"cancel"}
+  ],v=>{
+    if(v!=="buy")return;
+    if(MONEY.v<HELI_PRICE){toast("\u{1F4B0} It costs $"+fmtMoney(HELI_PRICE)+" — you have $"+fmtMoney(MONEY.v)+". Keep earning!");return;}
+    MONEY.v-=HELI_PRICE;OWN.add("Helicopter");
+    updateMoneyUI();profileSave(true);saveGame();
+    summonHeli();
+    toast("\u{1F389}\u{1F681} SOLD! The helicopter is YOURS — press F to board!");
+  });
+};
+function updateHeli(dt){
+  const h=HELI;
+  const thr=thrInput(),st=steerInput();
+  const maxS=230/3.6;
+  if(thr>0)h.hs=Math.min(maxS,h.hs+22*thr*dt);
+  else if(thr<0)h.hs=Math.max(0,h.hs+30*thr*dt);
+  else h.hs*=Math.pow(0.99,dt*60);
+  h.yaw+=st*1.4/(1+h.hs/30)*dt;
+  let climb=0;
+  if(spaceInput())climb=14;else if(keys.shift)climb=-14;
+  h.y+=climb*dt;
+  h.x+=Math.sin(h.yaw)*h.hs*dt;
+  h.z+=Math.cos(h.yaw)*h.hs*dt;
+  const gh=Math.max(terrainH(h.x,h.z),deckYAt(h.x,h.z,h.y));
+  if(h.y<gh)h.y=gh;
+  h.mesh.position.set(h.x,h.y,h.z);
+  h.mesh.rotation.set(0,h.yaw,0);
+  h.mesh.rotateX(Math.min(0.3,h.hs/64*0.3));
+  h.mesh.userData.rotor.rotation.y+=dt*26;
+  h.mesh.userData.tailRotor.rotation.x+=dt*40;
+  player.x=h.x;player.z=h.z;player.y=h.y+1.5;
+  return h.hs+Math.abs(climb);
+}
+/* ================= WEEKLY LEADERBOARD (crown for #1!) ================= */
+const BOARD={top:""};
+function weekKey(){return "wk"+Math.floor((Date.now()-1767225600000)/(7*86400000));}
+function pushBoard(){
+  if(!SERVER_READY)return;
+  const k=profileKey();
+  if(!k)return;
+  fbPut("/board/"+weekKey()+"/"+fbKey(k),{t:myToken(),n:mpName(),money:MONEY.v,km:Math.round(S.km*10)/10,ts:Date.now()});
+}
+setInterval(pushBoard,60000);
+async function fetchBoard(){
+  const g=await fbGet("/board/"+weekKey());
+  const list=(g.ok&&g.data)?Object.values(g.data).filter(e=>e&&typeof e.money==="number"):[];
+  list.sort((a,b)=>b.money-a.money);
+  BOARD.top=list.length?(list[0].n||""):"";
+  return list;
+}
+setInterval(()=>{if(SERVER_READY)fetchBoard();},300000);
+async function openBoard(){
+  pushBoard();
+  const list=await fetchBoard();
+  const opts=list.slice(0,10).map((e,i)=>({
+    label:(i===0?"\u{1F451} ":"#"+(i+1)+"  ")+(e.n||"?")+" — $"+fmtMoney(e.money)+" · "+Math.round(e.km||0)+" km",value:"x"}));
+  if(!opts.length)opts.push({label:"(Empty this week — be the FIRST on the board!)",value:"x"});
+  opts.push({label:"✅ Close",value:"x"});
+  showDest("\u{1F3C5} WEEKLY LEADERBOARD — new week, new race to the top!",opts,()=>{});
+}
+$("bBoard").onclick=()=>{$("moneyModal").classList.remove("open");openBoard();};
+function makeCrown(){
+  const g=new THREE.Group();
+  const band=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.32,0.2,8,1,true),new THREE.MeshBasicMaterial({color:0xffd700,side:THREE.DoubleSide}));
+  g.add(band);
+  for(let i=0;i<5;i++){
+    const a=i/5*Math.PI*2;
+    const sp=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.3,4),new THREE.MeshBasicMaterial({color:0xffd700}));
+    sp.position.set(Math.cos(a)*0.3,0.22,Math.sin(a)*0.3);
+    g.add(sp);
+  }
+  return g;
+}
+/* ================= CAR CUSTOMIZATION 2.0 ================= */
+const CUSTOM={};
+try{Object.assign(CUSTOM,JSON.parse(localStorage.getItem("vc4custom")||"{}"));}catch(e){}
+function saveCustom(){try{localStorage.setItem("vc4custom",JSON.stringify(CUSTOM))}catch(e){}}
+function custOf(n){return CUSTOM[n]||(CUSTOM[n]={sp:0,neon:0,rim:0,stripe:0,plate:""});}
+const NEONS=[["OFF",0],["Cyan",0x00ffff],["Pink",0xff00ff],["Green",0x39ff14],["Red",0xff3333]];
+const RIMS=[["Standard",0],["Gold",0xffd700],["Red",0xff3333],["Aqua",0x00ffcc],["Black",0x0a0a0a]];
+const STRIPES=[["None",0],["White",0xffffff],["Black",0x111111],["Red",0xff3333],["Blue",0x00cfff]];
+function applyCustom(mesh,v,cfg){
+  if(!v||v.type!=="car"||!cfg)return;
+  if(cfg.sp&&!((v.top||0)>=340)){
+    [[-0.7],[0.7]].forEach(p=>{
+      const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.3,0.1),darkTrim);
+      st.position.set(p[0],1.22,-2.05);mesh.add(st);
+    });
+    const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
+    wing.position.set(0,1.4,-2.1);mesh.add(wing);
+  }
+  if(cfg.neon){
+    const nc=NEONS[cfg.neon][1];
+    const gl=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.9),
+      new THREE.MeshBasicMaterial({color:nc,transparent:true,opacity:0.55,depthWrite:false}));
+    gl.rotation.x=-Math.PI/2;gl.position.y=0.14;mesh.add(gl);
+  }
+  if(cfg.rim){
+    const rc=RIMS[cfg.rim][1];
+    for(const w of mesh.userData.wheels){
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.62,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
+      ring.rotation.y=Math.PI/2;
+      w.spin.add(ring);
+    }
+  }
+  if(cfg.stripe){
+    const sc=new THREE.MeshLambertMaterial({color:STRIPES[cfg.stripe][1]});
+    [[1.13,1.55,1.15],[1.67,-0.25,1.95],[1.14,-1.8,0.8]].forEach(s=>{
+      const b=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.03,s[2]),sc);
+      b.position.set(0,s[0],s[1]);mesh.add(b);
+    });
+  }
+  if(cfg.plate){
+    const cv=document.createElement("canvas");cv.width=128;cv.height=32;
+    const c=cv.getContext("2d");
+    c.fillStyle="#f4f7fb";c.fillRect(0,0,128,32);
+    c.fillStyle="#1b3f8f";c.fillRect(0,0,12,32);
+    c.fillStyle="#14161a";c.font="bold 22px Segoe UI";c.textAlign="center";
+    c.fillText(cfg.plate.toUpperCase().slice(0,7),70,24);
+    const pm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
+    [[2.37,0],[-2.37,Math.PI]].forEach(p=>{
+      const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.52,0.15),pm);
+      pl.position.set(0,0.52,p[0]);pl.rotation.y=p[1];mesh.add(pl);
+    });
+  }
+}
+function cuUI(){
+  if(!GAR.v)return;
+  const c=custOf(GAR.v.name);
+  $("cuSpoiler").innerHTML="\u{1F3CE} Spoiler: "+(c.sp?"ON":"OFF");
+  $("cuNeon").innerHTML="\u{1F4A1} Neon: "+NEONS[c.neon][0];
+  $("cuRim").innerHTML="⭕ Rims: "+RIMS[c.rim][0];
+  $("cuStripe").innerHTML="\u{1F3F3} Stripe: "+STRIPES[c.stripe][0];
+  $("cuPlate").innerHTML="\u{1F520} Plate: "+(c.plate?c.plate.toUpperCase():"—");
+}
+["cuSpoiler","cuNeon","cuRim","cuStripe"].forEach((id,k)=>{
+  $(id).onclick=()=>{
+    const c=custOf(GAR.v.name);
+    if(k===0)c.sp=c.sp?0:1;
+    else if(k===1)c.neon=(c.neon+1)%NEONS.length;
+    else if(k===2)c.rim=(c.rim+1)%RIMS.length;
+    else c.stripe=(c.stripe+1)%STRIPES.length;
+    saveCustom();garageSetMesh();cuUI();
+  };
+});
+$("cuPlate").onclick=()=>{
+  const c=custOf(GAR.v.name);
+  const s=prompt("License plate text (max 7 letters/numbers):",c.plate||"");
+  if(s===null)return;
+  c.plate=s.replace(/[^a-zA-Z0-9 ]/g,"").slice(0,7);
+  saveCustom();garageSetMesh();cuUI();
+};
+/* ================= VOLCANOES: eruptions on the shared clock + lava dumplings ================= */
+function volcPhase(){
+  const tm=CLOCK.day*1440+CLOCK.min;
+  return((tm/12000)%1+1)%1;   // a full cycle every ~40 real minutes
+}
+function volcErupting(){return volcPhase()<0.06;}   // ~2.4 real minutes of chaos
+function updateVolcanoes(dt){
+  const erupting=volcErupting();
+  const now=performance.now();
+  for(let i=volcs.length-1;i>=0;i--){
+    const v=volcs[i];
+    if(offScene(v.g)){volcs.splice(i,1);continue;}
+    v.glow.material.opacity=0.5+Math.sin(now/300)*0.18+(erupting?0.3:0);
+    v.light.intensity=erupting?2.6+Math.sin(now/90)*0.8:1;
+    v.pts.visible=erupting;
+    if(erupting){
+      const pos=v.pts.geometry.attributes.position;
+      for(let k=0;k<pos.count;k++){
+        const t=((now/1400)+v.seeds[k])%1;
+        const a=v.seeds[k]*97;
+        pos.setXYZ(k,v.x+Math.sin(a)*t*28,v.y+t*(1-t)*4*36,v.z+Math.cos(a)*t*28);
+      }
+      pos.needsUpdate=true;
+      if(Math.random()<dt*7)puffSmoke(v.x+(Math.random()-0.5)*10,v.y+22,v.z+(Math.random()-0.5)*10,true);
+      if(!v.announced){
+        v.announced=true;
+        pushNews("\u{1F30B} ERUPTION! The volcano at ("+Math.round(v.x)+", "+Math.round(v.z)+") is blowing its top!");
+        if(Math.hypot(player.x-v.x,player.z-v.z)<2500)toast("\u{1F30B}\u{1F4A5} THE VOLCANO IS ERUPTING — stay away from the crater!!");
+      }
+      /* the blast throws anyone on the cone down to the shore */
+      if(!player.inRocket&&!player.inPlane&&!player.inHeli&&Math.hypot(player.x-v.x,player.z-v.z)<55){
+        player.x=v.x+150;player.z=v.z;
+        player.y=terrainH(player.x,player.z);player.vy=0;player.grounded=true;
+        if(player.drive){player.drive.x=player.x;player.drive.z=player.z;player.drive.speed=0;}
+        toast("\u{1F30B}\u{1F4A8} WHOOSH!! The eruption blew you down to the shore — that was CLOSE!");
+      }
+    }else{
+      v.announced=false;
+      if(Math.random()<dt*1.1)puffSmoke(v.x+(Math.random()-0.5)*6,v.y+18,v.z+(Math.random()-0.5)*6);
+    }
+  }
+}
+function nearVolcanoCrater(){
+  for(const v of volcs){
+    if(offScene(v.g))continue;
+    if(Math.hypot(player.x-v.x,player.z-v.z)<30)return v;
+  }
+  return null;
+}
+/* ================= SKY RESTAURANT & CO-OP pay ================= */
+function nearSkyRest(){
+  for(let i=skyRests.length-1;i>=0;i--){
+    const s=skyRests[i];
+    if(offScene(s.g)){skyRests.splice(i,1);continue;}
+    if(Math.hypot(player.x-s.x,player.z-s.z)<14)return s;
+  }
+  return null;
+}
+function openSkyRest(){
+  showDest("☁️ SKY RESTAURANT — dining above the clouds!",[
+    {label:"\u{1F969} Mountain feast — $60 (+60 food)",value:"feast"},
+    {label:"\u{1F370} Cloud cake — $25 (+35 food)",value:"cake"},
+    {label:"☁️ CLOUD dumpling — $100 (ONLY sold up here!)",value:"cloud"},
+    {label:"❌ Just enjoying the view",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    const price=v==="feast"?60:v==="cake"?25:100;
+    if(MONEY.v<price){toast("\u{1F4B0} That costs $"+price+"!");return;}
+    MONEY.v-=price;updateMoneyUI();
+    if(v==="cloud"){
+      DUMP.owned.push({color:"Cloud",hex:"#eef6ff",glitter:Math.random()<0.08});
+      renderDump();saveGame();
+      toast("☁️\u{1F95F} A fluffy CLOUD dumpling — you can only get these above the clouds!");
+    }else{
+      MCD.pack.push(v==="feast"?["\u{1F969} Mountain feast",60]:["\u{1F370} Cloud cake",35]);
+      renderPack();saveGame();
+      toast("\u{1F37D} In your backpack — press R to enjoy it with this VIEW!");
+    }
+  });
+}
+/* a REAL friend in your passenger seat doubles all job pay */
+function coopMult(){
+  for(const o of MP.others.values())
+    if(o.kind==="seat"&&Math.hypot(o.x-player.x,o.z-player.z)<6)return 2;
+  return 1;
+}
+/* ================= BIRDS: flocks circling in the daytime sky ================= */
+const BIRDS=(function(){
+  const g=new THREE.Group();scene.add(g);
+  const mat=new THREE.MeshBasicMaterial({color:0x2a2f3a,side:THREE.DoubleSide});
+  const list=[];
+  for(let i=0;i<10;i++){
+    const b=new THREE.Group();
+    const l=new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.5),mat);l.position.x=-0.8;b.add(l);
+    const r=new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.5),mat);r.position.x=0.8;b.add(r);
+    g.add(b);
+    list.push({b,l,r,th:Math.random()*7,rr:40+Math.random()*90,h:55+Math.random()*45,sp:0.15+Math.random()*0.2,ph:Math.random()*7});
+  }
+  return{g,list};
+})();
+function updateBirds(dt){
+  const vis=S.world==="earth"&&!isNight()&&!CAVE.in;
+  BIRDS.g.visible=vis;
+  if(!vis)return;
+  const now=performance.now();
+  for(const b of BIRDS.list){
+    b.th+=b.sp*dt;
+    b.b.position.set(player.x+Math.cos(b.th)*b.rr,b.h+Math.sin(b.th*3)*4,player.z+Math.sin(b.th)*b.rr);
+    b.b.rotation.y=-b.th;
+    const f=Math.sin(now/120+b.ph)*0.6;
+    b.l.rotation.z=f;b.r.rotation.z=-f;
+  }
 }
 /* ================= HOME FOOD DELIVERY: order to your mansion or apartment ================= */
 const ORDER={active:false,stage:null,items:[],dumps:0,cost:0,tx:0,tz:0,mesh:null,x:0,z:0,lx:0,lz:0,wait:0,label:"",pend:null};
@@ -6378,7 +6768,27 @@ const UPDATE_PAGES=[
 <li>The sea <b>glints in the sunlight</b> (real specular water).</li>
 <li><b>Realistic car lights</b>: brake lights flare bright red, reverse lights glow white, and at night every car (traffic too!) casts visible <b>headlight beams</b>.</li>
 <li>Cars got <b>interiors</b>: seats and a steering wheel you can see through the glass.</li>
-<li>All of it is light on the GPU — smooth on the ⚡ Fast setting too.</li></ul>`}
+<li>All of it is light on the GPU — smooth on the ⚡ Fast setting too.</li></ul>`},
+{t:"Round 24 — Helicopters, volcanoes, leaderboards & tuning \u{1F681}\u{1F30B}",h:`
+<h4>\u{1F681} YOUR OWN HELICOPTER — $500,000</h4><ul>
+<li>New \u{1F681} Heli button: buy it once, summon it anywhere on Earth. W/S speed, A/D turn, SPACE up, SHIFT down, F to land — <b>land it anywhere</b>, even on rooftops and decks.</li>
+<li>Other players see you flying it, spinning rotors and all!</li></ul>
+<h4>☁️ SKY RESTAURANTS</h4><ul>
+<li>On the tallest mountain peaks: a platform with a helipad, tables with a VIEW, fancy meals — and the exclusive <b>☁️ CLOUD dumpling</b> ($100, worth $80 / glitter $240).</li></ul>
+<h4>\u{1F30B} VOLCANO ISLANDS</h4><ul>
+<li>Rare smoking volcano islands out at sea — and they <b>ERUPT on the shared clock</b>: lava fountains, glowing crater, smoke, breaking news!</li>
+<li>Get caught on the cone during an eruption and the blast throws you to the shore.</li>
+<li>Between eruptions: press T at the crater to mine <b>LAVA dumplings</b> ($120, glitter $300) — one scoop per 10 minutes.</li></ul>
+<h4>\u{1F3C5} WEEKLY LEADERBOARD</h4><ul>
+<li>\u{1F4B0} Money menu → <b>WEEKLY LEADERBOARD</b>: the top 10 richest players, resets every week.</li>
+<li>The #1 player wears a <b>\u{1F451} golden crown</b> that everyone can see in the world!</li></ul>
+<h4>\u{1F3CE} CAR TUNING 2.0</h4><ul>
+<li>In the garage: add a <b>spoiler</b>, glowing <b>neon underglow</b> (4 colors), colored <b>rims</b>, <b>racing stripes</b> and your own <b>license plate text</b>!</li></ul>
+<h4>\u{1F91D} CO-OP JOBS</h4><ul>
+<li>Take a REAL player along in your passenger seat while working — <b>every job pays DOUBLE</b>!</li></ul>
+<h4>\u{1F54A} EVEN MORE REALISTIC</h4><ul>
+<li>Birds circle in the daytime sky · golden-hour sunlight turns warm and orange at sunrise & sunset.</li>
+<li>The camera <b>widens at speed</b> and the <b>wind rushes</b> louder the faster you go.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -6415,6 +6825,7 @@ function frame(now){
   else if(player.inTrain)speedMS=Math.abs(player.train.speed);
   else if(player.inPlane)speedMS=Math.abs(player.planeRef.speed);
   else if(player.inBus)speedMS=Math.abs(player.bus.speed);
+  else if(player.inHeli)speedMS=updateHeli(dt);
   else if(RIDE.on)speedMS=updateRide(dt);
   else if(player.drive){
     const mcdBusy=player.drive===myVehicle&&MCD.phase!=="idle";
@@ -6426,6 +6837,13 @@ function frame(now){
   if(player.inPlane){const p=player.planeRef;player.x=p.x;player.z=p.z;player.y=p.y;}
   if(player.inBus){const b=player.bus;player.x=b.g.position.x;player.z=b.g.position.z;player.y=b.g.position.y;}
   S.km+=speedMS*dt/1000;
+  /* speed FEEL: the view widens as you go faster + wind rushes past */
+  const tgtFov=62+Math.min(13,Math.max(0,speedMS-8)*0.11);
+  if(Math.abs(camera.fov-tgtFov)>0.15){
+    camera.fov+=(tgtFov-camera.fov)*Math.min(1,3*dt);
+    camera.updateProjectionMatrix();
+  }
+  setWind(speedMS);
   updateFuel(dt,speedMS);
   updateCave();
   updateEngine(speedMS,!!player.drive&&player.drive.type!=="bike"&&FUEL.km>0);
@@ -6436,6 +6854,8 @@ function frame(now){
     updateTrafficLights();updateGates(dt);
     updateCrowd(dt);updateMuseums(dt);
     updateFerries(dt);updateIslands(dt);updateOrder(dt);
+    updateVolcanoes(dt);updateBirds(dt);
+    if(HELI.active&&!player.inHeli&&HELI.mesh)HELI.mesh.userData.rotor.rotation.y+=dt*1.5;
     water.position.x=player.x;water.position.z=player.z;   // the sea follows you
     updateFish(dt);
     clouds.forEach(c=>{

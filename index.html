@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=39">
+<link rel="stylesheet" href="style.css?v=40">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -103,6 +103,7 @@
     <button class="btn" id="bTablet">&#128241; Tablet</button>
     <button class="btn" id="bJobs">&#128188; Jobs</button>
     <button class="btn" id="bAuto">&#129302; Auto</button>
+    <button class="btn" id="bHeli">&#128641; Heli</button>
     <button class="btn" id="bPhoto">&#128247; Photo</button>
     <button class="btn" id="bCompass">&#129517; Compass</button>
     <button class="btn" id="bAch">&#127942;</button>
@@ -195,6 +196,13 @@
     <div id="garInfo"></div>
   </div>
   <div id="garBottom">
+    <div id="garCustom" style="display:none;flex-wrap:wrap;gap:6px;justify-content:center">
+      <button class="btn" id="cuSpoiler">&#127950; Spoiler</button>
+      <button class="btn" id="cuNeon">&#128161; Neon</button>
+      <button class="btn" id="cuRim">&#11093; Rims</button>
+      <button class="btn" id="cuStripe">&#127987; Stripe</button>
+      <button class="btn" id="cuPlate">&#128288; Plate</button>
+    </div>
     <div id="garColors"></div>
     <div id="garBtns">
       <button class="btn" id="garBack">&#9664; Back</button>
@@ -262,6 +270,7 @@
     <h2>&#128176; Your money</h2>
     <div id="mmVal" style="font-size:36px;font-weight:800">$0</div>
     <div style="font-size:13px;color:var(--dim);margin-top:10px">Sell Squishy Dumplings to the &#129375; dumpling buyers (one every ~500 m &mdash; pink dots on the map), win races, collect crystals and give &#127929; concerts!<br>Psst... reach $1,000 for a surprise...</div>
+    <button class="btn warn" id="bBoard" style="width:100%;margin-top:10px">&#127941; WEEKLY LEADERBOARD &mdash; who's the richest?</button>
     <div style="font-size:14px;color:var(--acc2);margin-top:12px;font-weight:700">&#128184; Pay another player</div>
     <div id="payList"></div>
     <button class="btn close" id="moneyClose">Close</button>
@@ -441,9 +450,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=39"></script>
-<script src="js/world.js?v=39"></script>
-<script src="js/vehicles.js?v=39"></script>
-<script src="js/game.js?v=39"></script>
+<script src="js/core.js?v=40"></script>
+<script src="js/world.js?v=40"></script>
+<script src="js/vehicles.js?v=40"></script>
+<script src="js/game.js?v=40"></script>
 </body>
 </html>

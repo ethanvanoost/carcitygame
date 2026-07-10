@@ -181,6 +181,33 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "$other": { ".validate": false }
            }
          }
+       },
+       "treasure": {
+         "$world": {
+           "$day": {
+             ".read": true,
+             ".write": "!data.exists()",
+             ".validate": "newData.hasChildren(['n','ts'])",
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
+       "board": {
+         "$week": {
+           "$id": {
+             ".read": true,
+             ".write": "!data.exists() || data.child('t').val() === newData.child('t').val()",
+             ".validate": "newData.hasChildren(['t','n','money'])",
+             "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+             "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "money": { ".validate": "newData.isNumber()" },
+             "km": { ".validate": "newData.isNumber()" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "$other": { ".validate": false }
+           }
+         }
        }
      }
    }
@@ -219,6 +246,11 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    characters). The `races` / `raceent` / `racewin` parts run **multiplayer races**:
    a race per flag (replaceable after 4 minutes), an entrant list, and a
    create-only winner record — the first player to write it takes the pot.
+   The `treasure` part records the **first finder of each daily treasure**
+   (create-only, one record per world per day). The `board` part is the
+   **weekly leaderboard**: each player updates their own row (guarded by their
+   token) with their money and kilometers; a new week starts a fresh board,
+   and the #1 player gets a golden crown in the game.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming

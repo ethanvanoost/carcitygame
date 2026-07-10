@@ -238,6 +238,40 @@ function setAstro(on){
   cur.visible=old.visible;old.visible=false;
   player.mesh=cur;player.limbs=cur.userData.limbs;
 }
+/* ---------- the HELICOPTER ---------- */
+function buildHeliMesh(color){
+  const G=new THREE.Group();
+  const mat=paintMat(color||0xd7263d);
+  const cab=shadowBox(new THREE.Mesh(new THREE.SphereGeometry(1.5,12,10),mat));
+  cab.scale.set(1,0.85,1.35);cab.position.y=1.7;G.add(cab);
+  const glass=new THREE.Mesh(new THREE.SphereGeometry(1.2,10,8,0,Math.PI),glassMat);
+  glass.rotation.y=-Math.PI/2;glass.scale.set(1,0.8,1.1);glass.position.set(0,1.8,0.7);G.add(glass);
+  const boom=shadowBox(new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.4,4.4,8),mat));
+  boom.rotation.x=Math.PI/2;boom.position.set(0,1.9,-3.2);G.add(boom);
+  const fin=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.2,0.8),mat);
+  fin.position.set(0,2.5,-5.2);G.add(fin);
+  /* skids */
+  [[-0.9],[0.9]].forEach(p=>{
+    const sk=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,3.4),darkTrim);
+    sk.rotation.x=Math.PI/2;sk.position.set(p[0],0.25,0);G.add(sk);
+    [[-1],[1]].forEach(q=>{
+      const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.9),darkTrim);
+      leg.position.set(p[0],0.7,q[0]*0.9);leg.rotation.z=p[0]*0.3;G.add(leg);
+    });
+  });
+  /* main rotor + tail rotor (they really spin) */
+  const rotor=new THREE.Group();rotor.position.y=2.9;G.add(rotor);
+  const hub2=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,0.5,8),darkTrim);rotor.add(hub2);
+  [0,Math.PI/2].forEach(a=>{
+    const bl=new THREE.Mesh(new THREE.BoxGeometry(9,0.06,0.36),darkTrim);
+    bl.rotation.y=a;rotor.add(bl);
+  });
+  const tail=new THREE.Group();tail.position.set(0.28,2.5,-5.2);G.add(tail);
+  const tb=new THREE.Mesh(new THREE.BoxGeometry(0.05,1.6,0.2),darkTrim);tail.add(tb);
+  G.userData.rotor=rotor;G.userData.tailRotor=tail;
+  G.userData.camD=17;G.userData.camH=7;
+  return G;
+}
 /* ---------- the rocket ---------- */
 function buildRocketMesh(){
   const G=new THREE.Group();
@@ -374,7 +408,12 @@ function respawnCar(c){
 const SND={sound:true,music:true};
 let audioCtx=null,sirenOsc=null,sirenGain=null;
 let engOsc=null,engOsc2=null,engFilt=null,engGain=null,musicGain=null,musicTimer=null,_lastCrash=0,hornGain=null;
-let rocketNoise=null,rocketGain=null;
+let rocketNoise=null,rocketGain=null,windGain=null;
+function setWind(speedMS){
+  if(!audioCtx||!windGain)return;
+  const v=(SND.sound&&S.mode==="game")?Math.min(0.13,Math.max(0,speedMS-14)*0.0016):0;
+  windGain.gain.setTargetAtTime(v,audioCtx.currentTime,0.25);
+}
 function setHorn(on){
   if(!audioCtx||!hornGain)return;
   const allow=SND.sound&&(typeof SETTINGS==="undefined"||SETTINGS.honk);
@@ -423,6 +462,17 @@ function ensureAudio(){
     engGain=audioCtx.createGain();engGain.gain.value=0;
     engOsc.connect(engFilt);engOsc2.connect(engFilt);engFilt.connect(engGain);
     engGain.connect(audioCtx.destination);engOsc.start();engOsc2.start();
+    /* wind rush at speed: soft filtered noise that grows as you go faster */
+    {
+      const len=audioCtx.sampleRate*2,buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+      const src=audioCtx.createBufferSource();src.buffer=buf;src.loop=true;
+      const wf=audioCtx.createBiquadFilter();wf.type="bandpass";wf.frequency.value=600;wf.Q.value=0.4;
+      windGain=audioCtx.createGain();windGain.gain.value=0;
+      src.connect(wf);wf.connect(windGain);windGain.connect(audioCtx.destination);
+      src.start();
+    }
     /* rocket rumble: filtered noise, silent until a launch */
     {
       const len=audioCtx.sampleRate*2,buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);

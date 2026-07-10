@@ -61,6 +61,7 @@ const clouds=[];
   }
 }
 const skyDay=new THREE.Color(0x8ec9f0),skyNight=new THREE.Color(0x0a1028),skyDusk=new THREE.Color(0xf2a35e);
+const _sunLow=new THREE.Color(0xffb46b),_sunHigh=new THREE.Color(0xfff6e0);
 const fogDay=new THREE.Color(0x9fd0f0),fogNight=new THREE.Color(0x0c1226);
 /* a real gradient SKY DOME: deep blue overhead melting into a bright horizon —
    sunsets now glow like the real thing instead of one flat color */
@@ -106,6 +107,8 @@ function updateSky(px,pz){
   const dayness=THREE.MathUtils.clamp(sy*2.2+0.25,0,1);
   const duskness=THREE.MathUtils.clamp(1-Math.abs(sy)*5,0,1)*dayness;
   sun.intensity=0.15+dayness*1.05;
+  /* golden-hour light: the sun goes warm & orange when it sits low */
+  sun.color.copy(_sunLow).lerp(_sunHigh,THREE.MathUtils.clamp(sy*3,0,1));
   hemi.intensity=0.25+dayness*0.7;
   const sky=skyNight.clone().lerp(skyDay,dayness).lerp(skyDusk,duskness*0.55);
   scene.background=sky;
@@ -179,6 +182,25 @@ function islandSpot(i,j){
 function nearIsland(x,z){
   return islandSpot(Math.round((x-900)/ISP),Math.round((z-1500)/ISP));
 }
+/* ---- VOLCANO ISLANDS: rare, tall, smoking — they ERUPT on the shared clock ---- */
+const VOLC=9000;
+const _volCache=new Map();
+function volcanoSpot(i,j){
+  const k=i+","+j;
+  if(_volCache.has(k))return _volCache.get(k);
+  let s=null;
+  const x=i*VOLC+4200,z=j*VOLC+7800;
+  if(seaAt(x,z)>0.9){
+    s={x,z};
+    for(const[ox,oz]of[[-135,0],[135,0],[0,-135],[0,135]])
+      if(seaAt(x+ox,z+oz)<0.7){s=null;break;}
+  }
+  _volCache.set(k,s);
+  return s;
+}
+function nearVolcano(x,z){
+  return volcanoSpot(Math.round((x-4200)/VOLC),Math.round((z-7800)/VOLC));
+}
 function moist(x,z){return fbm(x/900+51.7,z/900+23.9);}
 function biomeAt(x,z){const m=moist(x,z);return m<0.40?"desert":(m>0.60?"forest":"plains");}
 /* two-generation cache: when full, the old generation is dropped instead of
@@ -216,6 +238,18 @@ function baseH_(x,z){
         const t=1-d/85;
         const ih=-1.2+t*t*(7+vnoise(x/26+9.1,z/26+4.7)*2);
         if(ih>h)h=ih;
+      }
+    }
+    /* volcano islands: a tall cone with a crater bowl at the top */
+    const v2=nearVolcano(x,z);
+    if(v2){
+      const d=Math.hypot(x-v2.x,z-v2.z);
+      if(d<125){
+        const t=1-d/125;
+        let vh=-1.2+t*t*48;
+        const crater=Math.max(0,1-d/22);
+        vh-=crater*crater*28;
+        if(vh>h)h=vh;
       }
     }
   }
@@ -1678,6 +1712,78 @@ function buildIsland(s,g){
   });
   islands.push({g,x:s.x,z:s.z,head,shop:{x:shx,z:shz},digX:{x:xx,z:xz}});
 }
+/* ---------- VOLCANOES: glowing crater, smoke, lava fountains during eruptions ---------- */
+const volcs=[];
+function buildVolcano(s,g){
+  const y=terrainH(s.x,s.z);   // the crater floor
+  const glow=new THREE.Mesh(new THREE.CylinderGeometry(15,15,1.4,20),
+    new THREE.MeshBasicMaterial({color:0xff4400,transparent:true,opacity:0.75}));
+  glow.position.set(s.x,y+0.8,s.z);g.add(glow);
+  const light=new THREE.PointLight(0xff5522,1.1,140);
+  light.position.set(s.x,y+16,s.z);g.add(light);
+  /* the lava fountain (only visible while erupting) */
+  const n=140,pos=new Float32Array(n*3),seeds=new Float32Array(n);
+  for(let i=0;i<n;i++){pos[i*3]=s.x;pos[i*3+1]=y;pos[i*3+2]=s.z;seeds[i]=Math.random();}
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  const pts=new THREE.Points(geo,new THREE.PointsMaterial({color:0xff7733,size:1.8,transparent:true,opacity:0.95}));
+  pts.visible=false;pts.frustumCulled=false;g.add(pts);
+  /* a warning sign down at the beach */
+  const cv=document.createElement("canvas");cv.width=256;cv.height=64;
+  const c=cv.getContext("2d");c.fillStyle="#7a1010";c.fillRect(0,0,256,64);
+  c.fillStyle="#ffd75e";c.font="bold 26px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F30B} DANGER: VOLCANO",128,42);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(6,1.5),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
+  const sy=terrainH(s.x,s.z+118);
+  sg.position.set(s.x,sy+2.4,s.z+118);g.add(sg);
+  const sp2=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,2.4),poleMat);
+  sp2.position.set(s.x,sy+1.2,s.z+118);g.add(sp2);
+  volcs.push({g,x:s.x,z:s.z,y,glow,pts,seeds,light,announced:false});
+}
+/* ---------- SKY RESTAURANTS: only reachable by helicopter (or rocket!) ---------- */
+const skyRests=[];
+const SRSP=5200;
+function skyRestSpot(i,j){
+  const x=i*SRSP+2600,z=j*SRSP+900;
+  if(baseH(x,z)<58)return null;   // only on proper mountain peaks
+  if(onAnyRoad(x,z))return null;
+  if(rocketPadDist(x,z)<90)return null;
+  return{x,z};
+}
+function buildSkyRest(s,g){
+  const y=terrainH(s.x,s.z);
+  const disc=shadowBox(new THREE.Mesh(new THREE.CylinderGeometry(13,14,1,22),new THREE.MeshLambertMaterial({color:0x9aa0a8})));
+  disc.position.set(s.x,y+0.5,s.z);g.add(disc);
+  decks.push({g,x:s.x,z:s.z,hw:12.5,hd:12.5,tops:[y+1],ramp:null});
+  /* the little restaurant hut */
+  const hut=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(7,3.4,5),new THREE.MeshLambertMaterial({color:0xe8e2d4})));
+  hut.position.set(s.x-6,y+2.7,s.z-5);g.add(hut);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(7.8,0.4,5.8),new THREE.MeshLambertMaterial({color:0xd7263d}));
+  roof.position.set(s.x-6,y+4.6,s.z-5);g.add(roof);
+  const win=new THREE.Mesh(new THREE.PlaneGeometry(5.5,1.6),glassMat);
+  win.position.set(s.x-6,y+2.9,s.z-2.45);g.add(win);
+  /* tables with parasols + the helipad H */
+  for(const[tx,tz]of[[3,-5],[6,1],[1,3]]){
+    const tb=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.1,10),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
+    tb.position.set(s.x+tx,y+1.7,s.z+tz);g.add(tb);
+    const lg=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,0.7),poleMat);
+    lg.position.set(s.x+tx,y+1.35,s.z+tz);g.add(lg);
+    makeChair(s.x+tx-1.2,s.z+tz,Math.PI/2,g,y+1);
+    makeChair(s.x+tx+1.2,s.z+tz,-Math.PI/2,g,y+1);
+  }
+  const hcv=document.createElement("canvas");hcv.width=64;hcv.height=64;
+  const hc=hcv.getContext("2d");hc.fillStyle="#2e4a62";hc.beginPath();hc.arc(32,32,30,0,7);hc.fill();
+  hc.fillStyle="#fff";hc.font="bold 40px Segoe UI";hc.textAlign="center";hc.fillText("H",32,46);
+  const pad=new THREE.Mesh(new THREE.CircleGeometry(4.5,18),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(hcv)}));
+  pad.rotation.x=-Math.PI/2;pad.position.set(s.x+5,y+1.06,s.z-7);g.add(pad);
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#1a1030";c.fillRect(0,0,512,96);
+  c.fillStyle="#9fd8ff";c.font="bold 46px Segoe UI";c.textAlign="center";
+  c.fillText("☁️ SKY RESTAURANT",256,62);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(11,2.2),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
+  sg.position.set(s.x-6,y+6.4,s.z-5);g.add(sg);
+  skyRests.push({g,x:s.x,z:s.z,y:y+1});
+}
 function hitBuilding(x,z,speed){
   if(S.world!=="earth")return false;   // no invisible Earth buildings on the Moon
   if(speed<8)return false;
@@ -1810,6 +1916,8 @@ function keepClear(x,z){
   if(chh&&Math.abs(x-chh.x)<26&&Math.abs(z-chh.z)<22)return true;
   const isl=nearIsland(x,z);
   if(isl&&Math.hypot(x-isl.x,z-isl.z)<100)return true;   // islands get their own decor
+  const vc2=nearVolcano(x,z);
+  if(vc2&&Math.hypot(x-vc2.x,z-vc2.z)<140)return true;   // volcanoes too
   return false;
 }
 /* ---- drivable decks (parking garage floors + ramp) ---- */
@@ -2270,6 +2378,22 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(mansion(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* VOLCANOES: built by the chunk with the crater */
+  for(let i=Math.floor((x0-4350)/VOLC);i<=Math.ceil((x1-4050)/VOLC);i++)
+  for(let j=Math.floor((z0-7950)/VOLC);j<=Math.ceil((z1-7650)/VOLC);j++){
+    const sp=volcanoSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildVolcano(sp,g);
+  }
+  /* SKY RESTAURANTS on the mountain peaks */
+  for(let i=Math.floor((x0-2700)/SRSP);i<=Math.ceil((x1-2500)/SRSP);i++)
+  for(let j=Math.floor((z0-1000)/SRSP);j<=Math.ceil((z1-800)/SRSP);j++){
+    const sp=skyRestSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildSkyRest(sp,g);
   }
   /* FERRY ISLANDS: decor is built by the chunk that holds the island's center */
   for(let i=Math.floor((x0-1000)/ISP);i<=Math.ceil((x1-800)/ISP);i++)
