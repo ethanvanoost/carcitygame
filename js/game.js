@@ -558,7 +558,7 @@ function dumpValue(d){
   if(d.color==="Pearl")return d.glitter?90:25;                         // island exclusive (sells BELOW the $35 shop price!)
   if(d.color==="Alien")return d.glitter?2500:1000;                     // robbed from the moon aliens!
   if(d.color==="Lava")return d.glitter?300:120;                        // mined from a volcano crater
-  if(d.color==="Cloud")return d.glitter?240:80;                        // sky restaurant exclusive
+  if(typeof SKY_DUMPS!=="undefined"&&SKY_DUMPS.some(s=>s[0]===d.color))return d.glitter?240:80;   // cloud collection
   if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
 }
@@ -4696,6 +4696,21 @@ function drawMap(){
         }
       }
     }
+    /* building plots for sale every ~1.6 km */
+    if(sc>=0.14){
+      const pi0=Math.floor((mapView.cx-halfW-500)/PLSP),pi1=Math.ceil((mapView.cx+halfW-360)/PLSP);
+      const pj0=Math.floor((mapView.cz-halfH-1220)/PLSP),pj1=Math.ceil((mapView.cz+halfH-1080)/PLSP);
+      for(let i=pi0;i<=pi1;i++)for(let j=pj0;j<=pj1;j++){
+        const s=plotSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#0f7a3d",5);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#7dffb5";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3D7}",px,py-8);
+        }
+      }
+    }
     /* dumpling museums every ~1 km */
     if(sc>=0.14){
       const ui0=Math.floor((mapView.cx-halfW-600)/DMUS),ui1=Math.ceil((mapView.cx+halfW-440)/DMUS);
@@ -4963,6 +4978,10 @@ function mapEntries(q){
       setupTreasure();
       $("mapModal").classList.remove("open");
       toast(TREASURE.found?"\u{1F3F4}‍☠️ You already found today's treasure — a new one appears tomorrow!":treasureHintText());
+    }],
+    ["\u{1F3D7} Nearest building PLOT for sale",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3D7} Nearest building plot ($50K)",nearestSpot(plotSpot,PLSP,430,1150,4),0,16);
     }],
     ["\u{1F30B} Nearest VOLCANO island",()=>{
       switchWorld("earth");
@@ -5736,25 +5755,31 @@ function openBeachShop(isl){
       return;
     }
     if(v==="myst"){
-      if(mystUsed){toast("\u{1F381} You already got today's free mystery dumpling here — visit another island or come back tomorrow!");return;}
-      try{localStorage.setItem(mystKey,"1");}catch(e){}
-      giveBeachDump(true);
+      if(mystUsed)toast("\u{1F381} You already got today's free mystery dumpling here — visit another island or come back tomorrow!");
+      else{
+        try{localStorage.setItem(mystKey,"1");}catch(e){}
+        giveBeachDump(true);
+      }
     }else if(v==="beach"){
-      if(MONEY.v<35){toast("\u{1F4B0} That costs $35!");return;}
-      MONEY.v-=35;updateMoneyUI();
-      giveBeachDump(false);
+      if(MONEY.v<35)toast("\u{1F4B0} That costs $35!");
+      else{MONEY.v-=35;updateMoneyUI();giveBeachDump(false);}
     }else if(v==="coco"){
-      if(MONEY.v<15){toast("\u{1F4B0} That costs $15!");return;}
-      MONEY.v-=15;updateMoneyUI();saveGame();
-      MCD.pack.push(["\u{1F965} Coconut drink",30]);renderPack();
-      toast("\u{1F965} Fresh coconut drink in your backpack — press R to drink it!");
+      if(MONEY.v<15)toast("\u{1F4B0} That costs $15!");
+      else{
+        MONEY.v-=15;updateMoneyUI();saveGame();
+        MCD.pack.push(["\u{1F965} Coconut drink",30]);renderPack();
+        toast("\u{1F965} Fresh coconut drink in your backpack — press R to drink it!");
+      }
     }else if(v==="pearl"){
-      if(MONEY.v<35){toast("\u{1F4B0} That costs $35!");return;}
-      MONEY.v-=35;updateMoneyUI();
-      DUMP.owned.push({color:"Pearl",hex:"#e9e4f7",glitter:Math.random()<0.08});
-      renderDump();saveGame();
-      toast("\u{1FAA9} A shimmering PEARL dumpling — you can ONLY get these on islands!");
+      if(MONEY.v<35)toast("\u{1F4B0} That costs $35!");
+      else{
+        MONEY.v-=35;updateMoneyUI();
+        DUMP.owned.push({color:"Pearl",hex:"#e9e4f7",glitter:Math.random()<0.08});
+        renderDump();saveGame();
+        toast("\u{1FAA9} A shimmering PEARL dumpling — you can ONLY get these on islands!");
+      }
     }
+    openBeachShop(isl);   // the shop stays open so you can keep buying!
   });
 }
 function digTreasureX(isl){
@@ -5826,9 +5851,27 @@ function castOrReel(){
     const log=fishLog();
     log[fish[0]]=(log[fish[0]]||0)+1;
     try{localStorage.setItem("vc4fishlog",JSON.stringify(log));}catch(e){}
-    addMoney(fish[1]);
     FISHING.state="idle";
-    toast((fish[0].includes("GOLDEN")?"\u{1F31F}\u{1F929} INCREDIBLE!!! ":"\u{1F3A3} Caught: ")+fish[0]+" — sold for $"+fish[1]+"! (total caught: "+Object.values(log).reduce((a,b)=>a+b,0)+")");
+    const total=Object.values(log).reduce((a,b)=>a+b,0);
+    if(fish[0].includes("boot")){
+      toast("\u{1F462} You caught... an old boot. Squelch. (total catches: "+total+")");
+      return true;
+    }
+    /* your choice: sell it, or keep it as food */
+    const foodVal=Math.max(12,Math.min(60,Math.round(fish[1]/2)+10));
+    showDest((fish[0].includes("GOLDEN")?"\u{1F31F}\u{1F929} INCREDIBLE!!! You caught the ":"\u{1F3A3} You caught: ")+fish[0]+"!",[
+      {label:"\u{1F4B5} SELL it — $"+fish[1],value:"sell"},
+      {label:"\u{1F392} KEEP it — into your food backpack (+"+foodVal+" food, press R to eat)",value:"keep"}
+    ],v=>{
+      if(v==="keep"){
+        MCD.pack.push([fish[0],foodVal]);
+        renderPack();saveGame();
+        toast("\u{1F392} "+fish[0]+" is in your backpack — fresh fish for dinner! (total catches: "+total+")");
+      }else{
+        addMoney(fish[1]);
+        toast("\u{1F4B5} Sold "+fish[0]+" for $"+fish[1]+"! (total catches: "+total+")");
+      }
+    });
     return true;
   }
   if(FISHING.state==="wait"){
@@ -5877,6 +5920,10 @@ function runawayPos(r){
 function updatePoliceJob(dt){
   const r=JOB.run;
   if(!r)return;
+  const p=runawayPos(r);
+  const d=Math.hypot(player.x-p.x,player.z-p.z);
+  /* the thief PANICS when the cops are close — they slow right down */
+  r.sp=d<30?15:26;
   /* the runaway races the grid & turns randomly at crossings */
   const prev=r.t;
   r.t+=r.sp*dt*r.dir;
@@ -5887,31 +5934,39 @@ function updatePoliceJob(dt){
     r.axis=r.axis==="z"?"x":"z";
     r.t=old;r.line=cl;r.dir=Math.random()<0.5?1:-1;
   }
-  const p=runawayPos(r);
-  const y=terrainH(p.x,p.z);
+  const p2=runawayPos(r);
+  const y=terrainH(p2.x,p2.z);
   const yaw=r.axis==="z"?(r.dir>0?0:Math.PI):(r.dir>0?Math.PI/2:-Math.PI/2);
-  r.mesh.position.set(p.x,y,p.z);
+  r.mesh.position.set(p2.x,y,p2.z);
   r.mesh.rotation.set(0,yaw,0);
   for(const w of r.mesh.userData.wheels)w.spin.rotation.x+=r.sp/w.r*dt;
-  /* your beacon & route follow the runaway */
-  JOB.tx=p.x;JOB.tz=p.z;
-  jobBeacon.position.set(p.x,y,p.z);
-  const d=Math.hypot(player.x-p.x,player.z-p.z);
-  $("navDist").style.display="flex";
-  $("navTxt").textContent="\u{1F46E} CHASE the getaway car! "+(d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km")+" · arrests: "+JOB.count+" · $"+fmtMoney(JOB.total);
+  /* the map ROUTE follows the thief — blue line on the minimap & big map */
+  JOB.tx=p2.x;JOB.tz=p2.z;
+  jobBeacon.position.set(p2.x,y,p2.z);
+  r.routeT=(r.routeT||0)-dt;
+  if(r.routeT<=0||Math.hypot(NAV.x-p2.x,NAV.z-p2.z)>60){
+    navPathTo(p2.x,p2.z);
+    NAV.on=true;NAV.follow=null;
+    r.routeT=2;
+  }
   if(d>900){r.t=(r.axis==="z"?player.z:player.x)+(Math.random()<0.5?-1:1)*350;}   // never lose them completely
-  /* stay close to bust them */
-  if(d<9&&player.drive){
+  /* get INTO the circle to bust them (1.5 s) */
+  if(d<15&&player.drive){
+    const prevT=r.bustT;
     r.bustT+=dt;
-    if(r.bustT>=2.5){
+    const left=Math.ceil(1.5-r.bustT);
+    if(r.bustT>=1.5){
       const cm=coopMult();
       addMoney(200*cm);JOB.total+=200*cm;JOB.count++;
-      toast("\u{1F46E}\u{1F694} BUSTED! +$"+(200*cm)+(cm>1?" \u{1F91D} CO-OP x2":"")+" — arrests this shift: "+JOB.count+". Next call incoming...");
+      toast("\u{1F46E}\u{1F694} BUSTED!! +$"+(200*cm)+(cm>1?" \u{1F91D} CO-OP x2":"")+" — arrests this shift: "+JOB.count+". \u{1F4E1} Next call incoming...");
       scene.remove(r.mesh);disposeGroup(r.mesh);
       JOB.run=null;
+      navStop(true);
       spawnRunaway();
+      return;
     }
-  }else r.bustT=Math.max(0,r.bustT-dt);
+    if(Math.ceil(1.5-prevT)!==left||prevT<=0)toast("\u{1F6A8} STAY ON THEM — arrest in "+left+"...");
+  }else r.bustT=Math.max(0,r.bustT-dt*1.5);
   /* flashing lights on YOUR police car */
   if(myVehicle&&myVehicle.mesh.userData.lights){
     const on=Math.floor(performance.now()/140)%2===0;
@@ -6172,26 +6227,34 @@ function nearSkyRest(){
   }
   return null;
 }
+/* the CLOUD dumpling collection — 6 different ones, only sold up here */
+const SKY_DUMPS=[
+  ["Cloud","#eef6ff"],["Storm cloud","#8a93a6"],["Sunset cloud","#ffb46b"],
+  ["Sunrise cloud","#ffd9e8"],["Star cloud","#fff3b0"],["Rainbow cloud","#cdb4ff"]
+];
+function skyCollectionCount(){return SKY_DUMPS.filter(s=>DUMP.owned.some(d=>d.color===s[0])).length;}
 function openSkyRest(){
-  showDest("☁️ SKY RESTAURANT — dining above the clouds!",[
+  showDest("☁️ SKY RESTAURANT — cloud collection: "+skyCollectionCount()+" / 6",[
+    {label:"☁️ Mystery CLOUD dumpling — $100 (6 DIFFERENT ones to collect!)",value:"cloud"},
     {label:"\u{1F969} Mountain feast — $60 (+60 food)",value:"feast"},
     {label:"\u{1F370} Cloud cake — $25 (+35 food)",value:"cake"},
-    {label:"☁️ CLOUD dumpling — $100 (ONLY sold up here!)",value:"cloud"},
-    {label:"❌ Just enjoying the view",value:"cancel"}
+    {label:"❌ Done — enjoy the view!",value:"cancel"}
   ],v=>{
     if(v==="cancel")return;
     const price=v==="feast"?60:v==="cake"?25:100;
-    if(MONEY.v<price){toast("\u{1F4B0} That costs $"+price+"!");return;}
+    if(MONEY.v<price){toast("\u{1F4B0} That costs $"+price+"!");openSkyRest();return;}
     MONEY.v-=price;updateMoneyUI();
     if(v==="cloud"){
-      DUMP.owned.push({color:"Cloud",hex:"#eef6ff",glitter:Math.random()<0.08});
+      const c=SKY_DUMPS[Math.floor(Math.random()*SKY_DUMPS.length)];
+      DUMP.owned.push({color:c[0],hex:c[1],glitter:Math.random()<0.08});
       renderDump();saveGame();
-      toast("☁️\u{1F95F} A fluffy CLOUD dumpling — you can only get these above the clouds!");
+      toast("☁️\u{1F95F} A "+c[0].toUpperCase()+" dumpling! Collection: "+skyCollectionCount()+" / 6"+(skyCollectionCount()>=6?" — COMPLETE!! \u{1F389}":""));
     }else{
       MCD.pack.push(v==="feast"?["\u{1F969} Mountain feast",60]:["\u{1F370} Cloud cake",35]);
       renderPack();saveGame();
       toast("\u{1F37D} In your backpack — press R to enjoy it with this VIEW!");
     }
+    openSkyRest();   // the menu stays open so you can keep shopping!
   });
 }
 /* a REAL friend in your passenger seat doubles all job pay */
@@ -7233,7 +7296,18 @@ const UPDATE_PAGES=[
 <li>The \u{1F681} Heli button now offers a REAL rental helicopter for $500 a day if $500K is too steep — summon it and fly, just like an owned one.</li></ul>
 <h4>\u{1F3DC} PRETTIER WORLD & SIMPLER LOGIN</h4><ul>
 <li>The desert got wind-rippled sand, golden dry grass and red rocks; grasslands got natural light-and-dark patches.</li>
-<li>Passwords are GONE — just pick a username and play!</li></ul>`}
+<li>Passwords are GONE — just pick a username and play!</li></ul>`},
+{t:"Round 27 — Cloud collection, keep your fish & better police chases",h:`
+<h4>☁️ SIX CLOUD DUMPLINGS TO COLLECT</h4><ul>
+<li>Sky restaurants now sell <b>mystery cloud dumplings</b> — 6 different ones: Cloud, Storm, Sunset, Sunrise, Star and \u{1F308} Rainbow cloud!</li>
+<li>Shop menus at the ☁️ sky restaurant and \u{1F3D6} beach shop <b>stay open</b> while you buy — shop till you drop.</li></ul>
+<h4>\u{1F3A3} KEEP YOUR CATCH</h4><ul>
+<li>Catching a fish now gives you the choice: \u{1F4B5} <b>SELL it</b> for money, or \u{1F392} <b>KEEP it</b> in your food backpack and eat it later (press R). Fresh fish fills you up!</li></ul>
+<h4>\u{1F46E} POLICE CHASES THAT WORK</h4><ul>
+<li>The blue <b>map route now follows the thief live</b> on the minimap and big map.</li>
+<li>Thieves <b>panic and slow down</b> when you get close — drive into the circle and a 3-2-1 arrest countdown busts them properly.</li></ul>
+<h4>\u{1F3D7} PLOTS ON THE MAP</h4><ul>
+<li>Building plots now show as green \u{1F3D7} dots on the map, plus a "Nearest building PLOT for sale" quick button.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
