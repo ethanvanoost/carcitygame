@@ -1,10 +1,25 @@
 /* ================= VEHICLE MESHES (realistic cars, buses, emergency) ================= */
 const tireMat=keep(new THREE.MeshLambertMaterial({color:0x1c1c1e}));
-const hubMat=keep(new THREE.MeshPhongMaterial({color:0xc9cfd8,shininess:80,specular:0x888888}));
-const glassMat=keep(new THREE.MeshPhongMaterial({color:0x9fd8ff,transparent:true,opacity:0.85,shininess:120,specular:0xaaddff}));
+const hubMat=keep(new THREE.MeshStandardMaterial({color:0xc9cfd8,metalness:0.9,roughness:0.3,envMapIntensity:1.2}));
+const glassMat=keep(new THREE.MeshStandardMaterial({color:0x9fd8ff,transparent:true,opacity:0.8,metalness:0.1,roughness:0.06,envMapIntensity:1.5}));
 const darkTrim=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
-/* shiny car paint: real specular highlights instead of flat plastic */
-function paintMat(color){return new THREE.MeshPhongMaterial({color,shininess:65,specular:0x666666});}
+/* REAL car paint: metallic, reflecting the sky (scene.environment) */
+function paintMat(color){return new THREE.MeshStandardMaterial({color,metalness:0.7,roughness:0.34,envMapIntensity:1.15});}
+/* soft round contact shadow under every vehicle — grounds them visually */
+const blobTex=(function(){
+  const cv=document.createElement("canvas");cv.width=cv.height=64;
+  const c=cv.getContext("2d");
+  const g=c.createRadialGradient(32,32,4,32,32,30);
+  g.addColorStop(0,"rgba(0,0,0,0.45)");g.addColorStop(1,"rgba(0,0,0,0)");
+  c.fillStyle=g;c.fillRect(0,0,64,64);
+  return keep(new THREE.CanvasTexture(cv));
+})();
+const blobMat=keep(new THREE.MeshBasicMaterial({map:blobTex,transparent:true,depthWrite:false}));
+function addBlobShadow(g,w,l){
+  const b=new THREE.Mesh(new THREE.PlaneGeometry(w,l),blobMat);
+  b.rotation.x=-Math.PI/2;b.position.y=0.04;b.renderOrder=1;
+  g.add(b);
+}
 function addWheel(g,x,z,r,w,front){
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
@@ -63,10 +78,10 @@ function buildVehicleMesh(type,color,top){
     [[-0.9,0.85],[0.9,0.85],[-0.92,-1.32],[0.92,-1.32]].forEach(p=>{
       const pil=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.52,0.12),darkTrim);
       pil.position.set(p[0],1.32,p[1]);pil.rotation.x=p[1]>0?0.28:-0.22;g.add(pil);});
-    /* license plates + door handles */
-    [[2.345,0],[-2.345,Math.PI]].forEach(p=>{
+    /* license plates mounted ON the bumpers (they used to hide inside them!) */
+    [[2.455,0],[-2.455,Math.PI]].forEach(p=>{
       const pl=new THREE.Mesh(new THREE.BoxGeometry(0.52,0.15,0.03),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
-      pl.position.set(0,0.52,p[0]);pl.rotation.y=p[1];g.add(pl);});
+      pl.position.set(0,0.42,p[0]);pl.rotation.y=p[1];g.add(pl);});
     [[-1.05],[1.05]].forEach(p=>{const dh=new THREE.Mesh(new THREE.BoxGeometry(0.03,0.05,0.3),hubMat);
       dh.position.set(p[0],1.02,-0.15);g.add(dh);});
     /* wheel arches + side skirts */
@@ -84,6 +99,7 @@ function buildVehicleMesh(type,color,top){
     }
     addWheel(g,-0.95,1.5,0.42,0.3,true);addWheel(g,0.95,1.5,0.42,0.3,true);
     addWheel(g,-0.95,-1.5,0.42,0.3,false);addWheel(g,0.95,-1.5,0.42,0.3,false);
+    addBlobShadow(g,3.3,5.6);
     g.userData.camD=13;g.userData.camH=5;
   }else if(type==="moto"){
     const body=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.5,0.42,1.9),mat));body.position.y=0.95;g.add(body);
@@ -99,6 +115,7 @@ function buildVehicleMesh(type,color,top){
     const hl=new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8),new THREE.MeshBasicMaterial({color:0xfff2b0}));hl.position.set(0,1.3,1.05);g.add(hl);
     const tl=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.08,0.06),new THREE.MeshBasicMaterial({color:0xd7263d}));tl.position.set(0,1.16,-0.94);g.add(tl);
     addWheel(g,0,1,0.42,0.16,true);addWheel(g,0,-1,0.42,0.2,false);
+    addBlobShadow(g,1.5,3);
     g.userData.camD=11;g.userData.camH=4.4;g.userData.rider=true;
   }else{
     const fr=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,1.6),mat);fr.position.y=0.85;fr.rotation.x=0.12;g.add(fr);
@@ -112,6 +129,7 @@ function buildVehicleMesh(type,color,top){
     [[0.12,0.32],[-0.12,-0.32]].forEach(p=>{const pd=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.03,0.1),darkTrim);pd.position.set(p[0],0.5+p[1]*0.3,-0.05+p[1]*0.2);g.add(pd);});
     [[0.75],[-0.75]].forEach(p=>{const f=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.05,0.5),darkTrim);f.position.set(0,1.28,p[0]);g.add(f);});
     addWheel(g,0,0.75,0.38,0.08,true);addWheel(g,0,-0.75,0.38,0.08,false);
+    addBlobShadow(g,1.1,2.4);
     g.userData.camD=9;g.userData.camH=3.8;g.userData.rider=true;
   }
   if(g.userData.rider){ // you can see yourself on motorcycles & bikes
@@ -157,6 +175,7 @@ function buildBusMesh(color){
   [[1.33],[-1.33]].forEach(p=>{const st=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.3,9.6),new THREE.MeshLambertMaterial({color:0xf4f7fb}));st.position.set(p[0],1.15,0);g.add(st);});
   [[1.5],[-1.5]].forEach(p=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.3,0.16),darkTrim);m.position.set(p[0],2.9,5.1);g.add(m);});
   [[-0.9],[0.9]].forEach(p=>{const t=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.08),new THREE.MeshBasicMaterial({color:0xd7263d}));t.position.set(p[0],0.9,-5.28);g.add(t);});
+  addBlobShadow(g,3.6,11.4);
   g.userData.camD=18;g.userData.camH=7;
   return g;
 }

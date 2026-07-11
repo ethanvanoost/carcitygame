@@ -1916,6 +1916,7 @@ function updatePet(dt){
 }
 /* ================= PROPERTY: buy or rent apartments & mansions ================= */
 const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game day
+const PRENT={on:false};                           // ✈️ rented plane: $250 per game day
 const APT_PRICE=100000,APT_RENT=100;             // $100K to buy, or $100 per game day
 /* ---- online claims: once a player owns a property, nobody else can buy it ---- */
 function fbKey(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,"_");}
@@ -2036,6 +2037,15 @@ function updateRent(){
       RENT.list.splice(i,1);
       releaseClaim(rm.id);
       toast("\u{1F631} You couldn't pay the rent — you LOST "+rm.label+"!");
+    }
+  }
+  /* the rented plane costs $250 per day */
+  if(PRENT.on){
+    const cost=250*delta;
+    if(MONEY.v>=cost){MONEY.v-=cost;paid+=cost;}
+    else{
+      PRENT.on=false;saveGame();
+      toast("\u{1F6EC} You couldn't pay the plane rental — it went back to the airport!");
     }
   }
   /* owned apartments earn tenant money every day */
@@ -3333,7 +3343,7 @@ function saveGame(){
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
       world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
-      own:[...OWN],paint:PAINT,fuel:FUEL.km
+      own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0
     }));
   }catch(e){}
 }
@@ -3351,6 +3361,7 @@ function loadGame(){
     (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(n);});
     if(d.paint&&typeof d.paint==="object")for(const k in d.paint)if(typeof d.paint[k]==="number")PAINT[k]=d.paint[k];
     if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
+    PRENT.on=d.prent===1;
   }catch(e){}
 }
 loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();profileLoad();
@@ -3508,16 +3519,36 @@ function tryCall(){
   }
   const ap=nearTerminal();
   if(ap){
-    let best=null;
-    for(const p of planes){
-      if(p.state!=="flying"&&p.state!=="wander"&&p.state!=="wanderfly")continue;
-      const d=Math.hypot(p.x-ap.term.x,p.z-ap.term.z);
-      if(!best||d<best.d)best={p,d};
-    }
-    /* autofly navigates to the approach point first, then lands properly */
-    if(best){best.p.state="autofly";best.p.dest=ap;
-      toast("\u2708\uFE0F A plane is coming in to land \u2014 "+Math.round(best.d)+" m away!");}
-    else toast("No plane is free right now.");
+    showDest("\u2708\uFE0F Airport terminal",[
+      {label:"\u{1F4DE} Call a plane to this airport",value:"call"},
+      PRENT.on?{label:"\u{1F6EC} Return the rented plane (stop paying $250/day)",value:"unrent"}
+        :{label:"\u{1F6E9} RENT a plane \u2014 $250 per day, FLY IT YOURSELF!",value:"rent"},
+      {label:"\u274C Cancel",value:"cancel"}
+    ],v=>{
+      if(v==="cancel")return;
+      if(v==="rent"){
+        if(MONEY.v<250){toast("\u{1F4B0} Renting costs $250 (per day) \u2014 you have $"+fmtMoney(MONEY.v)+"!");return;}
+        MONEY.v-=250;updateMoneyUI();
+        PRENT.on=true;saveGame();
+        toast("\u{1F6E9}\u{1F5DD} PLANE RENTED! Board any plane (press F) and choose \u{1F9D1}\u200D\u2708\uFE0F 'I'll fly it MYSELF'. $250 is charged every day.");
+        return;
+      }
+      if(v==="unrent"){
+        PRENT.on=false;saveGame();
+        toast("\u{1F6EC} Rental returned \u2014 no more daily costs. Thanks for flying!");
+        return;
+      }
+      let best=null;
+      for(const p of planes){
+        if(p.state!=="flying"&&p.state!=="wander"&&p.state!=="wanderfly")continue;
+        const d=Math.hypot(p.x-ap.term.x,p.z-ap.term.z);
+        if(!best||d<best.d)best={p,d};
+      }
+      /* autofly navigates to the approach point first, then lands properly */
+      if(best){best.p.state="autofly";best.p.dest=ap;
+        toast("\u2708\uFE0F A plane is coming in to land \u2014 "+Math.round(best.d)+" m away!");}
+      else toast("No plane is free right now.");
+    });
     return;
   }
   toast("Go to a train station, bus stop or airport terminal to call a ride.");
@@ -3672,7 +3703,7 @@ function board(kind,ref){
     player.inPlane=true;player.planeRef=ref;
     const opts=nearestAirports(player.x,player.z,4).slice(1,4).map(a=>({label:"\u2708\uFE0F Airport at ("+Math.round(a.term.x)+", "+Math.round(a.term.z)+") — "+(a.dist/1000).toFixed(1)+" km",value:{type:"air",a}}));
     opts.push({label:"\u{1F3B2} No destination (fly around randomly)",value:{type:"none"}});
-    if(S.admin)opts.push({label:"\u{1F9D1}\u200D\u2708\uFE0F I'll fly it myself (admin)",value:{type:"pilot"}});
+    if(S.admin||PRENT.on)opts.push({label:"\u{1F9D1}\u200D\u2708\uFE0F I'll fly it MYSELF"+(PRENT.on&&!S.admin?" (rented \u{1F6E9})":" (admin)"),value:{type:"pilot"}});
     showDest("Choose your flight destination",opts,v=>{
       if(v.type==="pilot"){ref.state="piloted";toast("You have the controls! W/S speed, A/D turn, Space climb, Shift descend");}
       else if(v.type==="air"){ref.dest=v.a;ref.state="autofly";toast("Autopilot engaged — enjoy the flight (F to exit after landing)");}
@@ -5816,9 +5847,10 @@ function applyCustom(mesh,v,cfg){
     c.fillStyle="#14161a";c.font="bold 22px Segoe UI";c.textAlign="center";
     c.fillText(cfg.plate.toUpperCase().slice(0,7),70,24);
     const pm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
-    [[2.37,0],[-2.37,Math.PI]].forEach(p=>{
-      const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.52,0.15),pm);
-      pl.position.set(0,0.52,p[0]);pl.rotation.y=p[1];mesh.add(pl);
+    /* mounted ON the bumper faces, clearly visible front & back */
+    [[2.475,0],[-2.475,Math.PI]].forEach(p=>{
+      const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.56,0.17),pm);
+      pl.position.set(0,0.42,p[0]);pl.rotation.y=p[1];mesh.add(pl);
     });
   }
 }
@@ -6940,7 +6972,14 @@ const UPDATE_PAGES=[
 <li>Choosing the news channel now shows a <b>list of stories</b> — pick the one YOU want on screen, or \u{1F4E1} LIVE mode for the newest.</li>
 <li>Every story stays available for <b>5 real minutes</b> before it expires.</li></ul>
 <h4>\u{1F304} A CALMER CITY</h4><ul>
-<li>Random events (house fires, road construction, accidents, festivals) happen <b>less often</b> — special, not constant.</li></ul>`}
+<li>Random events (house fires, road construction, accidents, festivals) happen <b>less often</b> — special, not constant.</li></ul>
+<h4>\u{1F6E9} RENT A PLANE — $250/DAY</h4><ul>
+<li>At any ✈️ airport terminal: <b>RENT a plane</b> and fly it YOURSELF (no admin needed) — W/S speed, A/D turn, Space climb, Shift descend.</li>
+<li>$250 is charged every game day; return the rental at any terminal.</li></ul>
+<h4>✨ REALISM PACK</h4><ul>
+<li><b>Reflective car paint</b>: metallic bodywork and glass now mirror the sky around them.</li>
+<li><b>License plates fixed</b> — they sit ON the bumpers now instead of hiding inside them (your custom plate too!).</li>
+<li>The sun got a real <b>glare halo</b>, every vehicle casts a soft <b>contact shadow</b>, and roads got a detailed surface with wheel-wear tracks and cracks.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

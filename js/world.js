@@ -23,6 +23,40 @@ function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWi
 resize();addEventListener("resize",resize);
 renderer.domElement.addEventListener("webglcontextlost",e=>{e.preventDefault();location.reload();});
 const hemi=new THREE.HemisphereLight(0xcfe8ff,0x5a7d4a,0.9);scene.add(hemi);
+/* a simple sky/ground environment map: metallic car paint & glass REFLECT it */
+{
+  const faces=[];
+  for(let i=0;i<6;i++){
+    const cv=document.createElement("canvas");cv.width=cv.height=64;
+    const c=cv.getContext("2d");
+    if(i===2){c.fillStyle="#7fb8e8";c.fillRect(0,0,64,64);}          // up: blue sky
+    else if(i===3){c.fillStyle="#5b6b52";c.fillRect(0,0,64,64);}     // down: ground
+    else{
+      const gr=c.createLinearGradient(0,0,0,64);
+      gr.addColorStop(0,"#8ec9f0");gr.addColorStop(0.6,"#e8f2fa");
+      gr.addColorStop(0.62,"#77876b");gr.addColorStop(1,"#55624e");
+      c.fillStyle=gr;c.fillRect(0,0,64,64);
+    }
+    faces.push(cv);
+  }
+  const envTex=new THREE.CubeTexture(faces);
+  envTex.needsUpdate=true;
+  scene.environment=envTex;   // lives on the scene itself — never chunk-disposed
+}
+/* the sun gets a real GLARE halo */
+const sunFlare=(function(){
+  const cv=document.createElement("canvas");cv.width=cv.height=128;
+  const c=cv.getContext("2d");
+  const g=c.createRadialGradient(64,64,2,64,64,64);
+  g.addColorStop(0,"rgba(255,246,220,1)");
+  g.addColorStop(0.22,"rgba(255,232,170,0.5)");
+  g.addColorStop(1,"rgba(255,220,130,0)");
+  c.fillStyle=g;c.fillRect(0,0,128,128);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false,depthTest:false}));
+  s.scale.set(280,280,1);
+  scene.add(s);
+  return s;
+})();
 const sun=new THREE.DirectionalLight(0xfff3d6,1.15);
 sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
 Object.assign(sun.shadow.camera,{left:-260,right:260,top:260,bottom:-260,far:1400});
@@ -121,6 +155,9 @@ function updateSky(px,pz){
   scene.fog.color.copy(fogNight.clone().lerp(fogDay,dayness));
   stars.material.opacity=THREE.MathUtils.clamp(1-dayness*1.8,0,0.95);
   sunBall.visible=sy>-0.08;moonBall.visible=sy<0.12;
+  sunFlare.position.copy(sunBall.position);
+  sunFlare.material.opacity=THREE.MathUtils.clamp(dayness,0,1)*0.9;
+  sunFlare.visible=sy>-0.05;
 }
 /* ================= TERRAIN, BIOMES, ROAD NETWORK ================= */
 function h2i(ix,iz){let n=ix*374761393+iz*668265263;n=(n^(n>>>13))*1274126177;return((n^(n>>>16))>>>0)/4294967295;}
@@ -376,10 +413,24 @@ function disposeGroup(g){
 }
 const shadowBox=m=>{m.castShadow=true;m.receiveShadow=true;return m};
 function makeRoadTex(lanes){
-  const cv=document.createElement("canvas");cv.width=128;cv.height=128;
+  /* higher-res asphalt with speckle, cracks & darker wheel-wear tracks */
+  const cv=document.createElement("canvas");cv.width=256;cv.height=256;
   const c=cv.getContext("2d");
+  c.scale(2,2);
   c.fillStyle="#3b3f46";c.fillRect(0,0,128,128);
-  c.fillStyle="#33373d";for(let i=0;i<60;i++)c.fillRect(Math.random()*128,Math.random()*128,2,2);
+  c.fillStyle="#33373d";for(let i=0;i<220;i++)c.fillRect(Math.random()*128,Math.random()*128,1.4,1.4);
+  c.fillStyle="#43474e";for(let i=0;i<140;i++)c.fillRect(Math.random()*128,Math.random()*128,1,1);
+  /* wheel-wear: soft dark tracks where tires roll */
+  c.fillStyle="rgba(0,0,0,0.08)";
+  for(const wx of[22,42,84,104]){c.fillRect(wx-5,0,10,128);c.fillRect(wx-3,0,6,128);}
+  /* faint cracks */
+  c.strokeStyle="rgba(20,22,26,0.35)";c.lineWidth=0.7;
+  for(let i=0;i<7;i++){
+    let x=Math.random()*128,y=Math.random()*128;
+    c.beginPath();c.moveTo(x,y);
+    for(let k2=0;k2<4;k2++){x+=(Math.random()-0.5)*22;y+=Math.random()*14;c.lineTo(x,y);}
+    c.stroke();
+  }
   if(lanes===8){
     /* the MEGA HIGHWAY: 4 lanes each side + a center median */
     c.fillStyle="#f7e08b";c.fillRect(60,0,3,128);c.fillRect(65,0,3,128);   // double yellow median
