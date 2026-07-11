@@ -257,6 +257,36 @@ function setAstro(on){
   cur.visible=old.visible;old.visible=false;
   player.mesh=cur;player.limbs=cur.userData.limbs;
 }
+/* ---------- the CARGO TRUCK (for the trucker job) ---------- */
+function buildTruckMesh(){
+  const g=new THREE.Group();g.userData.wheels=[];
+  const cabM=paintMat(0x1d6fd1);
+  const cab=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.5,2.2,2.6),cabM));
+  cab.position.set(0,1.6,3.6);g.add(cab);
+  const ws=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1),glassMat);
+  ws.position.set(0,2,4.92);g.add(ws);
+  const grille=new THREE.Mesh(new THREE.BoxGeometry(2.3,0.7,0.1),darkTrim);
+  grille.position.set(0,0.9,4.93);g.add(grille);
+  const frame=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.4,9.6),darkTrim);
+  frame.position.set(0,0.7,-0.6);g.add(frame);
+  /* the cargo container */
+  const cont=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.5,2.5,6.6),new THREE.MeshLambertMaterial({color:0xff7f11})));
+  cont.position.set(0,2.2,-1.6);g.add(cont);
+  for(let i=0;i<5;i++){
+    const rib=new THREE.Mesh(new THREE.BoxGeometry(2.54,2.4,0.1),new THREE.MeshLambertMaterial({color:0xe06c00}));
+    rib.position.set(0,2.2,-4.4+i*1.4);g.add(rib);
+  }
+  [[-0.72],[0.72]].forEach(p=>{
+    const h=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));
+    h.position.set(p[0],0.9,4.94);g.add(h);
+  });
+  addWheel(g,-1.05,3.4,0.5,0.34,true);addWheel(g,1.05,3.4,0.5,0.34,true);
+  addWheel(g,-1.05,-1.4,0.5,0.34,false);addWheel(g,1.05,-1.4,0.5,0.34,false);
+  addWheel(g,-1.05,-3.2,0.5,0.34,false);addWheel(g,1.05,-3.2,0.5,0.34,false);
+  addBlobShadow(g,3.4,10.4);
+  g.userData.camD=17;g.userData.camH=6.5;
+  return g;
+}
 /* ---------- the HELICOPTER ---------- */
 function buildHeliMesh(color){
   const G=new THREE.Group();
@@ -513,6 +543,51 @@ function ensureAudio(){
       o.connect(g);g.connect(hornGain);o.start();
       return o;
     });
+    /* LIVING WORLD ambience: a soft city hum + birdsong by day, crickets at night */
+    {
+      const len=audioCtx.sampleRate*2,buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
+      const d=buf.getChannelData(0);
+      let last=0;
+      for(let i=0;i<len;i++){last=(last+(Math.random()*2-1)*0.02)*0.98;d[i]=last*8;}
+      const hum=audioCtx.createBufferSource();hum.buffer=buf;hum.loop=true;
+      const hf=audioCtx.createBiquadFilter();hf.type="lowpass";hf.frequency.value=110;
+      const hg=audioCtx.createGain();hg.gain.value=0.018;
+      hum.connect(hf);hf.connect(hg);hg.connect(audioCtx.destination);hum.start();
+    }
+    setInterval(()=>{
+      if(!SND.sound||S.mode!=="game"||S.world!=="earth")return;
+      const t=audioCtx.currentTime;
+      if(!isNight()){
+        /* birds chirping somewhere nearby */
+        if(Math.random()<0.65){
+          const n=2+Math.floor(Math.random()*3);
+          for(let i=0;i<n;i++){
+            const o=audioCtx.createOscillator(),g2=audioCtx.createGain();
+            o.type="sine";
+            const st=t+i*0.13+Math.random()*0.05;
+            o.frequency.setValueAtTime(2600+Math.random()*800,st);
+            o.frequency.exponentialRampToValueAtTime(1900+Math.random()*300,st+0.09);
+            g2.gain.setValueAtTime(0,st);
+            g2.gain.linearRampToValueAtTime(0.028,st+0.012);
+            g2.gain.exponentialRampToValueAtTime(0.001,st+0.13);
+            o.connect(g2);g2.connect(audioCtx.destination);
+            o.start(st);o.stop(st+0.16);
+          }
+        }
+      }else{
+        /* crickets trilling in the dark */
+        for(let i=0;i<6;i++){
+          const o=audioCtx.createOscillator(),g2=audioCtx.createGain();
+          o.type="sine";o.frequency.value=4200+Math.random()*300;
+          const st=t+i*0.07;
+          g2.gain.setValueAtTime(0,st);
+          g2.gain.linearRampToValueAtTime(0.011,st+0.012);
+          g2.gain.linearRampToValueAtTime(0,st+0.05);
+          o.connect(g2);g2.connect(audioCtx.destination);
+          o.start(st);o.stop(st+0.06);
+        }
+      }
+    },2700);
     /* music bus */
     musicGain=audioCtx.createGain();musicGain.gain.value=0.4;musicGain.connect(audioCtx.destination);   // music louder (sound effects unchanged)
     startMusic();
@@ -591,7 +666,9 @@ function updateSiren(dt){
     nearest=Math.min(nearest,Math.hypot(p.x-player.x,p.z-player.z));
   }
   const allow=SND.sound&&(typeof SETTINGS==="undefined"||SETTINGS.siren);
-  const vol=(allow&&any&&nearest<120)?0.13*(1-nearest/120):0;
+  let vol=(allow&&any&&nearest<120)?0.13*(1-nearest/120):0;
+  /* on a POLICE SHIFT your own siren wails automatically */
+  if(allow&&typeof JOB!=="undefined"&&JOB.type==="police"&&player.drive)vol=Math.max(vol,0.12);
   sirenGain.gain.setTargetAtTime(vol,audioCtx.currentTime,0.1);
   /* real European two-tone: it STEPS between the notes instead of screeching */
   const hi=Math.floor(performance.now()/620)%2===0;

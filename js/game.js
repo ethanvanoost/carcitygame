@@ -542,6 +542,10 @@ function openShop(s){
     cat.innerHTML="\u{1F431} Kitten <span style='color:var(--dim)'>$400 — follows you everywhere!</span>";
     cat.onclick=()=>buyPet("cat",400);
     list.appendChild(cat);
+    const par=document.createElement("button");
+    par.innerHTML="\u{1F99C} Parrot <span style='color:var(--dim)'>$600 — rides on your SHOULDER!</span>";
+    par.onclick=()=>buyPet("parrot",600);
+    list.appendChild(par);
   }
   $("shopModal").classList.add("open");
 }
@@ -1766,6 +1770,17 @@ function startJob(type){
     JOB.acc=acc;
     jobTarget(acc.x,acc.z,"\u{1F69B} Drive to the accident");
     toast("\u{1F69B} TOW TRUCK JOB — get to the accident and stop next to the wrecks!");
+  }else if(type==="truck"){
+    /* your car becomes a big rig with a cargo container */
+    JOB.oldMesh=myVehicle.mesh;
+    scene.remove(JOB.oldMesh);
+    myVehicle.mesh=buildTruckMesh();
+    scene.add(myVehicle.mesh);
+    const m=nearestSpot(function(i,j){return hugeShopSpot(i,j);},HSP,750,390,3);
+    if(!m){toast("No MEGA MART depot found nearby!");endJob(true);return;}
+    JOB.stage=0;JOB.damage=0;JOB.lastSp=0;
+    jobTarget(m.sp.x,m.sp.z+50,"\u{1F4E6} Pick up the cargo at the MEGA MART depot");
+    toast("\u{1F69B}\u{1F4E6} TRUCKER JOB — you've got a BIG RIG now! Collect cargo at the depot. Drive SMOOTHLY: crashes damage the cargo!");
   }else if(type==="police"){
     /* your car transforms into a real police cruiser for the shift */
     JOB.oldMesh=myVehicle.mesh;
@@ -1794,6 +1809,15 @@ function updateJob(dt){
   if(!player.drive||player.drive!==myVehicle){endJob();return;}
   jobBeacon.rotation.y+=dt*1.4;
   if(JOB.type==="police"){updatePoliceJob(dt);return;}
+  /* trucker: hard hits damage the cargo */
+  if(JOB.type==="truck"&&JOB.stage===1){
+    const sp2=Math.abs(myVehicle.speed);
+    if(JOB.lastSp-sp2>11&&JOB.lastSp>14){
+      JOB.damage=Math.min(4,(JOB.damage||0)+1);
+      toast("\u{1F4A5}\u{1F4E6} OUCH — the cargo got damaged! ("+JOB.damage+"/4 — each dent costs 20% pay)");
+    }
+    JOB.lastSp=sp2;
+  }
   const d=Math.hypot(player.x-JOB.tx,player.z-JOB.tz);
   const stopped=Math.abs(myVehicle.speed)<1.5;
   const el=$("navDist");
@@ -1847,6 +1871,31 @@ function updateJob(dt){
         jobTarget(h.x,h.z,"\u{1F3E0} Delivery "+(JOB.count+1)+" of 3");
       }
     }
+  }else if(JOB.type==="truck"){
+    if(JOB.stage===0){
+      /* cargo loaded: haul it to a gas station depot far away */
+      const cands=[];
+      const ci=Math.round((player.x-286)/GSP),cj=Math.round((player.z-150)/GSP);
+      for(let i=ci-3;i<=ci+3;i++)for(let j=cj-3;j<=cj+3;j++){
+        const s=gasSpot(i,j);
+        if(!s)continue;
+        const dd=Math.hypot(s.x-player.x,s.z-player.z);
+        if(dd>350&&dd<1600)cands.push({s,dd});
+      }
+      if(!cands.length){toast("No delivery depot in range — try elsewhere!");endJob(true);return;}
+      const pick=cands[Math.floor(Math.random()*cands.length)];
+      JOB.stage=1;JOB.damage=0;JOB.lastSp=0;JOB.haul=Math.round(pick.dd*0.15/5)*5;
+      jobTarget(pick.s.x,pick.s.z,"\u{1F69B} Deliver the cargo — $"+JOB.haul+" ("+fmtDist(pick.dd)+")");
+      toast("\u{1F4E6} Cargo loaded! Haul it "+fmtDist(pick.dd)+" for $"+JOB.haul+" — no crashing!");
+    }else{
+      const cm=coopMult();
+      const pay=Math.max(20,Math.round(JOB.haul*(1-0.2*(JOB.damage||0))))*cm;
+      addMoney(pay);JOB.total+=pay;JOB.count++;
+      toast("\u{1F4B0} Cargo delivered — $"+fmtMoney(pay)+(JOB.damage?" (−"+JOB.damage*20+"% for dents!)":" in PERFECT condition!")+(cm>1?" \u{1F91D} CO-OP x2!":"")+" New load waiting...");
+      const m=nearestSpot(function(i,j){return hugeShopSpot(i,j);},HSP,750,390,3);
+      if(m){JOB.stage=0;jobTarget(m.sp.x,m.sp.z+50,"\u{1F4E6} Pick up the cargo at the MEGA MART depot");}
+      else endJob();
+    }
   }else if(JOB.type==="tow"){
     if(JOB.stage===0){
       /* hook up the wreck: the accident disappears */
@@ -1881,6 +1930,7 @@ $("jobTaxi").onclick=()=>startJob("taxi");
 $("jobDeliver").onclick=()=>startJob("deliver");
 $("jobTow").onclick=()=>startJob("tow");
 $("jobPolice").onclick=()=>startJob("police");
+$("jobTruck").onclick=()=>startJob("truck");
 /* ---------- daily reward + streak (shares the real-world calendar) ---------- */
 function dailyReward(){
   let d=null;
@@ -1904,8 +1954,49 @@ function scratchCard(){
   if(win>0){addMoney(win);toast(win>=500?"\u{1F3B0}\u{1F929} JACKPOT!! Your scratch card won $"+fmtMoney(win)+"!!":"\u{1F3B0} Scratch scratch... you won $"+win+"!");}
   else{updateMoneyUI();saveGame();toast("\u{1F3B0} Scratch scratch... nothing this time. Better luck next card!");}
 }
-/* ---------- your pet: buy a puppy or kitten at the MEGA MART ---------- */
-const PET={type:localStorage.getItem("vc4pet")||null,mesh:null,x:0,z:0};
+/* ---------- your pet: puppy, kitten or parrot — with a NAME and TRICKS ---------- */
+const PET={type:localStorage.getItem("vc4pet")||null,name:localStorage.getItem("vc4petname")||"",mesh:null,x:0,z:0,trick:null,trickT:0,boneT:30};
+function petName(){return PET.name||(PET.type==="dog"?"Puppy":PET.type==="cat"?"Kitten":"Polly");}
+function makeParrot(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.16,8,7),new THREE.MeshLambertMaterial({color:0xd7263d}));
+  body.scale.set(0.8,1.1,1);body.position.y=0.2;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.1,8,7),new THREE.MeshLambertMaterial({color:0x1b98e0}));
+  head.position.set(0,0.4,0.06);g.add(head);
+  const beak=new THREE.Mesh(new THREE.ConeGeometry(0.04,0.1,6),new THREE.MeshLambertMaterial({color:0xf4d35e}));
+  beak.rotation.x=Math.PI/2;beak.position.set(0,0.39,0.17);g.add(beak);
+  [[-0.13],[0.13]].forEach(p=>{
+    const w=new THREE.Mesh(new THREE.SphereGeometry(0.1,7,6),new THREE.MeshLambertMaterial({color:0x2ec4b6}));
+    w.scale.set(0.4,0.8,1);w.position.set(p[0],0.2,0);g.add(w);
+  });
+  const tail=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.3,5),new THREE.MeshLambertMaterial({color:0x8ac926}));
+  tail.rotation.x=1.9;tail.position.set(0,0.12,-0.2);g.add(tail);
+  return g;
+}
+function openPetMenu(){
+  showDest("\u{1F43E} "+petName()+" — your "+(PET.type==="dog"?"puppy":PET.type==="cat"?"kitten":"parrot"),[
+    {label:"\u{1FA91} Sit!",value:"sit"},
+    {label:"\u{1F300} Spin!",value:"spin"},
+    {label:"✋ High-five!",value:"high5"},
+    {label:"✏️ Rename "+petName(),value:"rename"},
+    {label:"❌ Good "+(PET.type==="dog"?"boy":"buddy")+"!",value:"cancel"}
+  ],v=>{
+    if(v==="cancel")return;
+    if(v==="rename"){
+      const s=prompt("What's your pet's name?",PET.name);
+      if(s&&s.trim()){
+        PET.name=s.trim().slice(0,12);
+        try{localStorage.setItem("vc4petname",PET.name);}catch(e){}
+        toast("\u{1F49B} From now on: "+PET.name+"!");
+      }
+      return;
+    }
+    PET.trick=v;PET.trickT=v==="sit"?4:2.2;
+    toast(v==="sit"?"\u{1FA91} "+petName()+" sits like a champion!"
+      :v==="spin"?"\u{1F300} "+petName()+" spins around — wheee!"
+      :"✋ "+petName()+" jumps up for a HIGH-FIVE! \u{1F389}");
+  });
+}
 function makeDog(){const g=makeQuad(0xc9a35a,0.36,0.32,0.7,0.26,0xb8924a);
   const t=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.4,6),new THREE.MeshLambertMaterial({color:0xc9a35a}));
   t.rotation.x=1.1;t.position.set(0,0.55,-0.45);g.add(t);
@@ -1919,7 +2010,7 @@ function makeCat(){const g=makeQuad(0x3a3a3a,0.3,0.26,0.6,0.22,0x2c2c2c);
 function spawnPetMesh(){
   if(PET.mesh){scene.remove(PET.mesh);disposeGroup(PET.mesh);PET.mesh=null;}
   if(!PET.type)return;
-  PET.mesh=PET.type==="dog"?makeDog():makeCat();
+  PET.mesh=PET.type==="dog"?makeDog():PET.type==="cat"?makeCat():makeParrot();
   PET.x=player.x+2;PET.z=player.z+2;
   scene.add(PET.mesh);
 }
@@ -1929,7 +2020,11 @@ function buyPet(type,price){
   PET.type=type;
   try{localStorage.setItem("vc4pet",type);}catch(e){}
   spawnPetMesh();
-  toast(type==="dog"?"\u{1F436} WOOF! Your puppy will follow you everywhere!":"\u{1F431} MEOW! Your kitten will follow you everywhere!");
+  const s=prompt("What will you name your new "+(type==="dog"?"puppy":type==="cat"?"kitten":"parrot")+"?","");
+  if(s&&s.trim()){PET.name=s.trim().slice(0,12);try{localStorage.setItem("vc4petname",PET.name);}catch(e){}}
+  toast(type==="dog"?"\u{1F436} WOOF! "+petName()+" will follow you everywhere — press T next to them for TRICKS!"
+    :type==="cat"?"\u{1F431} MEOW! "+petName()+" will follow you everywhere — press T next to them for TRICKS!"
+    :"\u{1F99C} SQUAWK! "+petName()+" sits on your SHOULDER!");
 }
 function updatePet(dt){
   if(!PET.type)return;
@@ -1937,6 +2032,26 @@ function updatePet(dt){
   const m=PET.mesh;
   if(S.world!=="earth"||CAVE.in){m.visible=false;return;}
   m.visible=true;
+  const now=performance.now();
+  /* the parrot rides on your SHOULDER */
+  if(PET.type==="parrot"){
+    const yaw=player.yaw;
+    PET.x=player.x-Math.sin(yaw+Math.PI/2)*0.34-Math.sin(yaw)*0.1;
+    PET.z=player.z-Math.cos(yaw+Math.PI/2)*0.34-Math.cos(yaw)*0.1;
+    m.position.set(PET.x,player.y+1.55+Math.sin(now/500)*0.03,PET.z);
+    m.rotation.y=yaw+(PET.trick==="spin"?now/80:0);
+    if(PET.trick){PET.trickT-=dt;if(PET.trickT<=0)PET.trick=null;}
+    return;
+  }
+  /* tricks! */
+  if(PET.trick){
+    PET.trickT-=dt;
+    if(PET.trick==="spin")m.rotation.y+=dt*11;
+    else if(PET.trick==="sit"){m.rotation.x=-0.5;m.position.y=terrainH(PET.x,PET.z)-0.06;}
+    else if(PET.trick==="high5")m.position.y=terrainH(PET.x,PET.z)+Math.abs(Math.sin(now/130))*0.7;
+    if(PET.trickT<=0){PET.trick=null;m.rotation.x=0;}
+    if(PET.trick==="sit")return;   // sitting pets stay put
+  }
   const tx=player.x-Math.sin(player.yaw)*2.2+1,tz=player.z-Math.cos(player.yaw)*2.2;
   const dx=tx-PET.x,dz=tz-PET.z,d=Math.hypot(dx,dz);
   if(d>60){PET.x=tx;PET.z=tz;}   // teleported away: pet catches up instantly
@@ -1945,8 +2060,19 @@ function updatePet(dt){
     PET.x+=dx/d*sp*dt;PET.z+=dz/d*sp*dt;
     m.rotation.y=Math.atan2(dx,dz);
   }
-  const bounce=d>1.2?Math.abs(Math.sin(performance.now()/120))*0.16:0;
-  m.position.set(PET.x,terrainH(PET.x,PET.z)+bounce,PET.z);
+  const bounce=d>1.2?Math.abs(Math.sin(now/120))*0.16:0;
+  if(!PET.trick)m.position.set(PET.x,terrainH(PET.x,PET.z)+bounce,PET.z);
+  /* dogs & cats DIG UP BONES on island beaches! */
+  PET.boneT-=dt;
+  if(PET.boneT<=0){
+    PET.boneT=50+Math.random()*40;
+    const isl=nearIsland(PET.x,PET.z);
+    if(isl&&Math.hypot(PET.x-isl.x,PET.z-isl.z)<80&&Math.random()<0.7){
+      PET.trick="high5";PET.trickT=1.5;   // digging wiggle
+      addMoney(25);
+      toast("\u{1F9B4} "+petName()+" dug up a buried bone on the beach — +$25! Good "+(PET.type==="dog"?"dog":"cat")+"!");
+    }
+  }
 }
 /* ================= PROPERTY: buy or rent apartments & mansions ================= */
 const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game day
@@ -2215,12 +2341,13 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
     rim.rotation.x=Math.PI/2;rim.position.y=0.8;g.add(rim);
     TRAMPS.push({g,x,z,y:y+0.85});
   }else if(t==="pool"){
-    /* an in-ground pool: white rim flush with the lawn, blue water inside */
+    /* an in-ground pool: white rim flush with the lawn — and you can SWIM in it! */
     const rimM=new THREE.MeshLambertMaterial({color:0xf4f7fb});
     box(7,0.3,0.5,0,0.15,-2.75,rimM);box(7,0.3,0.5,0,0.15,2.75,rimM);
     box(0.5,0.3,6,-3.25,0.15,0,rimM);box(0.5,0.3,6,3.25,0.15,0,rimM);
     const wat=new THREE.Mesh(new THREE.BoxGeometry(6,0.22,5),new THREE.MeshLambertMaterial({color:0x1b98e0,transparent:true,opacity:0.8}));
     wat.position.y=0.11;g.add(wat);
+    POOLS.push({g,x,z,hw:3,hd:2.5,wy:y+0.12});
     /* a little ladder */
     [[-0.3],[0.3]].forEach(p=>box(0.05,0.7,0.05,3.3,0.35,p[0],hubMat));
     box(0.05,0.05,0.7,3.3,0.55,0,hubMat);
@@ -3481,6 +3608,13 @@ function tryCall(){
     if(dg){digTreasureX(dg);return;}
     /* the sky restaurant on the peaks */
     if(nearSkyRest()){openSkyRest();return;}
+    /* the WATERSLIDE at pool parks */
+    const psl=nearPoolSlide();
+    if(psl){
+      SLIDE.on=true;SLIDE.t=0;SLIDE.pts=psl.slidePts;
+      toast("\u{1F6DD} WHEEEEEE!!");
+      return;
+    }
     /* mine LAVA dumplings from a (calm) volcano crater */
     const vol=nearVolcanoCrater();
     if(vol){
@@ -3502,6 +3636,8 @@ function tryCall(){
     if(mn&&rentedAt(mn.id)){openMansionEdit(mn);return;}
     if(mn&&mn.owner){openVisitorMenu(mn);return;}
     if(mn){toast("\u{1F3F0} Buy this mansion first — press T at the RECEPTION out front ($"+fmtMoney(MANSION_PRICE)+")!");return;}
+    /* pet tricks: press T next to your pet (parrots are always with you) */
+    if(PET.type==="parrot"||(PET.type&&PET.mesh&&Math.hypot(player.x-PET.x,player.z-PET.z)<2.8)){openPetMenu();return;}
   }
   /* rocket stations work on BOTH worlds */
   const rp=nearestRocketPad(player.x,player.z);
@@ -3860,7 +3996,8 @@ function driveVehicle(v,dt){
   return Math.abs(v.speed);
 }
 function walkPlayer(dt){
-  const sp=keys.shift?9:4.2;
+  const inPool=(S.world==="earth"&&!CAVE.in)?poolAt(player.x,player.z,player.y):null;
+  const sp=inPool?2.4:(keys.shift?9:4.2);
   const thr=thrInput(),st=steerInput();
   /* sitting on a chair: stay put until you move */
   if(SIT.on){
@@ -3929,6 +4066,25 @@ function walkPlayer(dt){
     if(player.y<=gh){player.y=gh;player.grounded=true;player.vy=0;}}
   else if(gh<player.y-1.3){player.grounded=false;player.vy=0;}   // stepped off a deck
   else player.y=gh;
+  /* 🏊 REAL SWIMMING: in a pool you float and stroke through the water */
+  const pw=(S.world==="earth"&&!CAVE.in)?poolAt(player.x,player.z,player.y):null;
+  if(pw){
+    if(SWIM.cur!==pw){
+      SWIM.cur=pw;
+      toast(pw.hw<=4.5?"♨️ Ahhh... the HOT TUB. Sooo warm and bubbly!":"\u{1F3CA} SPLASH — you're SWIMMING! Paddle around!");
+    }
+    player.y=pw.wy-0.5;player.grounded=true;player.vy=0;
+    player.mesh.position.set(player.x,player.y,player.z);
+    player.mesh.rotation.y=player.yaw;
+    const t2=performance.now()/170;
+    const L2=player.limbs;
+    L2.lA.rotation.x=Math.sin(t2)*1.7-0.7;
+    L2.rA.rotation.x=Math.sin(t2+Math.PI)*1.7-0.7;
+    L2.lL.rotation.x=Math.sin(t2*1.5)*0.5;
+    L2.rL.rotation.x=-Math.sin(t2*1.5)*0.5;
+    return moving?2.4:0;
+  }
+  if(SWIM.cur)SWIM.cur=null;
   /* trampolines: walk onto one and BOING — way higher than a normal jump */
   if(player.grounded)for(let i=TRAMPS.length-1;i>=0;i--){
     const tr=TRAMPS[i];
@@ -4696,6 +4852,21 @@ function drawMap(){
         }
       }
     }
+    /* public pool parks every ~2 km */
+    {
+      const wi0=Math.floor((mapView.cx-halfW-1830)/PPSP),wi1=Math.ceil((mapView.cx+halfW-1590)/PPSP);
+      const wj0=Math.floor((mapView.cz-halfH-550)/PPSP),wj1=Math.ceil((mapView.cz+halfH-310)/PPSP);
+      for(let i=wi0;i<=wi1;i++)for(let j=wj0;j<=wj1;j++){
+        const s=poolSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#0e7490",7);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#7fe0ff";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3CA}",px,py-9);
+        }
+      }
+    }
     /* building plots for sale every ~1.6 km */
     if(sc>=0.14){
       const pi0=Math.floor((mapView.cx-halfW-500)/PLSP),pi1=Math.ceil((mapView.cx+halfW-360)/PLSP);
@@ -4978,6 +5149,10 @@ function mapEntries(q){
       setupTreasure();
       $("mapModal").classList.remove("open");
       toast(TREASURE.found?"\u{1F3F4}‍☠️ You already found today's treasure — a new one appears tomorrow!":treasureHintText());
+    }],
+    ["\u{1F3CA} Nearest SWIMMING POOL park",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3CA} Nearest pool park (swim, waterslide & hot tub!)",nearestSpot(poolSpot,PPSP,1710,430,3),0,40);
     }],
     ["\u{1F3D7} Nearest building PLOT for sale",()=>{
       switchWorld("earth");
@@ -5468,6 +5643,8 @@ function updateHint(){
       else if(ROD.owned&&FISHING.state==="bite"){txt="❗\u{1F3A3} BITE!! PRESS T NOW!!";showT=true;}
       else if(ROD.owned&&FISHING.state==="wait"){txt="\u{1F3A3} Line's in the water... wait for the ❗";}
       else if(ROD.owned&&FISHING.state==="idle"&&atWaterEdge()){txt="\u{1F3A3} Water ahead — press T to cast your line!";showT=true;}
+      else if(nearPoolSlide()){txt="\u{1F6DD} The WATERSLIDE — press T to ride it down!";showT=true;}
+      else if(SWIM.cur){txt=SWIM.cur.hw<=4.5?"♨️ Bubbling away in the hot tub...":"\u{1F3CA} Swimming! Paddle to the edge to climb out.";}
       else if(pn&&pn.hat&&(pn.hatMoney||0)>0&&Math.hypot(player.x-pn.hat.x,player.z-pn.hat.z)<2.4){txt="\u{1F3A9} The hat is full — press T to collect $"+pn.hatMoney+"!";showT=true;}
       else if(pn){txt=pn.crowded?"\u{1F3B9} Your concert is ON — press T at the piano, then \u{1F51A} End the concert":"\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
@@ -5792,6 +5969,39 @@ function digTreasureX(isl){
     renderDump();saveGame();
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
+}
+/* ================= 🏊 SWIMMING & THE WATERSLIDE ================= */
+const SWIM={cur:null};
+const SLIDE={on:false,t:0,pts:null};
+function nearPoolSlide(){
+  for(let i=poolParks.length-1;i>=0;i--){
+    const p=poolParks[i];
+    if(offScene(p.g)){poolParks.splice(i,1);continue;}
+    if(Math.hypot(player.x-p.slideBase.x,player.z-p.slideBase.z)<4.5)return p;
+  }
+  return null;
+}
+function updateSlide(dt){
+  SLIDE.t+=dt/2.4;
+  const pts=SLIDE.pts;
+  const raw=Math.min(0.999,SLIDE.t)*(pts.length-1);
+  const seg=Math.floor(raw),f=raw-seg;
+  const a=pts[seg],b=pts[seg+1];
+  player.x=a[0]+(b[0]-a[0])*f;
+  player.y=a[1]+(b[1]-a[1])*f-0.35;
+  player.z=a[2]+(b[2]-a[2])*f;
+  player.mesh.visible=true;
+  player.mesh.position.set(player.x,player.y,player.z);
+  player.mesh.rotation.y=Math.atan2(b[0]-a[0],b[2]-a[2]);
+  const L=player.limbs;
+  L.lL.rotation.x=-1.4;L.rL.rotation.x=-1.4;
+  L.lA.rotation.x=-2.7;L.rA.rotation.x=-2.7;   // hands in the air, obviously
+  if(SLIDE.t>=1){
+    SLIDE.on=false;
+    player.grounded=true;player.vy=0;
+    toast("\u{1F4A6} SPLAAASH!!");
+  }
+  return 9;
 }
 /* ================= BUILDING PLOTS: buy land, build your dream house ================= */
 const PLOT_PRICE=50000;
@@ -7307,7 +7517,25 @@ const UPDATE_PAGES=[
 <li>The blue <b>map route now follows the thief live</b> on the minimap and big map.</li>
 <li>Thieves <b>panic and slow down</b> when you get close — drive into the circle and a 3-2-1 arrest countdown busts them properly.</li></ul>
 <h4>\u{1F3D7} PLOTS ON THE MAP</h4><ul>
-<li>Building plots now show as green \u{1F3D7} dots on the map, plus a "Nearest building PLOT for sale" quick button.</li></ul>`}
+<li>Building plots now show as green \u{1F3D7} dots on the map, plus a "Nearest building PLOT for sale" quick button.</li></ul>`},
+{t:"Round 28 — POOL PARKS, trucking, pet tricks & a living city",h:`
+<h4>\u{1F3CA} PUBLIC POOL PARKS (every ~2 km, on the map!)</h4><ul>
+<li>Mega-mansion-sized parks with a giant pool you can <b>REALLY SWIM in</b> — jump in and your player paddles with real swim strokes!</li>
+<li>A twisting \u{1F6DD} <b>WATERSLIDE</b> (press T at the tower — hands in the air, SPLASH into the pool), a bubbling <b>♨️ hot tub</b>, a kiddie pool, a diving board and sun loungers.</li>
+<li>Garden pools at your mansion are swimmable now too!</li></ul>
+<h4>\u{1F4E6} NEW JOB: TRUCKER</h4><ul>
+<li>Your car becomes a <b>BIG RIG with a cargo container</b> — collect at MEGA MART depots, haul across the city, longer routes pay more.</li>
+<li>Drive smoothly: every crash <b>dents the cargo</b> and costs 20% of the pay!</li></ul>
+<h4>\u{1F43E} PET TRICKS & THE PARROT</h4><ul>
+<li><b>Name your pet</b>, and press T next to it for tricks: \u{1FA91} Sit, \u{1F300} Spin and ✋ High-five!</li>
+<li>Dogs & cats <b>dig up bones ($25)</b> on island beaches. New pet: the \u{1F99C} <b>PARROT ($600)</b> — it rides on your SHOULDER!</li></ul>
+<h4>\u{1F694} POLICE SIREN AUTO-ON</h4><ul>
+<li>The moment the radio calls out a speeder on your police shift, <b>YOUR siren wails automatically</b> — wee-woo all the way!</li></ul>
+<h4>\u{1F3D9} A LIVING, REALISTIC CITY</h4><ul>
+<li>A real <b>downtown skyline</b>: tall towers with antennas and blinking warning lights.</li>
+<li><b>Street furniture everywhere</b>: fire hydrants, mailboxes and trash bins — plus <b>cars parked along the curbs</b>.</li>
+<li>Houses got wooden <b>siding texture</b> instead of flat plastic walls.</li>
+<li><b>Living sound</b>: a soft city hum, \u{1F426} birdsong in the day, \u{1F997} crickets at night.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -7351,7 +7579,7 @@ function frame(now){
     speedMS=mcdBusy?Math.abs(myVehicle.speed)
       :(AUTO.on&&player.drive===myVehicle?updateAuto(dt):driveVehicle(player.drive,dt));   // McDrive lane / auto-drive
   }
-  else{speedMS=walkPlayer(dt);headLight.intensity=0;}
+  else{speedMS=SLIDE.on?updateSlide(dt):walkPlayer(dt);headLight.intensity=0;}
   if(player.inTrain){const t=player.train;player.x=railC(t.k,t.z);player.z=t.z;player.y=t.g.position.y;}
   if(player.inPlane){const p=player.planeRef;player.x=p.x;player.z=p.z;player.y=p.y;}
   if(player.inBus){const b=player.bus;player.x=b.g.position.x;player.z=b.g.position.z;player.y=b.g.position.y;}

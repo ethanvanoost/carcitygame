@@ -232,11 +232,10 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    is freed automatically when a renter can't pay the rent anymore). The `pianolock`
    part locks a **concert piano while a player is giving a concert** — only the
    concert giver can play until they end the concert; a lock left behind by a
-   crashed game frees itself after 15 minutes. The `usernames` rules now also allow
-   the **owner to update their own record** — that's how **passwords** work: each
-   account stores a password *hash* (`p`, never the plain password), registering
-   creates the account, and logging in with the right password on a new device
-   hands that device the account. The `payments` part is the **pay-a-player inbox**:
+   crashed game frees itself after 15 minutes. (The `p` field in `usernames` is a
+   leftover from an old password system that has been removed — the rules keep
+   accepting it so old accounts stay valid, but the game no longer uses it.)
+   The `payments` part is the **pay-a-player inbox**:
    anyone can drop a payment into someone's inbox (amount 1 to 1 billion), and the
    game collects and deletes them within seconds — a payment can also carry a
    **dumpling gift** (`d`). Claims now also carry the mansion's **furniture layout**

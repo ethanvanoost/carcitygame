@@ -992,11 +992,27 @@ function houseWinMat(){
   return _houseWin;
 }
 const roofMats=[0xa0522d,0x7a4a3a,0x5b6470,0x8a3b2e].map(c=>keep(new THREE.MeshLambertMaterial({color:c})));
+/* wooden siding texture: houses stop looking like plastic blocks */
+let _siding=null;
+function sidingTex(){
+  if(_siding)return _siding;
+  const cv=document.createElement("canvas");cv.width=64;cv.height=64;
+  const c=cv.getContext("2d");
+  c.fillStyle="#ffffff";c.fillRect(0,0,64,64);
+  c.strokeStyle="rgba(0,0,0,0.14)";c.lineWidth=1;
+  for(let y=6;y<64;y+=7){c.beginPath();c.moveTo(0,y);c.lineTo(64,y);c.stroke();}
+  c.fillStyle="rgba(0,0,0,0.05)";
+  for(let i=0;i<50;i++)c.fillRect(Math.random()*64,Math.random()*64,2.5,1);
+  _siding=keep(new THREE.CanvasTexture(cv));
+  _siding.wrapS=_siding.wrapT=THREE.RepeatWrapping;
+  _siding.repeat.set(2,1.6);
+  return _siding;
+}
 function house(x,z,rand,parent,baseY){
   baseY=baseY||0;
   const cols=[0xf2e8cf,0xe8b4b8,0xcde3d0,0xf3d9a4,0xdbe7f5];
   const w=7+rand()*3,d=7+rand()*3,h=4+rand()*1.5;
-  const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:cols[Math.floor(rand()*cols.length)]})));
+  const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:cols[Math.floor(rand()*cols.length)],map:sidingTex()})));
   m.position.set(x,baseY+h/2-0.3,z);parent.add(m);
   const roof=shadowBox(new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.75,3,4),roofMats[Math.floor(rand()*roofMats.length)]));
   roof.position.set(x,baseY+h+1.2,z);roof.rotation.y=Math.PI/4;parent.add(roof);
@@ -1843,7 +1859,117 @@ function buildSkyRest(s,g){
   sg.position.set(s.x-6,y+6.4,s.z-5);g.add(sg);
   skyRests.push({g,x:s.x,z:s.z,y:CLOUD_Y});
 }
-/* ---------- BUILDING PLOTS: buy an empty plot & build your own house! ---------- */
+/* ---------- PUBLIC SWIMMING POOL PARKS: swim, slide & soak every ~2 km ---------- */
+const POOLS=[];        // rectangles of REAL swimmable water {g,x,z,hw,hd,wy}
+const poolParks=[];    // the parks (slide, hot tub...)
+const PPSP=2000;
+function poolAt(x,z,y){
+  for(let i=POOLS.length-1;i>=0;i--){
+    const p=POOLS[i];
+    if(offScene(p.g)){POOLS.splice(i,1);continue;}
+    if(Math.abs(x-p.x)<p.hw&&Math.abs(z-p.z)<p.hd&&Math.abs(y-p.wy)<2.2)return p;
+  }
+  return null;
+}
+function poolSpot(i,j){
+  const x=Math.round((i*PPSP+1710-90)/120)*120+90;
+  const z=Math.round((j*PPSP+430-90)/120)*120+90;
+  if(Math.abs(x)<320&&Math.abs(z)<320)return null;
+  if(Math.abs(x-170)<70||Math.abs(z+170)<70)return null;
+  if(inAirport(x,z)||inAirport(x-50,z)||inAirport(x+50,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox,oz]of[[-45,-33],[45,-33],[-45,33],[45,33]]){
+    const ch=baseH(x+ox,z+oz);
+    if(ch<-1||Math.abs(ch-h)>3.5)return null;
+  }
+  if(nearestRail(x,z).d<70)return null;
+  if(Math.abs(x-curveXC(x,z))<70||Math.abs(z-curveZC(x,z))<70)return null;
+  if(rocketPadDist(x,z)<110)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<130&&Math.abs(hs.z-z)<110)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<130&&Math.abs(ms.z-z)<110)return null;
+  return{x,z};
+}
+function regPool(g,x,z,hw,hd,wy,depth,rimCol){
+  /* white rim + glowing blue water you can REALLY swim in */
+  const rimM=new THREE.MeshLambertMaterial({color:rimCol||0xf4f7fb});
+  const rim=new THREE.Mesh(new THREE.BoxGeometry(hw*2+1.6,0.5,hd*2+1.6),rimM);
+  rim.position.set(x,wy-0.1,z);g.add(rim);
+  const basin=new THREE.Mesh(new THREE.BoxGeometry(hw*2,depth,hd*2),new THREE.MeshLambertMaterial({color:0x7fd4e8}));
+  basin.position.set(x,wy-depth/2+0.05,z);g.add(basin);
+  const wat=new THREE.Mesh(new THREE.BoxGeometry(hw*2,0.16,hd*2),
+    new THREE.MeshPhongMaterial({color:0x36b6e0,transparent:true,opacity:0.72,shininess:130,specular:0xbfeaff}));
+  wat.position.set(x,wy+0.12,z);g.add(wat);
+  POOLS.push({g,x,z,hw,hd,wy});
+}
+let _poolSign=null;
+function poolSignMat(){
+  if(_poolSign)return _poolSign;
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#0e7490";c.fillRect(0,0,512,96);
+  c.fillStyle="#fff";c.font="bold 52px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3CA} CITY POOL PARK",256,64);
+  _poolSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _poolSign;
+}
+function buildPoolPark(s,g){
+  const y=terrainH(s.x,s.z);
+  /* a mega-mansion-sized paved lot */
+  const pave=new THREE.Mesh(new THREE.BoxGeometry(100,0.3,76),new THREE.MeshLambertMaterial({color:0xd8d2c4}));
+  pave.position.set(s.x,y+0.15,s.z);g.add(pave);
+  decks.push({g,x:s.x,z:s.z,hw:50,hd:38,tops:[y+0.3],ramp:null});
+  const wy=y+0.3;
+  /* the BIG pool you can swim in */
+  regPool(g,s.x-15,s.z,20,12,wy,1.8);
+  /* the round kiddie pool outside the main area */
+  regPool(g,s.x+30,s.z+22,7,7,wy,0.9,0xffd75e);
+  /* the HOT TUB: warm, bubbly */
+  regPool(g,s.x+32,s.z-20,4,4,wy,1,0xb56576);
+  const tubGlow=new THREE.PointLight(0xffb46b,0.6,18);
+  tubGlow.position.set(s.x+32,wy+2,s.z-20);g.add(tubGlow);
+  for(let i=0;i<6;i++){
+    const bub=new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.7}));
+    bub.position.set(s.x+32+(Math.random()-0.5)*5,wy+0.25,s.z-20+(Math.random()-0.5)*5);
+    g.add(bub);
+  }
+  /* the WATERSLIDE: tower + cyan flume curving into the big pool */
+  const tow=[s.x+18,s.z+10];
+  const tm2=new THREE.MeshLambertMaterial({color:0x9aa0a8});
+  for(const[ox,oz]of[[-1.4,-1.4],[1.4,-1.4],[-1.4,1.4],[1.4,1.4]]){
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.16,9),tm2);
+    leg.position.set(tow[0]+ox,wy+4.5,tow[1]+oz);g.add(leg);
+  }
+  const deck2=new THREE.Mesh(new THREE.BoxGeometry(4,0.3,4),tm2);
+  deck2.position.set(tow[0],wy+9,tow[1]);g.add(deck2);
+  const slideM=new THREE.MeshPhongMaterial({color:0x22c3e6,shininess:90,side:THREE.DoubleSide});
+  /* flume segments from the tower down into the pool */
+  const pts=[[tow[0],wy+9,tow[1]],[s.x+8,wy+6.4,s.z+4],[s.x-2,wy+3.4,s.z-2],[s.x-10,wy+0.6,s.z]];
+  for(let i2=0;i2<pts.length-1;i2++){
+    const a=pts[i2],b=pts[i2+1];
+    const len=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);
+    const seg=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,len,10,1,true),slideM);
+    seg.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);
+    seg.lookAt(b[0],b[1],b[2]);
+    seg.rotateX(Math.PI/2);
+    g.add(seg);
+  }
+  /* diving board + sun loungers + palm-ish trees */
+  const board=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.12,3.4),new THREE.MeshLambertMaterial({color:0xf4f7fb}));
+  board.position.set(s.x-15,wy+1.4,s.z-14.5);g.add(board);
+  const bp=new THREE.Mesh(new THREE.BoxGeometry(0.5,1.3,0.5),tm2);
+  bp.position.set(s.x-15,wy+0.65,s.z-15.6);g.add(bp);
+  for(let i=0;i<4;i++){
+    const lounge=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.25,2.2),new THREE.MeshLambertMaterial({color:[0xd7263d,0x1b98e0,0xf4d35e,0x2ec4b6][i]}));
+    lounge.position.set(s.x+2+i*4,wy+0.35,s.z+26);g.add(lounge);
+    makeChair(s.x+2+i*4,s.z+30,0,g,wy);
+  }
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(16,3),poolSignMat());
+  sign.position.set(s.x,wy+7,s.z+37);g.add(sign);
+  [-7,7].forEach(o=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,7),poleMat);pl.position.set(s.x+o,wy+3.5,s.z+37);g.add(pl);});
+  poolParks.push({g,x:s.x,z:s.z,wy,slideBase:{x:tow[0]+2.5,z:tow[1]},slidePts:pts,tub:{x:s.x+32,z:s.z-20}});
+}
 const plots=[];
 const PLSP=1600;
 function plotSpot(i,j){
@@ -1864,6 +1990,8 @@ function plotSpot(i,j){
   if(hs&&Math.abs(hs.x-x)<75&&Math.abs(hs.z-z)<60)return null;
   const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
   if(ms&&Math.abs(ms.x-x)<75&&Math.abs(ms.z-z)<60)return null;
+  const pp3=poolSpot(Math.round((x-1710)/PPSP),Math.round((z-430)/PPSP));
+  if(pp3&&Math.abs(pp3.x-x)<75&&Math.abs(pp3.z-z)<60)return null;
   const mu=museumSpot(Math.round((x-520)/DMUS),Math.round((z-260)/DMUS));
   if(mu&&Math.abs(mu.x-x)<36&&Math.abs(mu.z-z)<32)return null;
   const ch2=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
@@ -2066,6 +2194,8 @@ function keepClear(x,z){
   if(isl&&Math.hypot(x-isl.x,z-isl.z)<100)return true;   // islands get their own decor
   const pl2=plotSpot(Math.round((x-430)/PLSP),Math.round((z-1150)/PLSP));
   if(pl2&&Math.abs(x-pl2.x)<19&&Math.abs(z-pl2.z)<19)return true;   // building plots stay empty
+  const pp2=poolSpot(Math.round((x-1710)/PPSP),Math.round((z-430)/PPSP));
+  if(pp2&&Math.abs(x-pp2.x)<60&&Math.abs(z-pp2.z)<48)return true;   // pool parks too
   const vc2=nearVolcano(x,z);
   if(vc2&&Math.hypot(x-vc2.x,z-vc2.z)<140)return true;   // volcanoes too
   return false;
@@ -2318,6 +2448,38 @@ function buildChunk(cx,cz){
       g.add(ribbon("z",lx+8.15,a,b,2.7,0.20,sideMat));
       if(oz-40>=a&&oz-40<=b)lightPole(lx+9.9,oz-40,g);
       if(oz+50>=a&&oz+50<=b)lightPole(lx+9.9,oz+50,g);
+      /* street furniture: hydrants, bins & mailboxes make it a real city */
+      if(oz+14>=a&&oz+14<=b&&!inAirport(lx,oz+14)&&baseH(lx+9.6,oz+14)>-1&&baseH(lx+9.6,oz+14)<15){
+        const hy=terrainH(lx+9.6,oz+14);
+        const hyd=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,0.6,8),new THREE.MeshLambertMaterial({color:0xd7263d}));
+        hyd.position.set(lx+9.6,hy+0.3,oz+14);g.add(hyd);
+        const hc2=new THREE.Mesh(new THREE.SphereGeometry(0.14,7,6),new THREE.MeshLambertMaterial({color:0xb01e2e}));
+        hc2.position.set(lx+9.6,hy+0.66,oz+14);g.add(hc2);
+      }
+      if(oz-52>=a&&oz-52<=b&&!inAirport(lx,oz-52)&&baseH(lx-9.6,oz-52)>-1&&baseH(lx-9.6,oz-52)<15){
+        const by2=terrainH(lx-9.6,oz-52);
+        const bin=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.3,0.9,9),new THREE.MeshLambertMaterial({color:0x2f5d3a}));
+        bin.position.set(lx-9.6,by2+0.45,oz-52);g.add(bin);
+      }
+      if(oz+62>=a&&oz+62<=b&&!inAirport(lx,oz+62)&&baseH(lx+9.6,oz+62)>-1&&baseH(lx+9.6,oz+62)<15){
+        const my2=terrainH(lx+9.6,oz+62);
+        const mp=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,1),poleMat);
+        mp.position.set(lx+9.6,my2+0.5,oz+62);g.add(mp);
+        const mb=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.34),new THREE.MeshLambertMaterial({color:0x1d6fd1}));
+        mb.position.set(lx+9.6,my2+1.15,oz+62);g.add(mb);
+      }
+      /* parked cars along the curb — cities live on street parking */
+      if(parkedCarBuilder&&Math.abs(lx)>200){
+        for(const pz of[oz-84,oz+36]){
+          if(pz<a||pz>b)continue;
+          if(h2i(Math.round(lx),Math.round(pz))<0.55)continue;
+          if(inAirport(lx,pz)||baseH(lx+5.85,pz)<-1||baseH(lx+5.85,pz)>14)continue;
+          const pc=parkedCarBuilder(COLORS[Math.floor(h2i(Math.round(pz),Math.round(lx))*COLORS.length)]);
+          pc.position.set(lx+5.85,terrainH(lx+5.85,pz),pz);
+          pc.rotation.y=h2i(Math.round(lx+pz),7)<0.5?0:Math.PI;
+          g.add(pc);
+        }
+      }
     }
   }
   for(const lz of roadLinesIn(z0,z1)){
@@ -2547,6 +2709,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildSkyRest(sp,g);
+  }
+  /* PUBLIC POOL PARKS every ~2 km */
+  for(let i=Math.floor((x0-1830)/PPSP);i<=Math.ceil((x1-1590)/PPSP);i++)
+  for(let j=Math.floor((z0-550)/PPSP);j<=Math.ceil((z1-310)/PPSP);j++){
+    const sp=poolSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildPoolPark(sp,g);
   }
   /* BUILDING PLOTS for sale every ~1.6 km */
   for(let i=Math.floor((x0-500)/PLSP);i<=Math.ceil((x1-360)/PLSP);i++)
@@ -2930,4 +3100,18 @@ function playground(cx,cz){
   playground(60,60);
   for(let i=0;i<7;i++){const a=i/7*Math.PI*2;makeTree(Math.cos(a)*14,Math.sin(a)*14,2.4+rand()*0.9,earthStatic,0);}
   makeTree(0,0,3.4,earthStatic,0);
+  /* the DOWNTOWN SKYLINE: real tall towers with antennas & warning lights */
+  [[-105,-105,64],[105,-105,82],[-105,105,58],[105,107,74],[-63,-118,90],[-118,63,52],[118,63,68]].forEach((t,i)=>{
+    const[tx,tz,th]=t;
+    if(onAnyRoad(tx,tz))return;
+    const tw=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(16,th,14),new THREE.MeshLambertMaterial({map:winTexes[i%4]})));
+    tw.position.set(tx,th/2,tz);earthStatic.add(tw);
+    const cap=new THREE.Mesh(new THREE.BoxGeometry(10,2,9),new THREE.MeshLambertMaterial({color:0x3d444d}));
+    cap.position.set(tx,th+1,tz);earthStatic.add(cap);
+    const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.16,9),poleMat);
+    ant.position.set(tx,th+6.5,tz);earthStatic.add(ant);
+    const bl=new THREE.Mesh(new THREE.SphereGeometry(0.32),new THREE.MeshBasicMaterial({color:0xff4444}));
+    bl.position.set(tx,th+11,tz);earthStatic.add(bl);
+    regBuilding(tx,tz,16,14,[tw],0);
+  });
 }
