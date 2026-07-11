@@ -519,6 +519,20 @@ function openShop(s){
     b.innerHTML="\u{1F95F} Squishy Dumpling <span style='color:#ff5d8f'>surprise!</span>";
     b.onclick=()=>{DUMP.unopened++;toast("\u{1F95F} Squishy Dumpling bought! Open it in the \u{1F95F} Dumplings menu.");};
     list.appendChild(b);
+    /* the fishing corner */
+    if(!ROD.owned){
+      const rod=document.createElement("button");
+      rod.innerHTML="\u{1F3A3} Fishing rod <span style='color:var(--dim)'>$200 — fish at any water edge!</span>";
+      rod.onclick=()=>{
+        if(MONEY.v<200){toast("\u{1F4B0} The rod costs $200!");return;}
+        MONEY.v-=200;updateMoneyUI();saveGame();
+        ROD.owned=true;
+        try{localStorage.setItem("vc4rod","1");}catch(e){}
+        toast("\u{1F3A3} Rod bought! Stand at the water's edge, face the sea, press T to cast!");
+        rod.remove();
+      };
+      list.appendChild(rod);
+    }
     /* the pet corner */
     const dog=document.createElement("button");
     dog.innerHTML="\u{1F436} Puppy <span style='color:var(--dim)'>$500 — follows you everywhere!</span>";
@@ -603,7 +617,8 @@ function nearMansion(){
   for(let i=mansions.length-1;i>=0;i--){
     const m=mansions[i];
     if(offScene(m.g)){mansions.splice(i,1);continue;}
-    if(Math.abs(player.x-m.x)<56&&Math.abs(player.z-m.z)<46)return m;
+    const r=m.plot?17:56,r2=m.plot?17:46;
+    if(Math.abs(player.x-m.x)<r&&Math.abs(player.z-m.z)<r2)return m;
   }
   return null;
 }
@@ -1713,6 +1728,14 @@ function jobRoadPoint(minD,maxD){
 function endJob(silent){
   JOB.type=null;jobBeacon.visible=false;
   if(jobPassenger){scene.remove(jobPassenger);disposeGroup(jobPassenger);jobPassenger=null;}
+  if(JOB.run){scene.remove(JOB.run.mesh);disposeGroup(JOB.run.mesh);JOB.run=null;}
+  if(JOB.oldMesh&&myVehicle){
+    /* the police cruiser turns back into your own car */
+    scene.remove(myVehicle.mesh);disposeGroup(myVehicle.mesh);
+    myVehicle.mesh=JOB.oldMesh;
+    scene.add(myVehicle.mesh);
+    JOB.oldMesh=null;
+  }
   navStop(true);
   if(!silent)toast("\u{1F4BC} Job ended. Total earned this shift: $"+fmtMoney(JOB.total));
 }
@@ -1743,6 +1766,15 @@ function startJob(type){
     JOB.acc=acc;
     jobTarget(acc.x,acc.z,"\u{1F69B} Drive to the accident");
     toast("\u{1F69B} TOW TRUCK JOB — get to the accident and stop next to the wrecks!");
+  }else if(type==="police"){
+    /* your car transforms into a real police cruiser for the shift */
+    JOB.oldMesh=myVehicle.mesh;
+    scene.remove(JOB.oldMesh);
+    myVehicle.mesh=buildEmergencyMesh("police");
+    scene.add(myVehicle.mesh);
+    jobBeacon.visible=true;
+    spawnRunaway();
+    toast("\u{1F46E}\u{1F694} POLICE SHIFT ON — your car is a cruiser now! Chase the getaway car and stay close to BUST it ($200 each)!");
   }
 }
 /* nearestSpot for jobs (the map sidebar has its own local copy) */
@@ -1761,6 +1793,7 @@ function updateJob(dt){
   if(!JOB.type)return;
   if(!player.drive||player.drive!==myVehicle){endJob();return;}
   jobBeacon.rotation.y+=dt*1.4;
+  if(JOB.type==="police"){updatePoliceJob(dt);return;}
   const d=Math.hypot(player.x-JOB.tx,player.z-JOB.tz);
   const stopped=Math.abs(myVehicle.speed)<1.5;
   const el=$("navDist");
@@ -1847,6 +1880,7 @@ $("jobsClose").onclick=()=>$("jobsModal").classList.remove("open");
 $("jobTaxi").onclick=()=>startJob("taxi");
 $("jobDeliver").onclick=()=>startJob("deliver");
 $("jobTow").onclick=()=>startJob("tow");
+$("jobPolice").onclick=()=>startJob("police");
 /* ---------- daily reward + streak (shares the real-world calendar) ---------- */
 function dailyReward(){
   let d=null;
@@ -1917,6 +1951,7 @@ function updatePet(dt){
 /* ================= PROPERTY: buy or rent apartments & mansions ================= */
 const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game day
 const PRENT={on:false};                           // ✈️ rented plane: $250 per game day
+const HRENT={on:false};                           // 🚁 rented helicopter: $500 per game day
 const APT_PRICE=100000,APT_RENT=100;             // $100K to buy, or $100 per game day
 /* ---- online claims: once a player owns a property, nobody else can buy it ---- */
 function fbKey(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,"_");}
@@ -2039,6 +2074,17 @@ function updateRent(){
       toast("\u{1F631} You couldn't pay the rent — you LOST "+rm.label+"!");
     }
   }
+  /* the rented helicopter costs $500 per day */
+  if(HRENT.on){
+    const hc=500*delta;
+    if(MONEY.v>=hc){MONEY.v-=hc;paid+=hc;}
+    else{
+      HRENT.on=false;HELI.active=false;
+      if(HELI.mesh&&!player.inHeli)HELI.mesh.visible=false;
+      saveGame();
+      toast("\u{1F6EC} You couldn't pay the helicopter rental — it flew back home!");
+    }
+  }
   /* the rented plane costs $250 per day */
   if(PRENT.on){
     const cost=250*delta;
@@ -2050,7 +2096,7 @@ function updateRent(){
   }
   /* owned apartments earn tenant money every day */
   let income=0;
-  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:"))income+=25*delta;
+  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:")&&!String(rm.id).startsWith("P:"))income+=25*delta;
   if(income>0){
     MONEY.v+=income;
     toast("\u{1F3E8} Your apartments earned $"+fmtMoney(income)+" from tenants!");
@@ -2073,6 +2119,11 @@ const FURN=[
   {t:"tv",n:"TV",e:"\u{1F4FA}",p:800,out:0},
   {t:"plant",n:"Plant",e:"\u{1FAB4}",p:60,out:0},
   {t:"rug",n:"Rug",e:"\u{1F7E5}",p:120,out:0},
+  {t:"wall",n:"Wall",e:"\u{1F9F1}",p:100,out:2},
+  {t:"window",n:"Window wall",e:"\u{1FA9F}",p:150,out:2},
+  {t:"doorw",n:"Door wall",e:"\u{1F6AA}",p:150,out:2},
+  {t:"roofp",n:"Roof panel",e:"\u{1F6D6}",p:150,out:2},
+  {t:"floorp",n:"Floor",e:"⬜",p:80,out:2},
   {t:"tramp",n:"Trampoline",e:"\u{1F938}",p:800,out:1},
   {t:"pool",n:"Pool",e:"\u{1F3CA}",p:1500,out:1},
   {t:"fountain",n:"Fountain",e:"⛲",p:1000,out:1},
@@ -2137,6 +2188,25 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
     rg.position.y=0.06;g.add(rg);
     const rg2=new THREE.Mesh(new THREE.CylinderGeometry(1,1,0.05,20),new THREE.MeshLambertMaterial({color:0xf4d35e}));
     rg2.position.y=0.07;g.add(rg2);
+  }else if(t==="wall"){
+    box(4,3,0.26,0,1.5,0,new THREE.MeshLambertMaterial({color:0xe8dcc8}));
+  }else if(t==="window"){
+    const wm2=new THREE.MeshLambertMaterial({color:0xe8dcc8});
+    box(4,1,0.26,0,0.5,0,wm2);
+    box(4,0.7,0.26,0,2.65,0,wm2);
+    box(0.7,1.65,0.26,-1.65,1.82,0,wm2);
+    box(0.7,1.65,0.26,1.65,1.82,0,wm2);
+    const gl2=new THREE.Mesh(new THREE.PlaneGeometry(2.6,1.6),glassMat);
+    gl2.position.set(0,1.82,0);g.add(gl2);
+  }else if(t==="doorw"){
+    const dm2=new THREE.MeshLambertMaterial({color:0xe8dcc8});
+    box(1.5,3,0.26,-1.25,1.5,0,dm2);
+    box(1.5,3,0.26,1.25,1.5,0,dm2);
+    box(1,0.6,0.26,0,2.7,0,dm2);
+  }else if(t==="roofp"){
+    box(4.4,0.22,4.4,0,3.1,0,new THREE.MeshLambertMaterial({color:0x8a3b2e}));
+  }else if(t==="floorp"){
+    box(4,0.16,4,0,0.08,0,new THREE.MeshLambertMaterial({color:0xcabfa6}));
   }else if(t==="tramp"){
     [[-0.8,-0.8],[0.8,-0.8],[-0.8,0.8],[0.8,0.8]].forEach(p=>box(0.09,0.7,0.09,p[0],0.35,p[1],darkTrim));
     const mat2=new THREE.Mesh(new THREE.CylinderGeometry(1.3,1.3,0.1,16),darkTrim);
@@ -2196,7 +2266,7 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
 }
 /* default furniture: a bed, three chairs and a table in the great hall */
 function mansionItems(id){
-  if(!MFURN.has(id))MFURN.set(id,[
+  if(!MFURN.has(id))MFURN.set(id,String(id).startsWith("P:")?[]:[
     {t:"bed",dx:-30,dz:-20,r:0},
     {t:"chair",dx:-33,dz:10,r:Math.PI},{t:"chair",dx:-30,dz:10,r:Math.PI},{t:"chair",dx:-27,dz:10,r:Math.PI},
     {t:"table",dx:-30,dz:6.6,r:0}
@@ -2209,11 +2279,11 @@ function buildMansionFurniture(man){
   const fg=new THREE.Group();man.g.add(fg);man.furnG=fg;
   for(const it of items){
     const wx=man.x+it.dx,wz=man.z+it.dz;
-    const inside=Math.abs(it.dx)<49&&Math.abs(it.dz)<37;
-    const fy=inside?man.baseY+0.3:terrainH(wx,wz)+0.12;
+    const inside=!man.plot&&Math.abs(it.dx)<49&&Math.abs(it.dz)<37;
+    const fy=man.plot?terrainH(wx,wz)+0.14:(inside?man.baseY+0.3:terrainH(wx,wz)+0.12);
     buildFurnPiece(it.t,wx,wz,fy,it.r||0,fg,man);
   }
-  if(rentedAt(man.id)){
+  if(rentedAt(man.id)&&!man.plot){
     /* YOUR mansion: your 3 fastest owned cars park on the driveway */
     VEHICLES.filter(v=>v.type==="car"&&OWN.has(v.name)).sort((a,b)=>b.top-a.top).slice(0,3)
       .forEach((v,i)=>{
@@ -2387,7 +2457,10 @@ addEventListener("mousedown",e=>{
   const pt=meditGroundPoint(e,man.baseY+0.3);
   if(!pt)return;
   const dx=pt.x-man.x,dz=pt.z-man.z;
-  if(Math.abs(dx)>49||Math.abs(dz)>49.5){toast("That's outside your mansion's block!");return;}
+  if(man.plot){
+    if(Math.abs(dx)>15||Math.abs(dz)>15){toast("\u{1F3D7} That's outside your plot — build inside the white fence!");return;}
+  }
+  else if(Math.abs(dx)>49||Math.abs(dz)>49.5){toast("That's outside your mansion's block!");return;}
   const items=mansionItems(man.id);
   if(MEDIT.tool==="remove"){
     let bi=-1,bd=3;
@@ -2402,9 +2475,11 @@ addEventListener("mousedown",e=>{
   }
   const def=furnDef(MEDIT.sel);
   if(!def){toast("Pick an item from the shop bar first!");return;}
-  const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
-  if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside the mansion!");return;}
-  if(def.out&&Math.abs(dz)<39){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn in FRONT of (or behind) the mansion!");return;}
+  if(!man.plot&&def.out!==2){
+    const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
+    if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside the mansion!");return;}
+    if(def.out===1&&Math.abs(dz)<39){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn in FRONT of (or behind) the mansion!");return;}
+  }
   if(MONEY.v<def.p){toast("\u{1F4B0} The "+def.n+" costs $"+fmtMoney(def.p)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
   MONEY.v-=def.p;updateMoneyUI();profileSave();
   items.push({t:def.t,dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot});
@@ -2877,23 +2952,10 @@ function myToken(){
   if(!t){t="t"+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("vc4ptoken",t);}
   return t;
 }
-/* passwords are stored as a SHA-256 hash — never as plain text */
-async function hashPass(p){
-  try{
-    const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("vc4:"+p));
-    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
-  }catch(e){
-    let h=5381;for(let i=0;i<p.length;i++)h=((h*33)^p.charCodeAt(i))>>>0;
-    return "x"+h.toString(16);
-  }
-}
-function savedPass(){return localStorage.getItem("vc4ppass")||"";}
-/* mode: "register" = create a new account, "login" = existing account,
-   "auto" = whichever fits (used by the settings name field) */
-async function claimName(raw,pass,mode){
+/* simple accounts: just pick a username — first come, first served */
+async function claimName(raw){
   const n=cleanServerName(raw||"").slice(0,16);
   if(n.length<3)return{ok:false,msg:"Use at least 3 letters or numbers."};
-  if(!pass||pass.length<3)return{ok:false,msg:"Type a password of at least 3 characters."};
   if(!SERVER_READY)return{ok:true,offline:true,name:n};
   const key=n.toLowerCase().replace(/[^a-z0-9]/g,"_");
   const url=SERVER_API+"/usernames/"+key+".json";
@@ -2901,53 +2963,33 @@ async function claimName(raw,pass,mode){
     const r=await fetch(url,{cache:"no-store"});
     if(!r.ok)throw 0;
     const d=await r.json();
-    const hp=await hashPass(pass);
-    if(d){
-      /* the account exists */
-      if(d.t===myToken()){
-        /* it's already this device's account — saving also updates the password */
-        await fetch(url,{method:"PUT",body:JSON.stringify({t:myToken(),name:d.name||n,created:d.created||new Date().toISOString().slice(0,10),p:hp})});
-        return{ok:true,name:n};
-      }
-      if(mode==="register")return{ok:false,msg:"\""+n+"\" already exists — use ▶ Log in with its password!"};
-      if(d.p){
-        if(d.p!==hp)return{ok:false,msg:"Wrong password for \""+n+"\"!"};
-        localStorage.setItem("vc4ptoken",d.t);   // correct password: this device becomes the account
-        return{ok:true,name:n};
-      }
-      return{ok:false,msg:"\""+n+"\" is an account from before passwords existed — open the game on its original device and set a password in ⚙ Settings first."};
-    }
-    /* the account doesn't exist yet */
-    if(mode==="login")return{ok:false,msg:"No account called \""+n+"\" — click \u{1F195} Register to create it!"};
+    if(d&&d.t===myToken())return{ok:true,name:n};          /* already mine */
+    if(d)return{ok:false,msg:"\""+n+"\" is already taken — try another!"};
     const w=await fetch(url,{method:"PUT",
-      body:JSON.stringify({t:myToken(),name:n,created:new Date().toISOString().slice(0,10),p:hp})});
+      body:JSON.stringify({t:myToken(),name:n,created:new Date().toISOString().slice(0,10)})});
     if(!w.ok)return{ok:false,msg:"\""+n+"\" is already taken — try another!"}; /* lost the race */
     return{ok:true,name:n};
   }catch(e){return{ok:true,offline:true,name:n};}          /* offline: allow for now */
 }
-async function doClaim(mode){
-  const b1=$("nameClaim"),b2=$("nameReg");
-  b1.disabled=b2.disabled=true;
-  $("nameStatus").textContent=mode==="register"?"⏳ Creating your account...":"⏳ Logging in...";
-  const res=await claimName($("nameInput").value,$("namePass").value,mode);
-  b1.disabled=b2.disabled=false;
+async function doClaim(){
+  const btn=$("nameClaim");
+  btn.disabled=true;
+  $("nameStatus").textContent="⏳ Checking if that name is free...";
+  const res=await claimName($("nameInput").value);
+  btn.disabled=false;
   if(!res.ok){$("nameStatus").textContent="❌ "+res.msg;return;}
   localStorage.setItem("vc4pname",res.name);
-  localStorage.setItem("vc4ppass",$("namePass").value);
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
-  $("pPass").value=$("namePass").value;
   $("nameModal").classList.remove("open");
   profileLoad();
   toast(res.offline
-    ?"\u{1F464} You are \""+res.name+"\" (offline — not saved online yet)"
-    :(mode==="register"?"\u{1F389}\u{1F464} Account \""+res.name+"\" created — remember your password!":"\u{1F511}\u{1F464} Welcome back, "+res.name+"!"));
+    ?"\u{1F464} You are \""+res.name+"\" (offline — not reserved online yet)"
+    :"\u{1F464} Username \""+res.name+"\" is yours!");
 }
-$("nameClaim").onclick=()=>doClaim("login");
-$("nameReg").onclick=()=>doClaim("register");
-$("namePass").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim("login");});
+$("nameClaim").onclick=doClaim;
+$("nameInput").addEventListener("keydown",e=>{if(e.key==="Enter")doClaim();});
 $("nameInput").addEventListener("input",()=>{$("nameStatus").textContent="";});
-$("namePass").addEventListener("input",()=>{$("nameStatus").textContent="";});
 $("nameSkip").onclick=()=>{
   localStorage.setItem("vc4nameok","1");
   $("nameModal").classList.remove("open");
@@ -3145,13 +3187,12 @@ function mpTick(dt){
   MP.lastSig=sig;MP.lastSendAt=now;
   try{MP.myRef.set(d);}catch(e){}
 }
-/* player-name field in settings: goes through the same login/register check */
+/* player-name field in settings: goes through the same taken-check */
 $("pName").value=mpName();
 $("pName").addEventListener("change",async()=>{
-  const res=await claimName($("pName").value,$("pPass").value||savedPass(),"auto");
+  const res=await claimName($("pName").value);
   if(!res.ok){toast("❌ "+res.msg);$("pName").value=mpName();return;}
   localStorage.setItem("vc4pname",res.name);
-  if($("pPass").value)localStorage.setItem("vc4ppass",$("pPass").value);
   localStorage.setItem("vc4nameok","1");
   $("pName").value=res.name;
   profileLoad();
@@ -3159,21 +3200,6 @@ $("pName").addEventListener("change",async()=>{
     ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"
     :"\u{1F464} Username \""+res.name+"\" is yours!");
 });
-/* password in settings: view it with the eye, change it with Save */
-$("pPass").value=savedPass();
-$("pPassEye").onclick=()=>{
-  const p=$("pPass");
-  p.type=p.type==="password"?"text":"password";
-  $("pPassEye").textContent=p.type==="password"?"\u{1F441}":"\u{1F648}";
-};
-$("pPassSave").onclick=async()=>{
-  const pass=$("pPass").value;
-  if(pass.length<3){toast("❌ Type a password of at least 3 characters first!");return;}
-  const res=await claimName(mpName(),pass,"auto");
-  if(!res.ok){toast("❌ "+res.msg);return;}
-  localStorage.setItem("vc4ppass",pass);
-  toast(res.offline?"\u{1F511} Password saved on this device (offline).":"\u{1F511} Password saved — use it to log in anywhere!");
-};
 /* ---------- your avatar: shirt, pants, hair & skin ---------- */
 const AVATAR={shirt:0x2563eb,pants:0x30395c,hair:0x4a2f1d,skin:0xf1c39a};
 try{
@@ -3343,7 +3369,7 @@ function saveGame(){
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
       world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
-      own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0
+      own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0,hrent:HRENT.on?1:0
     }));
   }catch(e){}
 }
@@ -3362,6 +3388,7 @@ function loadGame(){
     if(d.paint&&typeof d.paint==="object")for(const k in d.paint)if(typeof d.paint[k]==="number")PAINT[k]=d.paint[k];
     if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
     PRENT.on=d.prent===1;
+    HRENT.on=d.hrent===1;
   }catch(e){}
 }
 loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();profileLoad();
@@ -3432,6 +3459,13 @@ function tryCall(){
   }
   /* the delivery courier at your door: pay & pick up */
   if(player.onFoot&&tryPickupOrder())return;
+  /* 🎣 fishing: cast, reel & catch */
+  if(castOrReel())return;
+  /* 🏗 building plots for sale */
+  if(player.onFoot&&S.world==="earth"){
+    const pl=nearPlotSign();
+    if(pl){openPlotBuy(pl);return;}
+  }
   /* shops: walk inside and press T to buy food; buyers: sell dumplings */
   if(player.onFoot&&S.world==="earth"){
     const sh=nearShop();
@@ -4936,11 +4970,24 @@ function mapEntries(q){
       if(best)chooseDest("\u{1F30B} Volcano island — "+fmtDist(best.d)+" (mine LAVA dumplings!)",best.sp.x+140,best.sp.z,true);
       else toast("No volcanoes near here — look for the big red \u{1F30B} dots when you zoom out!");
     }],
-    ["☁️ Nearest SKY RESTAURANT",()=>{
+    ["☁️ Nearest SKY RESTAURANT (in the clouds!)",()=>{
       switchWorld("earth");
-      const best=nearestSpot(skyRestSpot,SRSP,2600,900,4);
-      if(best)chooseDest("☁️ Sky Restaurant — "+fmtDist(best.d)+" (fly there with your \u{1F681}!)",best.sp.x,best.sp.z,true);
-      else toast("No mountain peaks tall enough nearby!");
+      const best=nearestSpot(skyRestSpot,SRSP,2600,900,2);
+      if(!best)return;
+      showDest("☁️ Sky Restaurant — "+fmtDist(best.d)+", floating at 150 m",[
+        {label:"⚡ Teleport UP into the clouds",value:"tp"},
+        {label:"\u{1F9ED} Route — fly there with your \u{1F681} helicopter",value:"route"},
+        {label:"❌ Cancel",value:"cancel"}
+      ],v=>{
+        if(v==="cancel")return;
+        $("mapModal").classList.remove("open");
+        if(v==="tp"){
+          teleportTo(best.sp.x,best.sp.z);
+          player.y=CLOUD_Y+0.1;player.grounded=true;player.vy=0;
+          if(player.drive){player.drive.y=CLOUD_Y+0.1;player.drive.vy=0;player.drive.grounded=true;}
+          toast("☁️✨ WHOOSH — welcome ABOVE the clouds! Don't step off the edge...");
+        }else setRoute(best.sp.x,best.sp.z);
+      });
     }],
     ["\u{1F3DD} Nearest FERRY ISLAND",()=>{
       switchWorld("earth");
@@ -5398,6 +5445,10 @@ function updateHint(){
       else if(ORDER.active&&ORDER.stage==="waiting"&&Math.hypot(player.x-ORDER.x,player.z-ORDER.z)<6){txt="\u{1F6F5} Your "+ORDER.label+" — press T to pay $"+fmtMoney(ORDER.cost)+" & take it!";showT=true;}
       else if(nearTv()){txt="\u{1F4FA} The TV — press T to pick a channel (Minecraft, news, fireplace...)";showT=true;}
       else if(myRoomHere()){txt="\u{1F6F5} Your room — press T to ORDER FOOD to your door!";showT=true;}
+      else if(nearPlotSign()&&!rentedAt(nearPlotSign().id)){txt="\u{1F3D7} Empty plot FOR SALE — press T to buy it ($50K) and BUILD YOUR OWN HOUSE!";showT=true;}
+      else if(ROD.owned&&FISHING.state==="bite"){txt="❗\u{1F3A3} BITE!! PRESS T NOW!!";showT=true;}
+      else if(ROD.owned&&FISHING.state==="wait"){txt="\u{1F3A3} Line's in the water... wait for the ❗";}
+      else if(ROD.owned&&FISHING.state==="idle"&&atWaterEdge()){txt="\u{1F3A3} Water ahead — press T to cast your line!";showT=true;}
       else if(pn&&pn.hat&&(pn.hatMoney||0)>0&&Math.hypot(player.x-pn.hat.x,player.z-pn.hat.z)<2.4){txt="\u{1F3A9} The hat is full — press T to collect $"+pn.hatMoney+"!";showT=true;}
       else if(pn){txt=pn.crowded?"\u{1F3B9} Your concert is ON — press T at the piano, then \u{1F51A} End the concert":"\u{1F3B9} Piano — press T to play it (keyboard & MIDI!)";showT=true;}
       else if(bd){
@@ -5674,8 +5725,16 @@ function openBeachShop(isl){
     {label:"\u{1F41A} Beach dumpling — $35 (20 different ones to collect!)",value:"beach"},
     {label:"\u{1FAA9} PEARL dumpling — $35 (island exclusive!)",value:"pearl"},
     {label:"\u{1F965} Coconut drink — $15 (goes in your \u{1F392} backpack)",value:"coco"},
+    {label:"\u{1F4D6} My fish log",value:"log"},
     {label:"❌ Just enjoying the beach",value:"cancel"}
   ],v=>{
+    if(v==="log"){
+      const log=fishLog();
+      const opts=FISH_TABLE.map(f=>({label:(log[f[0]]?"✅ ":"\u{1F512} ")+f[0]+" — caught "+(log[f[0]]||0)+"x ($"+f[1]+")",value:"x"}));
+      opts.push({label:"✅ Close",value:"x"});
+      showDest("\u{1F4D6} Your fish log",opts,()=>{});
+      return;
+    }
     if(v==="myst"){
       if(mystUsed){toast("\u{1F381} You already got today's free mystery dumpling here — visit another island or come back tomorrow!");return;}
       try{localStorage.setItem(mystKey,"1");}catch(e){}
@@ -5709,6 +5768,157 @@ function digTreasureX(isl){
     toast("⛏️\u{1F4B0} You dug up $150 — AND a buried PEARL dumpling!!");
   }else toast("⛏️\u{1F4B0} You dug at the X and found $150! Come back tomorrow.");
 }
+/* ================= BUILDING PLOTS: buy land, build your dream house ================= */
+const PLOT_PRICE=50000;
+function nearPlotSign(){
+  for(let i=plots.length-1;i>=0;i--){
+    const p=plots[i];
+    if(offScene(p.g)){plots.splice(i,1);continue;}
+    if(Math.hypot(player.x-p.sign.x,player.z-p.sign.z)<6)return p;
+  }
+  return null;
+}
+function openPlotBuy(p){
+  if(rentedAt(p.id)){toast("\u{1F3D7} This plot is already YOURS — step inside the fence and press T to BUILD!");return;}
+  showDest("\u{1F3D7} Empty building plot — build your OWN house here!",[
+    {label:"\u{1F4B0} BUY THE PLOT — $"+fmtMoney(PLOT_PRICE)+" (walls, windows, doors, roofs & all furniture!)",value:"buy"},
+    {label:"❌ Not now",value:"cancel"}
+  ],async v=>{
+    if(v!=="buy")return;
+    const claim=await checkClaim(p.id);
+    if(claim.res==="taken"){toast("\u{1F512} This plot is already owned by "+claim.name+"!");return;}
+    if(claim.res!=="mine"){
+      if(MONEY.v<PLOT_PRICE){toast("\u{1F4B0} The plot costs $"+fmtMoney(PLOT_PRICE)+" — you have $"+fmtMoney(MONEY.v)+"!");return;}
+      if(!await writeClaim(p.id)){toast("\u{1F512} Another player claimed it just before you!");return;}
+      MONEY.v-=PLOT_PRICE;updateMoneyUI();profileSave(true);
+    }
+    RENT.list.push({id:p.id,x:p.x,z:p.z,ry:terrainH(p.x,p.z),mode:"own",rate:0,
+      label:"\u{1F3D7} Building plot at ("+Math.round(p.x)+", "+Math.round(p.z)+")"});
+    saveGame();
+    if(p.sgMesh)p.sgMesh.visible=false;
+    toast("\u{1F389}\u{1F3D7} THE LAND IS YOURS! Step inside the fence, press T, and build with \u{1F9F1} walls, \u{1FA9F} windows, \u{1F6AA} doors & \u{1F6D6} roofs!");
+  });
+}
+/* ================= 🎣 FISHING ================= */
+const ROD={owned:localStorage.getItem("vc4rod")==="1"};
+const FISHING={state:"idle",t:0};
+const FISH_TABLE=[
+  ["\u{1F41F} Sardine",8,28],["\u{1F41F} Mackerel",15,24],["\u{1F420} Tropical fish",25,18],
+  ["\u{1F363} Salmon",35,12],["\u{1F421} Puffer fish",50,8],["\u{1F5E1} Swordfish",120,5],
+  ["\u{1F462} Old boot",1,3],["\u{1F31F} GOLDEN FISH",500,2]
+];
+function fishLog(){try{return JSON.parse(localStorage.getItem("vc4fishlog")||"{}");}catch(e){return{}}}
+function atWaterEdge(){
+  if(!player.onFoot||S.world!=="earth"||CAVE.in)return false;
+  if(player.y>6)return false;
+  for(let d2=5;d2<=14;d2+=4.5){
+    const fx=player.x+Math.sin(player.yaw)*d2,fz=player.z+Math.cos(player.yaw)*d2;
+    if(baseH(fx,fz)<-1.05)return true;   // real water ahead (below the waves)
+  }
+  return false;
+}
+function castOrReel(){
+  if(!ROD.owned)return false;
+  if(FISHING.state==="bite"){
+    /* CATCH! pick a weighted random fish */
+    let roll=Math.random()*100,fish=FISH_TABLE[0];
+    for(const f of FISH_TABLE){roll-=f[2];if(roll<=0){fish=f;break;}}
+    const log=fishLog();
+    log[fish[0]]=(log[fish[0]]||0)+1;
+    try{localStorage.setItem("vc4fishlog",JSON.stringify(log));}catch(e){}
+    addMoney(fish[1]);
+    FISHING.state="idle";
+    toast((fish[0].includes("GOLDEN")?"\u{1F31F}\u{1F929} INCREDIBLE!!! ":"\u{1F3A3} Caught: ")+fish[0]+" — sold for $"+fish[1]+"! (total caught: "+Object.values(log).reduce((a,b)=>a+b,0)+")");
+    return true;
+  }
+  if(FISHING.state==="wait"){
+    FISHING.state="idle";
+    toast("\u{1F3A3} Reeled in — nothing on the hook yet. Patience!");
+    return true;
+  }
+  if(atWaterEdge()){
+    FISHING.state="wait";
+    FISHING.t=2.5+Math.random()*5;
+    toast("\u{1F3A3} SPLASH! Line's in the water... wait for the ❗ then press T FAST!");
+    return true;
+  }
+  return false;
+}
+function updateFishing(dt){
+  if(FISHING.state==="wait"){
+    FISHING.t-=dt;
+    if(!player.onFoot){FISHING.state="idle";return;}
+    if(FISHING.t<=0){
+      FISHING.state="bite";FISHING.t=1.6;
+      toast("❗\u{1F3A3} BITE!! PRESS T NOW!!");
+    }
+  }else if(FISHING.state==="bite"){
+    FISHING.t-=dt;
+    if(FISHING.t<=0){
+      FISHING.state="idle";
+      toast("\u{1F4A8} It got away... cast again!");
+    }
+  }
+}
+/* ================= 👮 POLICE CAREER: chase runaways, earn per arrest ================= */
+function spawnRunaway(){
+  const axis=Math.random()<0.5?"z":"x";
+  const p0=axis==="z"?player.x:player.z;
+  const line=Math.round((p0-30)/120)*120+30+(Math.floor(Math.random()*3)-1)*120;
+  const mesh=buildVehicleMesh("car",0x14161a);
+  scene.add(mesh);
+  JOB.run={mesh,axis,line,t:(axis==="z"?player.z:player.x)+(Math.random()<0.5?-1:1)*(280+Math.random()*220),dir:Math.random()<0.5?1:-1,sp:26,bustT:0};
+  toast("\u{1F4E1} RADIO: a black getaway car is speeding near ("+Math.round(axis==="z"?line:JOB.run.t)+", "+Math.round(axis==="z"?JOB.run.t:line)+") — GO GET 'EM!");
+}
+function runawayPos(r){
+  const off=3.5,c=r.axis==="z"?(r.dir>0?r.line-off:r.line+off):(r.dir>0?r.line+off:r.line-off);
+  return r.axis==="z"?{x:c,z:r.t}:{x:r.t,z:c};
+}
+function updatePoliceJob(dt){
+  const r=JOB.run;
+  if(!r)return;
+  /* the runaway races the grid & turns randomly at crossings */
+  const prev=r.t;
+  r.t+=r.sp*dt*r.dir;
+  const li0=Math.floor((prev-30)/120),li1=Math.floor((r.t-30)/120);
+  if(li0!==li1&&Math.random()<0.4){
+    const cl=(r.dir>0?li1:li0)*120+30;
+    const old=r.line;
+    r.axis=r.axis==="z"?"x":"z";
+    r.t=old;r.line=cl;r.dir=Math.random()<0.5?1:-1;
+  }
+  const p=runawayPos(r);
+  const y=terrainH(p.x,p.z);
+  const yaw=r.axis==="z"?(r.dir>0?0:Math.PI):(r.dir>0?Math.PI/2:-Math.PI/2);
+  r.mesh.position.set(p.x,y,p.z);
+  r.mesh.rotation.set(0,yaw,0);
+  for(const w of r.mesh.userData.wheels)w.spin.rotation.x+=r.sp/w.r*dt;
+  /* your beacon & route follow the runaway */
+  JOB.tx=p.x;JOB.tz=p.z;
+  jobBeacon.position.set(p.x,y,p.z);
+  const d=Math.hypot(player.x-p.x,player.z-p.z);
+  $("navDist").style.display="flex";
+  $("navTxt").textContent="\u{1F46E} CHASE the getaway car! "+(d<1000?Math.round(d)+" m":(d/1000).toFixed(1)+" km")+" · arrests: "+JOB.count+" · $"+fmtMoney(JOB.total);
+  if(d>900){r.t=(r.axis==="z"?player.z:player.x)+(Math.random()<0.5?-1:1)*350;}   // never lose them completely
+  /* stay close to bust them */
+  if(d<9&&player.drive){
+    r.bustT+=dt;
+    if(r.bustT>=2.5){
+      const cm=coopMult();
+      addMoney(200*cm);JOB.total+=200*cm;JOB.count++;
+      toast("\u{1F46E}\u{1F694} BUSTED! +$"+(200*cm)+(cm>1?" \u{1F91D} CO-OP x2":"")+" — arrests this shift: "+JOB.count+". Next call incoming...");
+      scene.remove(r.mesh);disposeGroup(r.mesh);
+      JOB.run=null;
+      spawnRunaway();
+    }
+  }else r.bustT=Math.max(0,r.bustT-dt);
+  /* flashing lights on YOUR police car */
+  if(myVehicle&&myVehicle.mesh.userData.lights){
+    const on=Math.floor(performance.now()/140)%2===0;
+    myVehicle.mesh.userData.lights[0].visible=on;
+    myVehicle.mesh.userData.lights[1].visible=!on;
+  }
+}
 /* ================= THE HELICOPTER: $500K, fly anywhere, land anywhere ================= */
 const HELI_PRICE=500000;
 const HELI={active:false,x:0,z:0,y:0,yaw:0,hs:0,mesh:null};
@@ -5725,16 +5935,40 @@ function summonHeli(){
 $("bHeli").onclick=()=>{
   if(S.mode!=="game"){toast("Start driving first!");return;}
   if(OWN.has("Helicopter")){summonHeli();return;}
+  if(HRENT.on){
+    showDest("\u{1F681} Your RENTED helicopter ($500/day)",[
+      {label:"\u{1F681} Summon it here!",value:"go"},
+      {label:"\u{1F6EC} Return the rental (stop paying $500/day)",value:"stop"},
+      {label:"❌ Cancel",value:"cancel"}
+    ],v=>{
+      if(v==="go")summonHeli();
+      else if(v==="stop"){
+        HRENT.on=false;HELI.active=false;
+        if(HELI.mesh)HELI.mesh.visible=false;
+        saveGame();
+        toast("\u{1F6EC} Helicopter rental returned — no more daily costs!");
+      }
+    });
+    return;
+  }
   showDest("\u{1F681} Your own HELICOPTER?",[
-    {label:"\u{1F4B0} BUY — $"+fmtMoney(HELI_PRICE)+" · fly ANYWHERE, land ANYWHERE (even ☁️ Sky Restaurants!)",value:"buy"},
+    {label:"\u{1F4B0} BUY — $"+fmtMoney(HELI_PRICE)+" · yours FOREVER, fly & land anywhere!",value:"buy"},
+    {label:"\u{1F511} RENT a real helicopter — $500 per day",value:"rent"},
     {label:"❌ Not yet",value:"cancel"}
   ],v=>{
-    if(v!=="buy")return;
-    if(MONEY.v<HELI_PRICE){toast("\u{1F4B0} It costs $"+fmtMoney(HELI_PRICE)+" — you have $"+fmtMoney(MONEY.v)+". Keep earning!");return;}
-    MONEY.v-=HELI_PRICE;OWN.add("Helicopter");
-    updateMoneyUI();profileSave(true);saveGame();
-    summonHeli();
-    toast("\u{1F389}\u{1F681} SOLD! The helicopter is YOURS — press F to board!");
+    if(v==="buy"){
+      if(MONEY.v<HELI_PRICE){toast("\u{1F4B0} It costs $"+fmtMoney(HELI_PRICE)+" — you have $"+fmtMoney(MONEY.v)+". Keep earning (or RENT one)!");return;}
+      MONEY.v-=HELI_PRICE;OWN.add("Helicopter");
+      updateMoneyUI();profileSave(true);saveGame();
+      summonHeli();
+      toast("\u{1F389}\u{1F681} SOLD! The helicopter is YOURS — press F to board!");
+    }else if(v==="rent"){
+      if(MONEY.v<500){toast("\u{1F4B0} Renting costs $500 (per day) — you have $"+fmtMoney(MONEY.v)+"!");return;}
+      MONEY.v-=500;updateMoneyUI();
+      HRENT.on=true;saveGame();
+      summonHeli();
+      toast("\u{1F681}\u{1F511} HELICOPTER RENTED — a REAL one, landing next to you now! $500 is charged every day. Press F to board!");
+    }
   });
 };
 function updateHeli(dt){
@@ -5934,7 +6168,7 @@ function nearSkyRest(){
   for(let i=skyRests.length-1;i>=0;i--){
     const s=skyRests[i];
     if(offScene(s.g)){skyRests.splice(i,1);continue;}
-    if(Math.hypot(player.x-s.x,player.z-s.z)<14)return s;
+    if(Math.abs(player.y-s.y)<8&&Math.hypot(player.x-s.x,player.z-s.z)<14)return s;
   }
   return null;
 }
@@ -6979,7 +7213,27 @@ const UPDATE_PAGES=[
 <h4>✨ REALISM PACK</h4><ul>
 <li><b>Reflective car paint</b>: metallic bodywork and glass now mirror the sky around them.</li>
 <li><b>License plates fixed</b> — they sit ON the bumpers now instead of hiding inside them (your custom plate too!).</li>
-<li>The sun got a real <b>glare halo</b>, every vehicle casts a soft <b>contact shadow</b>, and roads got a detailed surface with wheel-wear tracks and cracks.</li></ul>`}
+<li>The sun got a real <b>glare halo</b>, every vehicle casts a soft <b>contact shadow</b>, and roads got a detailed surface with wheel-wear tracks and cracks.</li></ul>`},
+{t:"Round 26 — Clouds, fishing, build-your-house & police career",h:`
+<h4>☁️ SKY RESTAURANTS FLOAT ON CLOUDS NOW</h4><ul>
+<li>They're no longer stuck on rare mountain peaks — every ~5 km a restaurant floats on a <b>fluffy cloud at 150 m</b>, so there's ALWAYS one near you.</li>
+<li>The map button lets you <b>⚡ teleport straight up into the clouds</b> — or set a route and fly there with your \u{1F681}. Just don't step off the edge!</li></ul>
+<h4>\u{1F3A3} FISHING</h4><ul>
+<li>Buy a <b>fishing rod ($200)</b> at any MEGA MART. Stand at the water's edge, press T to cast, wait for the ❗ and press T FAST!</li>
+<li>8 catches from Sardine to Swordfish, a soggy \u{1F462} old boot... and the legendary <b>\u{1F31F} GOLDEN FISH worth $500</b>.</li>
+<li>Check your \u{1F4D6} fish log at any island beach shop.</li></ul>
+<h4>\u{1F3D7} BUILD YOUR OWN HOUSE</h4><ul>
+<li>Empty fenced plots FOR SALE every ~1.6 km — <b>$50,000</b> and the land is yours!</li>
+<li>Press T inside your fence: the editor now sells \u{1F9F1} <b>walls, \u{1FA9F} window walls, \u{1F6AA} door walls, \u{1F6D6} roof panels and floors</b> — design any house you like, plus all the normal furniture!</li>
+<li>Your build is saved online — friends can visit it, exactly how you made it.</li></ul>
+<h4>\u{1F46E} POLICE CAREER</h4><ul>
+<li>New job: <b>POLICE OFFICER</b> — your car transforms into a real cruiser with flashing lights!</li>
+<li>Radio callouts send you after black getaway cars racing through the city — stay close to <b>BUST</b> them: $200 per arrest (co-op x2!).</li></ul>
+<h4>\u{1F681} RENT A HELICOPTER — $500/DAY</h4><ul>
+<li>The \u{1F681} Heli button now offers a REAL rental helicopter for $500 a day if $500K is too steep — summon it and fly, just like an owned one.</li></ul>
+<h4>\u{1F3DC} PRETTIER WORLD & SIMPLER LOGIN</h4><ul>
+<li>The desert got wind-rippled sand, golden dry grass and red rocks; grasslands got natural light-and-dark patches.</li>
+<li>Passwords are GONE — just pick a username and play!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -7058,7 +7312,7 @@ function frame(now){
     });
   }
   updateRocket(dt);updateUfos(dt);
-  updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);
+  updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);updateFishing(dt);
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);

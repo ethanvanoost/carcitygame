@@ -1791,18 +1791,26 @@ function buildVolcano(s,g){
   sp2.position.set(s.x,sy+1.2,s.z+118);g.add(sp2);
   volcs.push({g,x:s.x,z:s.z,y,glow,pts,seeds,light,announced:false});
 }
-/* ---------- SKY RESTAURANTS: only reachable by helicopter (or rocket!) ---------- */
+/* ---------- SKY RESTAURANTS: floating on CLOUDS, 150 m up in the sky ---------- */
 const skyRests=[];
-const SRSP=5200;
+const SRSP=5200,CLOUD_Y=150;
 function skyRestSpot(i,j){
-  const x=i*SRSP+2600,z=j*SRSP+900;
-  if(baseH(x,z)<58)return null;   // only on proper mountain peaks
-  if(onAnyRoad(x,z))return null;
-  if(rocketPadDist(x,z)<90)return null;
-  return{x,z};
+  /* they float on clouds now, so there's ALWAYS one every ~5 km */
+  return{x:i*SRSP+2600,z:j*SRSP+900};
 }
 function buildSkyRest(s,g){
-  const y=terrainH(s.x,s.z);
+  const y=CLOUD_Y-1;
+  /* the fluffy cloud that carries the whole restaurant */
+  const cm=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.92});
+  const core=new THREE.Mesh(new THREE.SphereGeometry(9,9,8),cm);
+  core.scale.y=0.5;core.position.set(s.x,y-3.4,s.z);g.add(core);
+  for(let i=0;i<6;i++){
+    const a=i/6*Math.PI*2;
+    const p=new THREE.Mesh(new THREE.SphereGeometry(4.5+(i%3)*2,8,7),cm);
+    p.scale.y=0.55;
+    p.position.set(s.x+Math.cos(a)*8,y-3.8,s.z+Math.sin(a)*8);
+    g.add(p);
+  }
   const disc=shadowBox(new THREE.Mesh(new THREE.CylinderGeometry(13,14,1,22),new THREE.MeshLambertMaterial({color:0x9aa0a8})));
   disc.position.set(s.x,y+0.5,s.z);g.add(disc);
   decks.push({g,x:s.x,z:s.z,hw:12.5,hd:12.5,tops:[y+1],ramp:null});
@@ -1833,7 +1841,71 @@ function buildSkyRest(s,g){
   c.fillText("☁️ SKY RESTAURANT",256,62);
   const sg=new THREE.Mesh(new THREE.PlaneGeometry(11,2.2),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
   sg.position.set(s.x-6,y+6.4,s.z-5);g.add(sg);
-  skyRests.push({g,x:s.x,z:s.z,y:y+1});
+  skyRests.push({g,x:s.x,z:s.z,y:CLOUD_Y});
+}
+/* ---------- BUILDING PLOTS: buy an empty plot & build your own house! ---------- */
+const plots=[];
+const PLSP=1600;
+function plotSpot(i,j){
+  const x=Math.round((i*PLSP+430-90)/120)*120+90;
+  const z=Math.round((j*PLSP+1150-90)/120)*120+90;
+  if(Math.abs(x)<320&&Math.abs(z)<320)return null;
+  if(inAirport(x,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox,oz]of[[-14,-14],[14,-14],[-14,14],[14,14]]){
+    const ch=baseH(x+ox,z+oz);
+    if(ch<-1||Math.abs(ch-h)>2.5)return null;
+  }
+  if(nearestRail(x,z).d<25)return null;
+  if(Math.abs(x-curveXC(x,z))<25||Math.abs(z-curveZC(x,z))<25)return null;
+  if(rocketPadDist(x,z)<70)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<75&&Math.abs(hs.z-z)<60)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<75&&Math.abs(ms.z-z)<60)return null;
+  const mu=museumSpot(Math.round((x-520)/DMUS),Math.round((z-260)/DMUS));
+  if(mu&&Math.abs(mu.x-x)<36&&Math.abs(mu.z-z)<32)return null;
+  const ch2=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
+  if(ch2&&Math.abs(ch2.x-x)<45&&Math.abs(ch2.z-z)<40)return null;
+  return{x,z};
+}
+let _plotSign=null;
+function plotSignMat(){
+  if(_plotSign)return _plotSign;
+  const cv=document.createElement("canvas");cv.width=256;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#0f7a3d";c.fillRect(0,0,256,96);
+  c.fillStyle="#fff";c.font="bold 30px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3D7} FOR SALE",128,40);
+  c.font="bold 24px Segoe UI";c.fillText("$50K · press T",128,76);
+  _plotSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _plotSign;
+}
+function buildPlot(s,g){
+  const y=terrainH(s.x,s.z);
+  /* a tidy lawn with a little white fence */
+  const lg=new THREE.PlaneGeometry(30,30,6,6);lg.rotateX(-Math.PI/2);
+  const lp=lg.attributes.position;
+  for(let i=0;i<lp.count;i++){
+    const wx=s.x+lp.getX(i),wz=s.z+lp.getZ(i);
+    lp.setXYZ(i,wx,terrainH(wx,wz)+0.13,wz);
+  }
+  lg.computeVertexNormals();
+  const lawn=new THREE.Mesh(lg,new THREE.MeshLambertMaterial({color:0x63a852}));
+  lawn.receiveShadow=true;g.add(lawn);
+  const fm=new THREE.MeshLambertMaterial({color:0xf4f7fb});
+  for(let k=-15;k<=15;k+=5)for(const[fx,fz]of[[k,-15],[k,15],[-15,k],[15,k]]){
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.16,1,0.16),fm);
+    p.position.set(s.x+fx,terrainH(s.x+fx,s.z+fz)+0.5,s.z+fz);g.add(p);
+  }
+  const sp2=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,2.6),poleMat);
+  sp2.position.set(s.x,y+1.3,s.z+16.5);g.add(sp2);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(4,1.5),plotSignMat());
+  sg.position.set(s.x,y+3,s.z+16.5);g.add(sg);
+  const man={g,x:s.x,z:s.z,id:"P:"+Math.round(s.x)+","+Math.round(s.z),baseY:y,tableG:null,furnG:null,plot:true};
+  mansions.push(man);
+  plots.push({g,x:s.x,z:s.z,id:man.id,sign:{x:s.x,z:s.z+16.5},sgMesh:sg});
+  if(window.onMansionBuilt)onMansionBuilt(man);
 }
 function hitBuilding(x,z,speed){
   if(S.world!=="earth")return false;   // no invisible Earth buildings on the Moon
@@ -1928,12 +2000,37 @@ const groundTex=(function(){
   return keep(t);
 })();
 const groundMat=keep(new THREE.MeshLambertMaterial({map:groundTex,vertexColors:true}));
+/* DESERT ground: wind-blown sand ripples instead of grass strokes */
+const sandTex=(function(){
+  const cv=document.createElement("canvas");cv.width=cv.height=128;
+  const c=cv.getContext("2d");
+  c.fillStyle="#f5efe2";c.fillRect(0,0,128,128);
+  for(let i=0;i<500;i++){
+    const v=225+Math.floor(Math.random()*30);
+    c.fillStyle="rgb("+v+","+(v-6)+","+(v-18)+")";
+    c.fillRect(Math.random()*128,Math.random()*128,1.5,1.5);
+  }
+  /* soft ripple waves */
+  c.strokeStyle="rgba(160,140,100,0.35)";c.lineWidth=1.6;
+  for(let y=4;y<128;y+=9){
+    c.beginPath();
+    for(let x=0;x<=128;x+=8)c.lineTo(x,y+Math.sin(x/17+y)*2.4);
+    c.stroke();
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return keep(t);
+})();
+const sandMat=keep(new THREE.MeshLambertMaterial({map:sandTex,vertexColors:true}));
+const dryTuftMat=keep(new THREE.MeshLambertMaterial({color:0xbfa964}));
+const desertRockMat=keep(new THREE.MeshLambertMaterial({color:0xc09a6a}));
 /* tufts of real 3D grass, scattered as one InstancedMesh per chunk */
 const tuftGeo=new THREE.ConeGeometry(0.06,0.55,3);tuftGeo.translate(0,0.26,0);KEEP.add(tuftGeo);
 const tuftMat=keep(new THREE.MeshLambertMaterial({color:0x4e8f3a}));
-function addGrassTufts(g,ox,oz,r,dense){
+function addGrassTufts(g,ox,oz,r,dense,mat){
   const n=dense;
-  const im=new THREE.InstancedMesh(tuftGeo,tuftMat,n);
+  const im=new THREE.InstancedMesh(tuftGeo,mat||tuftMat,n);
   const M=new THREE.Matrix4(),Q=new THREE.Quaternion(),V=new THREE.Vector3(),SC=new THREE.Vector3();
   let placed=0;
   for(let i=0;i<n*2&&placed<n;i++){
@@ -1967,6 +2064,8 @@ function keepClear(x,z){
   if(chh&&Math.abs(x-chh.x)<26&&Math.abs(z-chh.z)<22)return true;
   const isl=nearIsland(x,z);
   if(isl&&Math.hypot(x-isl.x,z-isl.z)<100)return true;   // islands get their own decor
+  const pl2=plotSpot(Math.round((x-430)/PLSP),Math.round((z-1150)/PLSP));
+  if(pl2&&Math.abs(x-pl2.x)<19&&Math.abs(z-pl2.z)<19)return true;   // building plots stay empty
   const vc2=nearVolcano(x,z);
   if(vc2&&Math.hypot(x-vc2.x,z-vc2.z)<140)return true;   // volcanoes too
   return false;
@@ -2141,17 +2240,20 @@ function buildChunk(cx,cz){
     if(h>20)c.lerp(cRock,Math.min(1,(h-20)/34));
     if(h>85)c.lerp(cSnow,Math.min(1,(h-85)/40));
     if(h<-1)c.lerp(new THREE.Color(0x8a7f5e),Math.min(1,-h/5));   // sandy sea floor
+    /* natural patchiness: light & dark blotches make the ground look alive */
+    c.multiplyScalar(0.9+vnoise(x/47+13.1,z/47+7.7)*0.2);
     cols.push(c.r,c.g,c.b);
   }
   geo.setAttribute("color",new THREE.Float32BufferAttribute(cols,3));
   /* tile the grass detail texture ~28x across the chunk (uv 0..1 → 0..28) */
   {const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*28,uv.getY(i)*28);}
   geo.computeVertexNormals();
-  const tm=new THREE.Mesh(geo,groundMat);
+  const tm=new THREE.Mesh(geo,biome==="desert"?sandMat:groundMat);
   tm.position.set(ox,0,oz);tm.receiveShadow=true;g.add(tm);
   const r=rng(cx*7349+cz*911+13);
-  /* 3D grass tufts (not in the desert, lighter in the city) */
-  if(biome!=="desert")addGrassTufts(g,ox,oz,r,biome==="forest"?120:80);
+  /* 3D grass tufts — even the desert gets dry golden ones */
+  if(biome==="desert")addGrassTufts(g,ox,oz,r,40,dryTuftMat);
+  else addGrassTufts(g,ox,oz,r,biome==="forest"?120:80);
   /* --- tunnels: where a road was cut through a mountain, cover it with a tube.
      Samples sit on an ABSOLUTE 12 m grid so tube pieces from neighbouring
      chunks meet exactly end-to-end (no overlapping walls = no flickering),
@@ -2438,13 +2540,21 @@ function buildChunk(cx,cz){
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildVolcano(sp,g);
   }
-  /* SKY RESTAURANTS on the mountain peaks */
+  /* SKY RESTAURANTS floating on their clouds */
   for(let i=Math.floor((x0-2700)/SRSP);i<=Math.ceil((x1-2500)/SRSP);i++)
   for(let j=Math.floor((z0-1000)/SRSP);j<=Math.ceil((z1-800)/SRSP);j++){
     const sp=skyRestSpot(i,j);
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildSkyRest(sp,g);
+  }
+  /* BUILDING PLOTS for sale every ~1.6 km */
+  for(let i=Math.floor((x0-500)/PLSP);i<=Math.ceil((x1-360)/PLSP);i++)
+  for(let j=Math.floor((z0-1220)/PLSP);j<=Math.ceil((z1-1080)/PLSP);j++){
+    const sp=plotSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildPlot(sp,g);
   }
   /* FERRY ISLANDS: decor is built by the chunk that holds the island's center */
   for(let i=Math.floor((x0-1000)/ISP);i<=Math.ceil((x1-800)/ISP);i++)
@@ -2485,8 +2595,16 @@ function buildChunk(cx,cz){
     if(keepClear(x,z))continue;
     const h=rawH(x,z);if(h>55)continue;
     if(biome==="desert"){
-      if(r()<0.6)makeCactus(x,z,0.8+r()*0.8,g,h);
-      else makeBush(x,z,0.6+r()*0.5,g,h);
+      const dr=r();
+      if(dr<0.45)makeCactus(x,z,0.8+r()*0.8,g,h);
+      else if(dr<0.7)makeBush(x,z,0.6+r()*0.5,g,h);
+      else{
+        /* red desert rocks give the dunes some drama */
+        const rk=shadowBox(new THREE.Mesh(new THREE.DodecahedronGeometry(0.5+r()*1.6,0),desertRockMat));
+        rk.position.set(x,h+0.35,z);
+        rk.rotation.set(r()*3,r()*3,r()*3);
+        g.add(rk);
+      }
     }else{
       if(r()<0.25)makeBush(x,z,0.7+r()*0.9,g,h);
       else makeTree(x,z,r()<0.15?2.4+r()*1.3:0.8+r()*0.9,g,h);

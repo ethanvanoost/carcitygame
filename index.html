@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="style.css?v=43">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -322,6 +322,7 @@
     <button class="btn" id="jobTaxi" style="width:100%;margin-top:6px;text-align:left">&#128662; TAXI DRIVER &mdash; pick up passengers, earn per ride</button>
     <button class="btn" id="jobDeliver" style="width:100%;margin-top:8px;text-align:left">&#127839; FOOD DELIVERY &mdash; 3 meals in 5 minutes, $40 each + bonus</button>
     <button class="btn" id="jobTow" style="width:100%;margin-top:8px;text-align:left">&#128667; TOW TRUCK &mdash; clear accidents, $150 per wreck</button>
+    <button class="btn" id="jobPolice" style="width:100%;margin-top:8px;text-align:left">&#128110; POLICE OFFICER &mdash; chase getaway cars, $200 per arrest</button>
     <button class="btn close" id="jobsClose">Close</button>
   </div>
 </div>
@@ -370,13 +371,11 @@
 
 <div class="modal" id="nameModal">
   <div class="box">
-    <h2>&#128100; Log in or register</h2>
-    <div style="font-size:13px;color:var(--dim);margin-bottom:10px">Your account = username + password. It stores your money, cars and houses online, so you can log in on any device. Every username is unique!</div>
-    <input id="nameInput" maxlength="16" placeholder="username (3-16 letters or numbers)" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 12px;font-size:15px">
-    <input id="namePass" type="password" maxlength="32" placeholder="password (3+ characters)" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 12px;font-size:15px;margin-top:8px">
+    <h2>&#128100; Choose your username</h2>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:10px">This is the name other players see. It stores your money, cars and houses. Every username is unique &mdash; first come, first served!</div>
+    <input id="nameInput" maxlength="16" placeholder="3-16 letters or numbers" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:10px 12px;font-size:15px">
     <div id="nameStatus" style="font-size:13px;min-height:20px;margin-top:8px;color:var(--acc2)"></div>
-    <button class="btn warn" id="nameClaim" style="width:100%;margin-top:6px">&#9654; Log in</button>
-    <button class="btn" id="nameReg" style="width:100%;margin-top:8px">&#127381; Register a new account</button>
+    <button class="btn warn" id="nameClaim" style="width:100%;margin-top:6px">&#9989; Claim username</button>
     <button class="btn" id="nameSkip" style="width:100%;margin-top:8px">Skip for now (you'll be a random Racer)</button>
   </div>
 </div>
@@ -411,12 +410,6 @@
     </div>
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Player name (other players see this)</div>
     <input id="pName" maxlength="16" placeholder="your name" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:6px">
-    <div style="font-size:14px;color:var(--dim);margin-top:14px">Password (&#128065; to view, Save to change)</div>
-    <div style="display:flex;gap:6px;margin-top:6px">
-      <input id="pPass" type="password" maxlength="32" placeholder="your password" style="flex:1;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px">
-      <button class="btn" id="pPassEye" title="Show / hide">&#128065;</button>
-      <button class="btn warn" id="pPassSave">Save</button>
-    </div>
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Your avatar (other players see it too)</div>
     <div id="avatarRows"></div>
     <button class="btn close" id="setClose">Done</button>
@@ -450,9 +443,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=42"></script>
-<script src="js/world.js?v=42"></script>
-<script src="js/vehicles.js?v=42"></script>
-<script src="js/game.js?v=42"></script>
+<script src="js/core.js?v=43"></script>
+<script src="js/world.js?v=43"></script>
+<script src="js/vehicles.js?v=43"></script>
+<script src="js/game.js?v=43"></script>
 </body>
 </html>
