@@ -6188,6 +6188,42 @@ function mapEntries(q){
       if(best)chooseDest("\u{1F3D6} The beach — "+fmtDist(best.d)+" (press F at the \u{1F6A4} speedboat to SAIL!)",best.sp.x+4,best.sp.z,true);
       else toast("\u{1F3D6} No beach nearby — head toward the big blue sea on the map!");
     }],
+    ["\u{1F3AC} Nearest CINEMA",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3AC} Mega Cinema (movies & popcorn!)",nearestSpot((i,j)=>{const p=entPos(i,j);return{x:p.x-24,z:p.z};},ENSP,2000,4200,3),0,10);
+    }],
+    ["\u{1F579} Nearest ARCADE",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F579} The Arcade (claw machine & high scores!)",nearestSpot(entPos,ENSP,2000,4200,3),0,10);
+    }],
+    ["\u{1F3B0} Nearest CASINO",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3B0} Lucky Casino (spin the MEGA WHEEL!)",nearestSpot((i,j)=>{const p=entPos(i,j);return{x:p.x+24,z:p.z};},ENSP,2000,4200,3),0,10);
+    }],
+    ["\u{1F3C1} Nearest RACE TRACK (grandstands!)",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3C1} Car City Speedway — press T at the flag to race!",nearestSpot(raceTrackPos,RTSP,4800,3400,2),38,6);
+    }],
+    ["\u{1F46E} Nearest POLICE STATION",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F46E} Police station (pay fines, join the force!)",nearestSpot((i,j)=>{const p=civicPos(i,j);return{x:p.x-14,z:p.z};},CVSP2,3700,1300,3),0,9);
+    }],
+    ["\u{1F692} Nearest FIRE STATION",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F692} Fire station (rescues & tow jobs!)",nearestSpot((i,j)=>{const p=civicPos(i,j);return{x:p.x+14,z:p.z};},CVSP2,3700,1300,3),0,9);
+    }],
+    ["\u{1F3DC} Nearest OFF-ROAD PARK",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3DC} Off-road park (dirt jumps & bumps!)",nearestSpot(offroadPos,ORSP,900,2600,3),0,-8);
+    }],
+    ["\u{1F3ED} Nearest INDUSTRIAL ZONE",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3ED} Car City Industrial",nearestSpot(induPos,INSP,5200,700,2),0,20);
+    }],
+    ["\u{1F570} Nearest TIME PORTAL (teleporter through TIME!)",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F570} Time portal — drive through the ring!",nearestSpot(portalPos,TPSP,30,2430,2),0,-14);
+    }],
     ["\u{1F30B} Nearest VOLCANO island",()=>{
       switchWorld("earth");
       const best=nearestSpot(volcanoSpot,VOLC,4200,7800,3);
