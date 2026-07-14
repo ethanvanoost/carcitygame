@@ -6182,6 +6182,12 @@ function mapEntries(q){
       switchWorld("earth");
       goNearest("\u{1F3D7} Nearest building plot ($50K)",nearestSpot(plotSpot,PLSP,430,1150,4),0,16);
     }],
+    ["\u{1F3D6} Nearest BEACH (\u{1F6A4} speedboats!)",()=>{
+      switchWorld("earth");
+      const best=nearestSpot(boatSpot,BOATSP,320,120,8);
+      if(best)chooseDest("\u{1F3D6} The beach — "+fmtDist(best.d)+" (press F at the \u{1F6A4} speedboat to SAIL!)",best.sp.x+4,best.sp.z,true);
+      else toast("\u{1F3D6} No beach nearby — head toward the big blue sea on the map!");
+    }],
     ["\u{1F30B} Nearest VOLCANO island",()=>{
       switchWorld("earth");
       const best=nearestSpot(volcanoSpot,VOLC,4200,7800,3);
