@@ -562,6 +562,12 @@ function dumpValue(d){
   if(d.color==="Pearl")return d.glitter?90:25;                         // island exclusive (sells BELOW the $35 shop price!)
   if(d.color==="Alien")return d.glitter?2500:1000;                     // robbed from the moon aliens!
   if(d.color==="Lava")return d.glitter?300:120;                        // mined from a volcano crater
+  /* PLANET dumplings: worth exactly how far away the planet is ($1 per km) —
+     glitter ones are worth 2.5x. Neptune dumplings are the most valuable! */
+  if(typeof PLANETS!=="undefined"){
+    const pk=d.color.toLowerCase();
+    if(PLANETS[pk]&&PLANETS[pk].km>0)return d.glitter?Math.round(PLANETS[pk].km*2.5):PLANETS[pk].km;
+  }
   if(typeof SKY_DUMPS!=="undefined"&&SKY_DUMPS.some(s=>s[0]===d.color))return d.glitter?240:80;   // cloud collection
   if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
@@ -3653,7 +3659,7 @@ function tryCall(){
     else toast("The rocket is busy right now.");
     return;
   }
-  if(S.world==="moon"){
+  if(S.world!=="earth"){
     const u=nearUfo();
     if(u){openRobUfo(u);return;}
     toast("Find a rocket station to fly back down!");
@@ -3769,7 +3775,7 @@ function tryEnterLeave(){
       player.inRocket=false;rocket.state="parked";rocket.wait=40;
       player.x=rocket.x+6;player.z=rocket.z;
       landOnFootOrVehicle();
-      if(S.world==="moon")toast("\u{1F31A} One small step... explore the Moon!");
+      if(S.world!=="earth")toast("\u{1F31A} One small step... explore "+(curPlanet().name)+"!");
       return;
     }
     toast("\u{1F680} You can't get out during the flight!");
@@ -3778,17 +3784,33 @@ function tryEnterLeave(){
   /* rocket: boarding (walk up to a landed rocket) — autopilot or fly it yourself */
   if(player.onFoot&&rocket.state==="landed"&&Math.hypot(player.x-rocket.x,player.z-rocket.z)<15){
     player.inRocket=true;player.onFoot=false;player.mesh.visible=false;
-    showDest("\u{1F680} Rocket — where to?",[
-      {label:(S.world==="earth"?"\u{1F319} Fly to the MOON":"\u{1F30D} Fly to EARTH")+" (autopilot)",value:"auto"},
-      {label:"\u{1F9D1}‍✈️ I'll fly it MYSELF — up to 2000 km/h!",value:"pilot"}
-    ],v=>{
+    /* destinations: Earth is always FREE, every planet costs $1 per km away */
+    const opts=[];
+    if(S.world!=="earth")opts.push({label:"\u{1F30D} Fly to EARTH — FREE (going home!)",value:"earth"});
+    for(const k in PLANETS){
+      if(k===S.world)continue;
+      const P=PLANETS[k];
+      opts.push({label:P.emoji+" Fly to "+P.name.toUpperCase()+" — "+(P.km>0?"$"+fmtMoney(P.km)+" ("+fmtMoney(P.km)+" km away)":"FREE"),value:k});
+    }
+    opts.push({label:"\u{1F9D1}‍✈️ I'll fly it MYSELF — up to 2000 km/h!",value:"pilot"});
+    opts.push({label:"❌ Never mind",value:"cancel"});
+    showDest("\u{1F680} Rocket — where to? ($1 per km!)",opts,v=>{
+      if(v==="cancel"){player.inRocket=false;player.onFoot=true;player.mesh.visible=true;return;}
       if(v==="pilot"){
         rocket.state="piloted";rocket.yaw=0;rocket.hs=0;rocket.vy=0;
         toast("\u{1F680} You have the controls! W/S = speed, A/D = turn, Space = up, Shift = down, F = land");
-      }else{
-        rocket.state="launch";rocket.t=0;rocket.vy=0;rocket.hs=0;
-        toast("\u{1F680} Buckle up! Launching..."+(S.admin?" (admin turbo!)":""));
+        return;
       }
+      const fare=v==="earth"?0:PLANETS[v].km;
+      if(fare>MONEY.v){
+        player.inRocket=false;player.onFoot=true;player.mesh.visible=true;
+        toast("\u{1F4B0} The trip to "+PLANETS[v].name+" costs $"+fmtMoney(fare)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings & win races!");
+        return;
+      }
+      if(fare>0){MONEY.v-=fare;updateMoneyUI();saveGame();}
+      rocket.dest=v;
+      rocket.state="launch";rocket.t=0;rocket.vy=0;rocket.hs=0;
+      toast("\u{1F680} Buckle up! Launching to "+(v==="earth"?"Earth":PLANETS[v].name)+"..."+(fare>0?" (ticket: $"+fmtMoney(fare)+")":"")+(S.admin?" (admin turbo!)":""));
     });
     return;
   }
@@ -3813,15 +3835,15 @@ function tryEnterLeave(){
     if(v.mesh.userData.riderMesh)v.mesh.userData.riderMesh.visible=false;
     return;
   }
-  /* moon buggies: parked at every moon rocket station */
-  if(S.world==="moon"&&player.onFoot){
+  /* space buggies: parked at every off-Earth rocket station */
+  if(S.world!=="earth"&&player.onFoot){
     for(let i=moonCars.length-1;i>=0;i--){
       const mc=moonCars[i];
       if(offScene(mc.g)){moonCars.splice(i,1);continue;}
       if(Math.hypot(player.x-mc.x,player.z-mc.z)<5){
         player.drive={mesh:mc.g,type:"car",top:200,x:mc.g.position.x,z:mc.g.position.z,yaw:mc.g.rotation.y,speed:0,vy:0,y:mc.g.position.y,grounded:true,roll:0,moonCar:mc};
         player.onFoot=false;player.mesh.visible=false;
-        toast("\u{1F319}\u{1F697} Moon buggy! Low gravity driving — F to get out.");
+        toast(curPlanet().emoji+"\u{1F697} "+curPlanet().name+" buggy! Space driving — F to get out.");
         return;
       }
     }
@@ -4059,10 +4081,11 @@ function walkPlayer(dt){
   const dk=deckYAt(player.x,player.z,player.y);   // parking-garage floors & ramp
   if(dk>gh)gh=dk;
   /* earth: snappy jumps that don't hang in the sky.
-     moon: big jumps and a slow, floaty fall */
-  const moon=S.world==="moon";
-  if(spaceInput()&&player.grounded){player.vy=moon?5:6.4;player.grounded=false;}
-  if(!player.grounded){player.vy-=(moon?2.4:20)*dt;player.y+=player.vy*dt;
+     each planet has its OWN gravity: floaty on the Moon & Mercury,
+     heavy on Jupiter! */
+  const P=curPlanet();
+  if(spaceInput()&&player.grounded){player.vy=P?P.jump:6.4;player.grounded=false;}
+  if(!player.grounded){player.vy-=(P?P.grav:20)*dt;player.y+=player.vy*dt;
     if(player.y<=gh){player.y=gh;player.grounded=true;player.vy=0;}}
   else if(gh<player.y-1.3){player.grounded=false;player.vy=0;}   // stepped off a deck
   else player.y=gh;
@@ -4672,11 +4695,12 @@ function updateCamera(dt){
 /* map */
 const mapView={cx:0,cz:0,scale:0.55};
 function mapColor(x,z){
-  if(S.world==="moon"){
+  if(S.world!=="earth"){
+    const P=curPlanet()||PLANETS.moon;
     const h=moonH(x,z);
     if(rocketPadDist(x,z)<20)return "#4a4f57";
-    if(h<-1.2)return "#6f6a5e";                       // holes
-    return vnoise(x/60+2.2,z/60+6.6)<0.5?"#cfc07a":"#b3ab8e";  // yellow + a bit of gray
+    if(h<-1.2)return cssCol(P.dark);                  // holes
+    return vnoise(x/60+2.2,z/60+6.6)<0.5?cssCol(P.ground):cssCol(P.ground2);
   }
   if(Math.abs(x)<170&&Math.abs(z)<170)return "#4c6b3c";
   if(inAirport(x,z))return "#3a3f47";
@@ -4768,15 +4792,15 @@ function drawMap(){
       }
     }
   }
-  /* alien spaceships (moon only, one every ~1000 km) */
-  if(S.world==="moon"){
+  /* alien spaceships (off Earth only, one every ~1000 km) */
+  if(S.world!=="earth"){
     const halfW=cv.width/2/sc,halfH=cv.height/2/sc;
     const ui0=Math.floor((mapView.cx-halfW-3300)/UFOSP),ui1=Math.ceil((mapView.cx+halfW-3300)/UFOSP);
     const uj0=Math.floor((mapView.cz-halfH-6600)/UFOSP),uj1=Math.ceil((mapView.cz+halfH-6600)/UFOSP);
     for(let i=ui0;i<=ui1;i++)for(let j=uj0;j<=uj1;j++){
       const s=ufoSpot(i,j);
       if(!s)continue;
-      dot(s.x,s.z,"#7dff4f",7);
+      dot(s.x,s.z,(curPlanet()||PLANETS.moon).alienCss,7);
       const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
       if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
         c.fillStyle="#b6ff9e";c.font="bold 11px Segoe UI";c.textAlign="center";
@@ -5249,8 +5273,8 @@ function mapEntries(q){
       if(Math.abs(player.x-MHX)<Math.abs(player.z-MHZ))chooseDest("\u{1F6E3}️ Mega Highway",MHX,player.z,true);
       else chooseDest("\u{1F6E3}️ Mega Highway",player.x,MHZ,true);
     }],
-    ["\u{1F6F8} Nearest ALIEN spaceship (moon!)",()=>{
-      if(S.world!=="moon"){toast("\u{1F6F8} The alien spaceships are on the MOON — take a \u{1F680} rocket up first!");return;}
+    ["\u{1F6F8} Nearest ALIEN spaceship (space!)",()=>{
+      if(S.world==="earth"){toast("\u{1F6F8} The alien spaceships are on the Moon & the planets — take a \u{1F680} rocket up first!");return;}
       const ci=Math.round((player.x-3300)/UFOSP),cj=Math.round((player.z-6600)/UFOSP);
       let best=null;
       for(let i2=ci-1;i2<=ci+1;i2++)for(let j2=cj-1;j2<=cj+1;j2++){
@@ -5265,11 +5289,24 @@ function mapEntries(q){
       $("mapModal").classList.remove("open");
       toast("\u{1F6F8} Signal locked: "+fmtDist(best.d)+" away! Teleporters are JAMMED near the aliens — fly the rocket yourself and follow the route!");
     }],
-    ["\u{1F319} Go to the MOON",()=>{
-      switchWorld("moon");
-      teleportTo(2400,2400);   // land right at a moon rocket station
-      $("mapModal").classList.remove("open");
-      toast("\u{1F319} You're on the Moon! Low gravity — try jumping!");
+    ["\u{1FA90} SPACE TRAVEL — Moon & planets ($1 per km!)",()=>{
+      const opts=[];
+      for(const k in PLANETS){
+        if(k===S.world)continue;
+        const P=PLANETS[k];
+        opts.push({label:P.emoji+" "+P.name.toUpperCase()+" — "+(P.km>0?"$"+fmtMoney(P.km)+" ("+fmtMoney(P.km)+" km away)":"FREE"),value:k});
+      }
+      opts.push({label:"❌ Stay here",value:"cancel"});
+      showDest("\u{1FA90} Space travel — the further, the pricier (and the better the dumplings!)",opts,v=>{
+        if(v==="cancel"||!PLANETS[v])return;
+        const fare=PLANETS[v].km;
+        if(fare>MONEY.v){toast("\u{1F4B0} The trip to "+PLANETS[v].name+" costs $"+fmtMoney(fare)+" — you only have $"+fmtMoney(MONEY.v)+". Sell dumplings & win races!");return;}
+        if(fare>0){MONEY.v-=fare;updateMoneyUI();saveGame();}
+        switchWorld(v);
+        teleportTo(2400,2400);   // land right at a rocket station
+        $("mapModal").classList.remove("open");
+        toast(PLANETS[v].emoji+" You're on "+PLANETS[v].name+"!"+(fare>0?" Ticket: $"+fmtMoney(fare)+".":"")+" Try jumping — the gravity is different here!");
+      });
     },"warn"],
     ["\u{1F30D} Back to EARTH",()=>{
       switchWorld("earth");
@@ -5473,7 +5510,7 @@ function updateCompass(){
 function teleportTo(x,z){
   endRide(true);
   /* the aliens JAM teleporters near their spaceships — you must travel there yourself */
-  if(S.world==="moon"){
+  if(S.world!=="earth"){
     const ci=Math.round((x-3300)/UFOSP),cj=Math.round((z-6600)/UFOSP);
     const s=ufoSpot(ci,cj);
     if(s&&Math.hypot(x-s.x,z-s.z)<400){
@@ -5564,10 +5601,11 @@ function updateRocket(dt){
       r.vy=Math.min(maxUp,r.vy+acc*dt);r.y+=r.vy*dt;
     }
     if(r.y>1000){
-      const to=S.world==="earth"?"moon":"earth";
+      const to=r.dest||(S.world==="earth"?"moon":"earth");
+      r.dest=null;
       switchWorld(to);
       r.vy=-45;r.y=1000;r.state="descend";
-      toast(to==="moon"?"\u{1F30C} Space! Coming in over the Moon...":"\u{1F30D} Re-entering Earth...");
+      toast(to==="earth"?"\u{1F30D} Re-entering Earth...":"\u{1F30C} Space! Coming in over "+(PLANETS[to]?PLANETS[to].name:"the Moon")+"...");
     }
   }else if(r.state==="descend"){
     fire=true;rumble=0.09;
@@ -5578,7 +5616,8 @@ function updateRocket(dt){
     if(r.y-padY<40&&Math.random()<0.6)puffSmoke(r.x+(Math.random()-0.5)*7,padY+0.5,r.z+(Math.random()-0.5)*7,true);
     if(r.y<=padY){
       r.y=padY;r.vy=0;r.state="arrived";
-      toast(S.world==="moon"?"\u{1F319} Welcome to the Moon! Press F to step out.":"\u{1F30D} Back on Earth! Press F to step out.");
+      toast(S.world==="earth"?"\u{1F30D} Back on Earth! Press F to step out."
+        :(curPlanet()||{}).emoji+" Welcome to "+((curPlanet()||{}).name||"the Moon")+"! Press F to step out.");
     }
   }else if(r.state==="piloted"){
     /* you fly it: W/S = speed (up to 2000 km/h), A/D = turn, Space up, Shift down */
@@ -5710,15 +5749,15 @@ function updateHint(){
     if(!txt&&player.onFoot&&nearSkyRest()){txt="☁️ SKY RESTAURANT — press T for a meal above the clouds!";showT=true;}
     if(!txt&&player.onFoot&&nearVolcanoCrater()){txt=volcErupting()?"\u{1F30B}\u{1F4A5} ERUPTION — GET AWAY!!":"\u{1F30B} The crater — press T to mine a LAVA dumpling!";showT=!volcErupting();}
     }
-    if(!txt&&S.world==="moon"){
+    if(!txt&&S.world!=="earth"){
       const uf=nearUfo();
       if(uf)
-        txt=uf.angry>0?"\u{1F47D} THE ALIENS ARE ANGRY — RUN!!":"\u{1F6F8} An ALIEN SPACESHIP — press T to rob it ($10K + alien dumpling)... if you dare!";
+        txt=uf.angry>0?"\u{1F47D} THE ALIENS ARE ANGRY — RUN!!":"\u{1F6F8} An ALIEN SPACESHIP — press T to rob it ($10K + a "+(S.world==="moon"?"ALIEN":curPlanet().name.toUpperCase())+" dumpling)... if you dare!";
       if(uf)showT=uf.angry<=0;
     }
-    if(!txt&&S.world==="moon"&&player.onFoot){
+    if(!txt&&S.world!=="earth"&&player.onFoot){
       for(const mc of moonCars){
-        if(!offScene(mc.g)&&Math.hypot(player.x-mc.x,player.z-mc.z)<6){txt="\u{1F319} Moon buggy — press F to drive!";showF=true;break;}
+        if(!offScene(mc.g)&&Math.hypot(player.x-mc.x,player.z-mc.z)<6){txt=curPlanet().emoji+" "+curPlanet().name+" buggy — press F to drive!";showF=true;break;}
       }
     }
     /* the ferry */
@@ -6714,8 +6753,13 @@ function openRobUfo(u){
     toast("\u{1F6F8}\u{1F512} The vault is LOCKED — the aliens reset it in "+Math.ceil(left/60000)+" minute"+(Math.ceil(left/60000)>1?"s":"")+"!");
     return;
   }
+  /* each planet's aliens carry that planet's OWN dumpling — worth $1 per km
+     of the planet's distance, so the Neptune one is the jackpot! */
+  const P=curPlanet()||PLANETS.moon;
+  const dumpName=S.world==="moon"?"Alien":P.name;
+  const dumpVal=dumpValue({color:dumpName,glitter:false});
   showDest("\u{1F6F8} The alien spaceship...",[
-    {label:"\u{1F4B0} ROB IT! ($10,000 + an ALIEN dumpling... if you dare)",value:"rob"},
+    {label:"\u{1F4B0} ROB IT! ($10,000 + a "+dumpName.toUpperCase()+" dumpling worth $"+fmtMoney(dumpVal)+"... if you dare)",value:"rob"},
     {label:"\u{1F44B} Just wave at the aliens",value:"wave"},
     {label:"❌ Back away slowly",value:"cancel"}
   ],v=>{
@@ -6723,15 +6767,15 @@ function openRobUfo(u){
     if(v!=="rob")return;
     try{localStorage.setItem(ufoKey(u),String(Date.now()));}catch(e){}
     addMoney(10000);
-    DUMP.owned.push({color:"Alien",hex:"#7dff4f",glitter:Math.random()<0.08});
+    DUMP.owned.push({color:dumpName,hex:P.alienCss,glitter:Math.random()<0.08});
     renderDump();saveGame();
     u.angry=22;u.loot=true;
-    pushNews("\u{1F6F8} BREAKING: "+mpName()+" robbed an alien spaceship on the MOON — $10,000 and an ALIEN dumpling!");
-    toast("\u{1F4B0}\u{1F47D} YOU ROBBED THE ALIENS — $10,000 + an ALIEN dumpling ($1K)! Now RUN, they're chasing you!!");
+    pushNews("\u{1F6F8} BREAKING: "+mpName()+" robbed an alien spaceship on "+P.name.toUpperCase()+" — $10,000 and a "+dumpName.toUpperCase()+" dumpling!");
+    toast("\u{1F4B0}\u{1F47D} YOU ROBBED THE ALIENS — $10,000 + a "+dumpName.toUpperCase()+" dumpling ($"+fmtMoney(dumpVal)+")! Now RUN, they're chasing you!!");
   });
 }
 function updateUfos(dt){
-  if(S.world!=="moon")return;
+  if(S.world==="earth")return;
   const now=performance.now();
   for(let i=ufos.length-1;i>=0;i--){
     const u=ufos[i];
@@ -6744,8 +6788,10 @@ function updateUfos(dt){
       cr.mesh.rotation.y+=dt*1.6;
       if(player.onFoot&&Math.hypot(player.x-cr.x,player.z-cr.z)<2.2){
         cr.got=true;cr.mesh.visible=false;
-        addMoney(100);
-        toast("\u{1F48E} A glowing MOON CRYSTAL — +$100!");
+        /* crystals on far-away planets are worth more too! */
+        const cv2=Math.max(100,Math.round((curPlanet()||PLANETS.moon).km/10));
+        addMoney(cv2);
+        toast("\u{1F48E} A glowing "+(curPlanet()||PLANETS.moon).name.toUpperCase()+" CRYSTAL — +$"+fmtMoney(cv2)+"!");
       }
     }
     /* the alien crew: wander around the ship, CHASE you after a robbery */

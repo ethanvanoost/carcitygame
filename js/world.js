@@ -112,13 +112,14 @@ const skyDome=(function(){
   return m;
 })();
 function updateSky(px,pz){
-  if(S.world==="moon"){
-    /* no atmosphere: black sky, stars always out, Earth hangs above */
-    scene.background=new THREE.Color(0x04060f);
+  if(S.world!=="earth"){
+    /* no atmosphere: dark sky in the planet's own tint, stars always out */
+    const P=curPlanet()||PLANETS.moon;
+    scene.background=new THREE.Color(P.sky);
     skyDome.position.set(px,0,pz);
-    skyDome.material.uniforms.top.value.set(0x03040c);
-    skyDome.material.uniforms.bot.value.set(0x0a0f1e);
-    scene.fog.color.set(0x04060f);scene.fog.near=900;scene.fog.far=2600;
+    skyDome.material.uniforms.top.value.set(P.sky);
+    skyDome.material.uniforms.bot.value.set(P.sky2);
+    scene.fog.color.set(P.sky);scene.fog.near=900;scene.fog.far=2600;
     stars.material.opacity=0.95;
     sun.intensity=1.25;hemi.intensity=0.4;
     sun.position.set(px+400,520,pz+140);
@@ -293,11 +294,47 @@ function baseH_(x,z){
   h*=1-flatMask(x,z);
   return h;
 }
-/* the moon: rolling yellow-gray dust with small holes, flat at rocket pads */
+/* ================= THE PLANETS =================
+   km = how far away it is — the rocket costs $1 per km (Earth is always FREE
+   to fly back to). Each planet has its own ground colors, its own color
+   aliens + spaceship, its own gravity, and its own dumpling worth exactly
+   its distance in km — so NEPTUNE dumplings are the most valuable of all! */
+const PLANETS={
+  moon:   {name:"Moon",   emoji:"\u{1F319}",km:0,    ground:0xd8c878,ground2:0x9c9788,dark:0x6f6a5e,rock:0x8f8a80,
+           sky:0x04060f,sky2:0x0a0f1e,alien:0x7dff4f,alienCss:"#7dff4f",ship:0x9aa4b2,glow:0x2f6a1f,
+           grav:2.4,jump:5,rough:1,holes:0.8},
+  mercury:{name:"Mercury",emoji:"\u{1FAA8}",km:920,  ground:0xb8b0a4,ground2:0x8a8378,dark:0x55504a,rock:0x7a746c,
+           sky:0x07070c,sky2:0x14121a,alien:0xc9cfd8,alienCss:"#c9cfd8",ship:0x5d5a6e,glow:0x3a3a4a,
+           grav:2.2,jump:5.2,rough:1.1,holes:0.68},
+  venus:  {name:"Venus",  emoji:"\u{1F7E1}",km:410,  ground:0xe8b45e,ground2:0xc98f3a,dark:0x8f6222,rock:0xb07f36,
+           sky:0x1c1206,sky2:0x3a2410,alien:0xffb02e,alienCss:"#ffb02e",ship:0xd4a017,glow:0x6a4a10,
+           grav:16,jump:6.2,rough:0.7,holes:0.92},
+  mars:   {name:"Mars",   emoji:"\u{1F534}",km:780,  ground:0xc96a3c,ground2:0x9e4a28,dark:0x6a2f18,rock:0x8a3f22,
+           sky:0x0e0605,sky2:0x261009,alien:0xff5040,alienCss:"#ff5040",ship:0x8a3324,glow:0x5a1c12,
+           grav:7.5,jump:5.6,rough:1.2,holes:0.72},
+  jupiter:{name:"Jupiter",emoji:"\u{1F7E0}",km:6280, ground:0xd9a066,ground2:0xa8763e,dark:0x74522a,rock:0x9a6a38,
+           sky:0x0c0804,sky2:0x241708,alien:0xff8c42,alienCss:"#ff8c42",ship:0xb87333,glow:0x66401a,
+           grav:40,jump:7.5,rough:0.6,holes:0.95},
+  saturn: {name:"Saturn", emoji:"\u{1FA90}",km:12750,   /* it gets a RING on its spaceship too! */ground:0xe6d29a,ground2:0xc4a95e,dark:0x8c7840,rock:0xb09a58,
+           sky:0x0a0906,sky2:0x1e1a0e,alien:0xffd75e,alienCss:"#ffd75e",ship:0xd4bd6a,glow:0x6a5a20,
+           grav:21,jump:6.3,rough:0.8,holes:0.9,ring:true},
+  uranus: {name:"Uranus", emoji:"\u{1F535}",km:27240,ground:0x9adbe8,ground2:0x6fb4c4,dark:0x3f7482,rock:0x5c98a8,
+           sky:0x040a0e,sky2:0x0c1d24,alien:0x4fd8ff,alienCss:"#4fd8ff",ship:0x3f8ea0,glow:0x1a4a5a,
+           grav:17,jump:6.1,rough:0.9,holes:0.85},
+  neptune:{name:"Neptune",emoji:"\u{1F52E}",km:43510,ground:0x5a7fd4,ground2:0x3a5aa8,dark:0x24356a,rock:0x33487e,
+           sky:0x03040e,sky2:0x0a0f2a,alien:0x4f7dff,alienCss:"#4f7dff",ship:0x2a3f9e,glow:0x14226a,
+           grav:22,jump:6.4,rough:1,holes:0.82}
+};
+function curPlanet(){return PLANETS[S.world]||null;}
+function offEarth(){return S.world!=="earth";}
+function cssCol(n){return "#"+n.toString(16).padStart(6,"0");}
+/* planet dust: rolling ground with small holes/craters, flat at rocket pads —
+   every planet gets its own roughness & crater amount */
 function moonH(x,z){
-  let h=(fbm(x/110+9.2,z/110+4.4)-0.5)*9;
-  const c=vnoise(x/26+3.7,z/26+8.9);
-  if(c>0.8)h-=(c-0.8)*24;                 // small holes / mini craters
+  const P=curPlanet()||PLANETS.moon;
+  let h=(fbm(x/110+9.2,z/110+4.4)-0.5)*9*(P.rough||1);
+  const c=vnoise(x/26+3.7,z/26+8.9),hl=P.holes||0.8;
+  if(c>hl)h-=(c-hl)*24;                   // small holes / mini craters
   h*=sstep(30,64,rocketPadDist(x,z));     // flat around rocket stations
   return h;
 }
@@ -370,8 +407,8 @@ function gradeAt(x,z){
   if(!wsum)return h;
   return h*(1-M)+(tsum/wsum)*M;
 }
-function rawH(x,z){return S.world==="moon"?moonH(x,z):gradeAt(x,z);}
-function terrainH(x,z){return S.world==="moon"?moonH(x,z):gradeAt(x,z);}
+function rawH(x,z){return S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
+function terrainH(x,z){return S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
 function onAnyRoad(x,z){
   if(inAirport(x,z))return true;
   if(nearGridLine(x)<9||nearGridLine(z)<9)return true;
@@ -2230,9 +2267,9 @@ function ufoSpot(i,j){
   if(rocketPadDist(x,z)<130)return null;
   return{x,z};
 }
-function makeAlien(){
+function makeAlien(col){
   const g=new THREE.Group();
-  const gm=new THREE.MeshLambertMaterial({color:0x7dff4f});
+  const gm=new THREE.MeshLambertMaterial({color:col||0x7dff4f});
   const body=new THREE.Mesh(new THREE.SphereGeometry(0.32,9,8),gm);
   body.scale.set(0.8,1.15,0.7);body.position.y=0.75;body.castShadow=true;g.add(body);
   const head=new THREE.Mesh(new THREE.SphereGeometry(0.34,10,9),gm);
@@ -2247,7 +2284,7 @@ function makeAlien(){
   [[-0.12],[0.12]].forEach(p=>{
     const st=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.4),gm);
     st.position.set(p[0],2.05,0);st.rotation.z=-p[0]*1.4;g.add(st);
-    const tip=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),new THREE.MeshBasicMaterial({color:0x7dff4f}));
+    const tip=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),new THREE.MeshBasicMaterial({color:col||0x7dff4f}));
     tip.position.set(p[0]*2.2,2.25,0);g.add(tip);
   });
   /* skinny arms & legs */
@@ -2260,15 +2297,21 @@ function makeAlien(){
   return g;
 }
 function buildUfo(s,g){
+  const P=curPlanet()||PLANETS.moon;
   const y=moonH(s.x,s.z);
   const u=new THREE.Group();u.position.set(s.x,y,s.z);g.add(u);
-  const metal=new THREE.MeshPhongMaterial({color:0x9aa4b2,shininess:90,specular:0xaaaaaa});
-  /* the saucer on landing legs */
+  const metal=new THREE.MeshPhongMaterial({color:P.ship,shininess:90,specular:0xaaaaaa});
+  /* the saucer on landing legs — every planet flies its own colors */
   const saucer=shadowBox(new THREE.Mesh(new THREE.SphereGeometry(7.5,18,10),metal));
   saucer.scale.y=0.28;saucer.position.y=3.4;u.add(saucer);
   const dome=new THREE.Mesh(new THREE.SphereGeometry(3,14,10,0,Math.PI*2,0,Math.PI/2),
-    new THREE.MeshPhongMaterial({color:0x7dff4f,transparent:true,opacity:0.5,emissive:0x2f6a1f,shininess:100}));
+    new THREE.MeshPhongMaterial({color:P.alien,transparent:true,opacity:0.5,emissive:P.glow,shininess:100}));
   dome.position.y=5;u.add(dome);
+  /* Saturn's spaceships even have their own little ring! */
+  if(P.ring){
+    const rg=new THREE.Mesh(new THREE.TorusGeometry(9.6,0.35,8,32),new THREE.MeshPhongMaterial({color:P.alien,shininess:80}));
+    rg.rotation.x=Math.PI/2;rg.position.y=3.4;u.add(rg);
+  }
   for(let i=0;i<3;i++){
     const a=i/3*Math.PI*2;
     const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.22,3.4),metal);
@@ -2284,38 +2327,43 @@ function buildUfo(s,g){
   for(let i=0;i<10;i++){
     const a=i/10*Math.PI*2;
     const l=new THREE.Mesh(new THREE.SphereGeometry(0.26,7,7),
-      new THREE.MeshBasicMaterial({color:i%2?0x7dff4f:0xff5d8f}));
+      new THREE.MeshBasicMaterial({color:i%2?P.alien:0xff5d8f}));
     l.position.set(Math.cos(a)*7.1,3.4,Math.sin(a)*7.1);u.add(l);
     lights.push(l);
   }
-  /* the alien crew, out for a moonwalk */
+  /* the alien crew, out for a spacewalk — in this planet's own color */
   const aliens=[];
   for(let i=0;i<4;i++){
-    const m=makeAlien();
+    const m=makeAlien(P.alien);
     const a={m,x:s.x+(Math.random()-0.5)*24,z:s.z+10+(Math.random()-0.5)*14,yaw:Math.random()*7,t:0};
     m.position.set(a.x,moonH(a.x,a.z),a.z);
     g.add(m);
     aliens.push(a);
   }
-  /* glowing green moon crystals near the ship — grab them for money! */
+  /* glowing crystals near the ship — grab them for money! */
   const crystals=[];
   for(let i=0;i<3;i++){
     const a=i*2.2+0.8,d=16+i*5;
     const cx=s.x+Math.sin(a)*d,cz=s.z+Math.cos(a)*d;
-    const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.7),new THREE.MeshBasicMaterial({color:0x7dff4f}));
+    const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.7),new THREE.MeshBasicMaterial({color:P.alien}));
     cr.position.set(cx,moonH(cx,cz)+0.9,cz);g.add(cr);
     crystals.push({mesh:cr,x:cx,z:cz,got:false});
   }
   ufos.push({g,x:s.x,z:s.z,lights,aliens,crystals,angry:0,loot:false});
 }
-/* ---- moon chunks: yellow-gray dust, holes, rocks — no roads, no buildings ---- */
-const moonRockMat=keep(new THREE.MeshLambertMaterial({color:0x8f8a80}));
+/* ---- planet chunks: colored dust, holes, rocks — no roads, no buildings ---- */
+const planetRockMats={};
+function planetRockMat(P){
+  if(!planetRockMats[P.name])planetRockMats[P.name]=keep(new THREE.MeshLambertMaterial({color:P.rock}));
+  return planetRockMats[P.name];
+}
 function buildMoonChunk(cx,cz){
+  const P=curPlanet()||PLANETS.moon;
   const g=new THREE.Group();g.userData.recs=[];
   const ox=cx*CS,oz=cz*CS;
   const geo=new THREE.PlaneGeometry(CS,CS,SEG,SEG);geo.rotateX(-Math.PI/2);
   const pos=geo.attributes.position,cols=[];
-  const cYel=new THREE.Color(0xd8c878),cGry=new THREE.Color(0x9c9788),cDark=new THREE.Color(0x6f6a5e);
+  const cYel=new THREE.Color(P.ground),cGry=new THREE.Color(P.ground2),cDark=new THREE.Color(P.dark);
   for(let i=0;i<pos.count;i++){
     const x=pos.getX(i)+ox,z=pos.getZ(i)+oz,h=moonH(x,z);
     pos.setY(i,h);
@@ -2331,7 +2379,7 @@ function buildMoonChunk(cx,cz){
   const r=rng(cx*911+cz*7349+5);
   for(let i=0;i<6;i++){
     const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS,s=0.4+r()*1.7;
-    const rock=shadowBox(new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),moonRockMat));
+    const rock=shadowBox(new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),planetRockMat(P)));
     rock.position.set(x,moonH(x,z)+s*0.4,z);rock.rotation.set(r()*3,r()*3,r()*3);g.add(rock);
   }
   /* an ALIEN SPACESHIP every ~1000 km */
@@ -2346,7 +2394,7 @@ function buildMoonChunk(cx,cz){
   return g;
 }
 function buildChunk(cx,cz){
-  if(S.world==="moon")return buildMoonChunk(cx,cz);
+  if(S.world!=="earth")return buildMoonChunk(cx,cz);
   const g=new THREE.Group();g.userData.recs=[];
   const ox=cx*CS,oz=cz*CS,x0=ox-CS/2,x1=ox+CS/2,z0=oz-CS/2,z1=oz+CS/2;
   const biome=biomeAt(ox,oz);
@@ -2393,14 +2441,25 @@ function buildChunk(cx,cz){
     const s0=Math.ceil(a0/step)*step,s1=Math.floor(a1/step)*step;
     let run=null;
     const emit=()=>{
+      /* one long horizontal pipe used to float over (or sink into) sloping
+         roads — now the tube is laid in short 36 m pieces that each sit on
+         the road grade, with a tiny overlap so the joints never show gaps */
       if(run&&run[1]-run[0]>=24){
-        const mid=(run[0]+run[1])/2,len=run[1]-run[0];
-        const mx=axis==="z"?c:mid,mz=axis==="z"?mid:c;
-        const tg=new THREE.CylinderGeometry(8,8,len,12,1,true);
-        if(axis==="z")tg.rotateX(Math.PI/2);else tg.rotateZ(Math.PI/2);
-        const tub=new THREE.Mesh(tg,tunnelMat);
-        tub.position.set(mx,terrainH(mx,mz)+2.6,mz);
-        g.add(tub);
+        for(let p0=run[0];p0<run[1];p0+=36){
+          const p1=Math.min(run[1],p0+36);
+          const mid=(p0+p1)/2,len=(p1-p0)+1.5;
+          const mx=axis==="z"?c:mid,mz=axis==="z"?mid:c;
+          const tg=new THREE.CylinderGeometry(8,8,len,12,1,true);
+          if(axis==="z")tg.rotateX(Math.PI/2);else tg.rotateZ(Math.PI/2);
+          const tub=new THREE.Mesh(tg,tunnelMat);
+          tub.position.set(mx,terrainH(mx,mz)+2.6,mz);
+          /* lean each piece along the road slope so the tube follows it */
+          const ha=terrainH(axis==="z"?c:p0,axis==="z"?p0:c);
+          const hb=terrainH(axis==="z"?c:p1,axis==="z"?p1:c);
+          const slope=Math.atan2(hb-ha,p1-p0);
+          if(axis==="z")tub.rotation.x=-slope;else tub.rotation.z=slope;
+          g.add(tub);
+        }
       }
       run=null;
     };
@@ -2965,8 +3024,8 @@ function buildRocketStation(i,j){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(16,4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
   sign.position.set(p.x,y+5.5,p.z-15);g.add(sign);
   [-6,6].forEach(o=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,5.6),poleMat);pl.position.set(p.x+o,y+2.8,p.z-15);g.add(pl);});
-  /* on the MOON: a few moon buggies parked at every rocket station (F = drive) */
-  if(S.world==="moon"&&parkedCarBuilder){
+  /* off Earth: a few space buggies parked at every rocket station (F = drive) */
+  if(S.world!=="earth"&&parkedCarBuilder){
     for(let i=0;i<3;i++){
       const mc=parkedCarBuilder([0xc9cfd8,0xff7f11,0x3fd0ff][i]);
       const mx=p.x+18+i*6,mz=p.z+10;
