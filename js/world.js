@@ -2401,6 +2401,31 @@ function buildMoonChunk(cx,cz){
   scene.add(g);
   return g;
 }
+/* ---- 🚤 BOATS: speedboats moored in shallow water — press F to SAIL ---- */
+const boats=[];
+const BOATSP=640;
+function boatSpot(i,j){
+  const x=i*BOATSP+320+Math.round((h2i(i,j)-0.5)*180),z=j*BOATSP+120+Math.round((h2i(j,i*3+1)-0.5)*180);
+  const h=baseH(x,z);
+  if(h>-1.6||h<-3.4)return null;   // only in SHALLOW water near the shore
+  return{x,z};
+}
+function makeBoatMesh(col){
+  const g=new THREE.Group();
+  const hullM=new THREE.MeshPhongMaterial({color:col,shininess:70});
+  const hull=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2,0.75,5.2),hullM));hull.position.y=0.42;g.add(hull);
+  const bow=new THREE.Mesh(new THREE.ConeGeometry(1,1.6,4),hullM);
+  bow.rotation.x=Math.PI/2;bow.rotation.y=Math.PI/4;bow.scale.set(1,1,0.56);bow.position.set(0,0.42,3.35);g.add(bow);
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.1,4.9),new THREE.MeshLambertMaterial({color:0xe8dcc0}));deck.position.y=0.84;g.add(deck);
+  const ws=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.55),glassMat);ws.position.set(0,1.25,1.1);ws.rotation.x=-0.45;g.add(ws);
+  const seatM=new THREE.MeshLambertMaterial({color:0x2a2f3a});
+  [[-0.45],[0.45]].forEach(p=>{const s=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.3,0.6),seatM);s.position.set(p[0],1,0.2);g.add(s);});
+  const motor=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,0.4),darkTrim);motor.position.set(0,0.75,-2.6);g.add(motor);
+  const flag=new THREE.Mesh(new THREE.PlaneGeometry(0.5,0.34),new THREE.MeshBasicMaterial({color:0xffd75e,side:THREE.DoubleSide}));
+  flag.position.set(0,1.9,-2.2);g.add(flag);
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1.1),darkTrim);pole.position.set(0,1.4,-2.35);g.add(pole);
+  return g;
+}
 /* ---- ⛏️ MINECRAFT chunks: blocky grass, trees to chop, ores to mine ---- */
 const mcThings=[];   // every mineable thing currently in the world
 const MC_ORES=[
@@ -2527,6 +2552,17 @@ function buildChunk(cx,cz){
   /* 3D grass tufts — even the desert gets dry golden ones */
   if(biome==="desert")addGrassTufts(g,ox,oz,r,40,dryTuftMat);
   else addGrassTufts(g,ox,oz,r,biome==="forest"?120:80);
+  /* 🚤 boats moored in shallow water — walk to the shore and press F to sail */
+  for(let i=Math.floor((ox-CS/2-500)/BOATSP);i<=Math.ceil((ox+CS/2+500)/BOATSP);i++)
+  for(let j=Math.floor((oz-CS/2-300)/BOATSP);j<=Math.ceil((oz+CS/2+300)/BOATSP);j++){
+    const sp=boatSpot(i,j);
+    if(!sp||sp.x<ox-CS/2||sp.x>=ox+CS/2||sp.z<oz-CS/2||sp.z>=oz+CS/2)continue;
+    const bm=makeBoatMesh(COLORS[Math.floor(h2i(i*7,j*3)*COLORS.length)]);
+    bm.position.set(sp.x,-1.05,sp.z);
+    bm.rotation.y=h2i(i,j)*6.28;
+    g.add(bm);
+    boats.push({g:bm,x:sp.x,z:sp.z});
+  }
   /* --- tunnels: where a road was cut through a mountain, cover it with a tube.
      Samples sit on an ABSOLUTE 12 m grid so tube pieces from neighbouring
      chunks meet exactly end-to-end (no overlapping walls = no flickering),
@@ -3128,6 +3164,27 @@ function buildRocketStation(i,j){
       moonCars.push({g:mc,x:mx,z:mz});
     }
   }
+  /* 🛰 SPACE STATION: a glowing dome base next to every off-Earth rocket station */
+  if(S.world!=="earth"&&S.world!=="mc"){
+    const P=curPlanet()||PLANETS.moon;
+    const sx=p.x-26,sz=p.z-8,sy2=terrainH(sx,sz);
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(7,16,10,0,Math.PI*2,0,Math.PI/2),
+      new THREE.MeshPhongMaterial({color:0xd8e2ec,transparent:true,opacity:0.55,shininess:90}));
+    dome.position.set(sx,sy2,sz);g.add(dome);
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(7.4,7.8,0.8,16),new THREE.MeshLambertMaterial({color:0x5d6470}));
+    base.position.set(sx,sy2+0.4,sz);g.add(base);
+    /* solar wings + a blinking antenna in the planet's color */
+    [[-9],[9]].forEach(o=>{
+      const sw=new THREE.Mesh(new THREE.BoxGeometry(5,0.14,3),new THREE.MeshPhongMaterial({color:0x1a3a6e,shininess:120}));
+      sw.position.set(sx+o[0],sy2+2,sz);g.add(sw);
+    });
+    const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,4),poleMat);ant.position.set(sx,sy2+8.6,sz);g.add(ant);
+    const blip=new THREE.Mesh(new THREE.SphereGeometry(0.3,8,8),new THREE.MeshBasicMaterial({color:P.alien}));
+    blip.position.set(sx,sy2+10.8,sz);g.add(blip);
+    const sign=bigSign("\u{1F6F0} "+P.name.toUpperCase()+" STATION","#0a0f1e","#9fd8ff",14);
+    sign.position.set(sx,sy2+6,sz+8);g.add(sign);
+    SPST.push({g,x:sx,z:sz,planet:S.world});
+  }
   scene.add(g);return g;
 }
 /* ---- stunt ramps park: real drivable ramps + a race start flag ---- */
@@ -3187,6 +3244,191 @@ function buildStuntPark(i,j){
   raceFlags.push({g,x:fx,z:fz});
   scene.add(g);return g;
 }
+/* ================= NEW CITY PLACES: race track, fun district, stations & more ================= */
+const ENT=[];     // cinema / arcade / casino spots (press T)
+const CIVIC=[];   // police & fire stations (press T)
+const SPST=[];    // space stations on the Moon & planets (press T)
+const PORTALS=[]; // time-travel portals (drive through!)
+function bigSign(text,bg,fg,w){
+  const cv=document.createElement("canvas");cv.width=512;cv.height=128;
+  const c=cv.getContext("2d");c.fillStyle=bg;c.fillRect(0,0,512,128);
+  c.fillStyle=fg;c.font="bold 46px Segoe UI";c.textAlign="center";c.fillText(text,256,82);
+  return new THREE.Mesh(new THREE.PlaneGeometry(w||16,4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
+}
+function boxPerson(col){
+  const g=new THREE.Group();
+  const b=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.62,0.26),new THREE.MeshLambertMaterial({color:col}));b.position.y=0.75;g.add(b);
+  const h=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.28),new THREE.MeshLambertMaterial({color:0xe8b88a}));h.position.y=1.22;g.add(h);
+  return g;
+}
+/* 🏁 RACE TRACK: a big oval with grandstands full of fans + a race start flag */
+const RTSP=9600;
+function raceTrackPos(i,j){return{x:i*RTSP+4800,z:j*RTSP+3400};}
+function buildRaceTrack(i,j){
+  const p=raceTrackPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
+  /* the oval: a wide flat ring you can drive on */
+  const ring=new THREE.Mesh(new THREE.RingGeometry(28,44,40),new THREE.MeshLambertMaterial({color:0x2e3238,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2;ring.position.set(p.x,y+0.15,p.z);ring.receiveShadow=true;g.add(ring);
+  const inner=new THREE.Mesh(new THREE.CircleGeometry(28,32),new THREE.MeshLambertMaterial({color:0x4c8a3c}));
+  inner.rotation.x=-Math.PI/2;inner.position.set(p.x,y+0.12,p.z);g.add(inner);
+  /* start/finish line */
+  const sf=new THREE.Mesh(new THREE.PlaneGeometry(16,3),new THREE.MeshBasicMaterial({color:0xffffff}));
+  sf.rotation.x=-Math.PI/2;sf.position.set(p.x+36,y+0.18,p.z);g.add(sf);
+  /* GRANDSTAND: three tiers packed with little fans */
+  const standM=new THREE.MeshLambertMaterial({color:0x3a4254});
+  const r=rng(i*31+j*77+9);
+  for(let t=0;t<3;t++){
+    const tier=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(26,1.1,3),standM));
+    tier.position.set(p.x,y+0.55+t*1.15,p.z-52-t*3);g.add(tier);
+    for(let s=0;s<9;s++){
+      const fan=boxPerson(COLORS[Math.floor(r()*COLORS.length)]);
+      fan.position.set(p.x-12+s*3+r()*1.4,y+1.1+t*1.15,p.z-52-t*3);
+      g.add(fan);
+    }
+  }
+  const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(28,0.3,10),new THREE.MeshLambertMaterial({color:0xd7263d})));
+  roof.position.set(p.x,y+6.4,p.z-55);g.add(roof);
+  [[-13],[13]].forEach(o=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,6),poleMat);pl.position.set(p.x+o[0],y+3.2,p.z-55);g.add(pl);});
+  const sign=bigSign("\u{1F3C1} CAR CITY SPEEDWAY","#141821","#ffd75e",22);
+  sign.position.set(p.x,y+8.6,p.z-55);g.add(sign);
+  /* a real race flag: press T here to start a (multiplayer) race on the spot */
+  const fx=p.x+38,fz=p.z+6;
+  const fp=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,5),poleMat);fp.position.set(fx,y+2.5,fz);g.add(fp);
+  const fs=new THREE.Mesh(new THREE.PlaneGeometry(4,2),raceSignMat());fs.position.set(fx+2,y+4,fz);g.add(fs);
+  raceFlags.push({g,x:fx,z:fz});
+  scene.add(g);return g;
+}
+/* 🎬 ENTERTAINMENT DISTRICT: cinema, arcade & casino side by side */
+const ENSP=6000;
+function entPos(i,j){return{x:i*ENSP+2000,z:j*ENSP+4200};}
+function buildEnt(i,j){
+  const p=entPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
+  const defs=[
+    ["cinema","\u{1F3AC} MEGA CINEMA","#141821","#7fd0ff",0x1e2a3a],
+    ["arcade","\u{1F579} ARCADE","#2a0e3a","#ff5d8f",0x3a1650],
+    ["casino","\u{1F3B0} LUCKY CASINO","#2e1c05","#ffd700",0x4a3208]
+  ];
+  defs.forEach((d,k)=>{
+    const bx=p.x+(k-1)*24,bz=p.z;
+    const bld=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(18,10,14),new THREE.MeshLambertMaterial({color:d[4]})));
+    bld.position.set(bx,y+5,bz);g.add(bld);
+    const sign=bigSign(d[1],d[2],d[3],16);
+    sign.position.set(bx,y+11.6,bz+7.2);g.add(sign);
+    const door=new THREE.Mesh(new THREE.BoxGeometry(3.4,3.4,0.2),new THREE.MeshLambertMaterial({color:0x10131a}));
+    door.position.set(bx,y+1.7,bz+7.05);g.add(door);
+    /* neon strip lights */
+    const neon=new THREE.Mesh(new THREE.BoxGeometry(18.2,0.3,0.3),new THREE.MeshBasicMaterial({color:d[3]}));
+    neon.position.set(bx,y+10.1,bz+7.1);g.add(neon);
+    ENT.push({kind:d[0],x:bx,z:bz+8,g});
+  });
+  scene.add(g);return g;
+}
+/* 👮🚒 POLICE & FIRE STATION — the emergency block */
+const CVSP2=4800;
+function civicPos(i,j){return{x:i*CVSP2+3700,z:j*CVSP2+1300};}
+function buildCivic(i,j){
+  const p=civicPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
+  [["police","\u{1F46E} POLICE STATION","#0a1a3a","#7fb8ff",0x22406e,0x3fd0ff],
+   ["fire","\u{1F692} FIRE STATION","#3a0a0a","#ff9b8a",0x8a1c14,0xff5c5c]].forEach((d,k)=>{
+    const bx=p.x+(k*2-1)*14,bz=p.z;
+    const bld=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(16,7,12),new THREE.MeshLambertMaterial({color:d[3]})));
+    bld.position.set(bx,y+3.5,bz);g.add(bld);
+    const sign=bigSign(d[1],d[2] ,"#ffffff",15);
+    sign.position.set(bx,y+8.4,bz+6.2);g.add(sign);
+    const garage=new THREE.Mesh(new THREE.BoxGeometry(6,4,0.2),new THREE.MeshLambertMaterial({color:0x2a2f3a}));
+    garage.position.set(bx,y+2,bz+6.05);g.add(garage);
+    const light=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8),new THREE.MeshBasicMaterial({color:d[4]}));
+    light.position.set(bx,y+7.4,bz+6.1);g.add(light);
+    CIVIC.push({kind:d[0],x:bx,z:bz+7.5,g});
+    /* a parked emergency vehicle out front */
+    const veh=buildEmergencyMesh?buildEmergencyMesh(d[0]==="police"?"police":"fire"):null;
+    if(veh){veh.position.set(bx+5,y,bz+10);veh.rotation.y=Math.PI/2;g.add(veh);}
+  });
+  scene.add(g);return g;
+}
+/* 🏜 OFF-ROAD PARK: dirt ramps, bumps & flags out in the wild (desert & hills) */
+const ORSP=5200;
+function offroadPos(i,j){
+  const x=i*ORSP+900,z=j*ORSP+2600;
+  /* only out in rough country — never in the city center */
+  if(Math.abs(x)<600&&Math.abs(z)<600)return null;
+  return{x,z};
+}
+function buildOffroad(i,j){
+  const p=offroadPos(i,j),g=new THREE.Group();
+  if(!p){scene.add(g);return g;}
+  const y=terrainH(p.x,p.z);
+  const dirtM=new THREE.MeshLambertMaterial({color:0x8a6b42});
+  const pad=new THREE.Mesh(new THREE.CircleGeometry(46,26),dirtM);
+  pad.rotation.x=-Math.PI/2;pad.position.set(p.x,y+0.1,p.z);pad.receiveShadow=true;g.add(pad);
+  const r=rng(i*17+j*59+3);
+  /* dirt ramps you can actually jump (registered as drivable ramps) */
+  for(let k=0;k<3;k++){
+    const a=k/3*Math.PI*2+0.5,d=20+k*7;
+    const rx=p.x+Math.sin(a)*d,rz=p.z+Math.cos(a)*d,h=2.6+k*1.6,len=13;
+    const rmp=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6,0.4,Math.hypot(h,len)),dirtM));
+    rmp.position.set(rx,y+h/2,rz+len/2);rmp.rotation.x=Math.atan2(h,len);g.add(rmp);
+    decks.push({g,x:rx,z:rz,hw:0.1,hd:0.1,tops:[],ramp:{x:rx,z0:rz,z1:rz+len,y0:y+h,y1:y+0.1}});
+  }
+  /* whoop bumps */
+  for(let k=0;k<8;k++){
+    const bx=p.x+(r()-0.5)*70,bz=p.z+(r()-0.5)*70;
+    const bump=new THREE.Mesh(new THREE.SphereGeometry(2.2,10,8,0,Math.PI*2,0,Math.PI/2),dirtM);
+    bump.scale.y=0.35;bump.position.set(bx,y+0.1,bz);g.add(bump);
+  }
+  for(let k=0;k<6;k++){
+    const a=k/6*Math.PI*2;
+    const fl=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.6),new THREE.MeshBasicMaterial({color:0xff7f11,side:THREE.DoubleSide}));
+    fl.position.set(p.x+Math.sin(a)*46,y+2,p.z+Math.cos(a)*46);g.add(fl);
+    const po=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,2.4),poleMat);
+    po.position.set(p.x+Math.sin(a)*46,y+1.2,p.z+Math.cos(a)*46);g.add(po);
+  }
+  const sign=bigSign("\u{1F3DC} OFF-ROAD PARK","#3a2a10","#ffd75e",18);
+  sign.position.set(p.x,y+6,p.z-48);g.add(sign);
+  [[-8],[8]].forEach(o=>{const pl=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,5),poleMat);pl.position.set(p.x+o[0],y+2.5,p.z-48);g.add(pl);});
+  scene.add(g);return g;
+}
+/* 🏭 INDUSTRIAL ZONE: warehouses, chimneys & container stacks */
+const INSP=8000;
+function induPos(i,j){return{x:i*INSP+5200,z:j*INSP+700};}
+function buildIndu(i,j){
+  const p=induPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
+  const r=rng(i*13+j*29+21);
+  for(let k=0;k<3;k++){
+    const wx=p.x+(k-1)*26,wz=p.z;
+    const wh=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(20,8,14),new THREE.MeshLambertMaterial({color:[0x8a8f96,0x6e7680,0x9aa0a8][k]})));
+    wh.position.set(wx,y+4,wz);g.add(wh);
+    const roof2=new THREE.Mesh(new THREE.CylinderGeometry(7,7,20,3,1,false,0,Math.PI),new THREE.MeshLambertMaterial({color:0x4a4f57}));
+    roof2.rotation.z=Math.PI/2;roof2.position.set(wx,y+8,wz);g.add(roof2);
+  }
+  const chim=new THREE.Mesh(new THREE.CylinderGeometry(1.4,2,18,10),new THREE.MeshLambertMaterial({color:0xb0483a}));
+  chim.position.set(p.x+30,y+9,p.z-10);g.add(chim);
+  for(let k=0;k<8;k++){
+    const cx2=p.x-30+r()*24,cz2=p.z+14+r()*8;
+    const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6,2.5,2.4),new THREE.MeshLambertMaterial({color:COLORS[Math.floor(r()*COLORS.length)]})));
+    ct.position.set(cx2,y+1.25+(k%2)*2.5,cz2);g.add(ct);
+  }
+  const sign=bigSign("\u{1F3ED} CAR CITY INDUSTRIAL","#1a1e26","#9aa0a8",20);
+  sign.position.set(p.x,y+10.5,p.z+9);g.add(sign);
+  scene.add(g);return g;
+}
+/* 🕰 TIME PORTALS: glowing rings on the road — drive through to change ERA! */
+const TPSP=7680;
+function portalPos(i,j){return{x:i*TPSP+30,z:j*TPSP+2430};}
+function buildPortal(i,j){
+  const p=portalPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(6,0.5,10,32),
+    new THREE.MeshBasicMaterial({color:0x9b5de5}));
+  ring.position.set(p.x,y+6,p.z);g.add(ring);
+  const glow=new THREE.Mesh(new THREE.CircleGeometry(5.4,24),
+    new THREE.MeshBasicMaterial({color:0x6d28d9,transparent:true,opacity:0.3,side:THREE.DoubleSide}));
+  glow.position.set(p.x,y+6,p.z);g.add(glow);
+  const sign=bigSign("\u{1F570} TIME PORTAL — drive through!","#1c0a33","#d8b4fe",16);
+  sign.position.set(p.x,y+11,p.z);g.add(sign);
+  g.userData.ring=ring;g.userData.glow=glow;
+  PORTALS.push({g,x:p.x,z:p.z,y:y});
+  scene.add(g);return g;
+}
 function updateLandmarks(px,pz){
   const need=new Set();
   /* build at most ONE new landmark per frame — this runs every frame, so a
@@ -3218,6 +3460,17 @@ function updateLandmarks(px,pz){
   for(let i=spi-1;i<=spi+1;i++)for(let j=spj-1;j<=spj+1;j++){
     const k=lmKey("stunt",i,j);need.add(k);
     if(!landmarks.has(k)&&built<1){landmarks.set(k,buildStuntPark(i,j));built++;}
+  }
+  /* the new city places */
+  const lmDefs=[["rtrk",RTSP,4800,3400,buildRaceTrack],["ent",ENSP,2000,4200,buildEnt],
+    ["civ",CVSP2,3700,1300,buildCivic],["offr",ORSP,900,2600,buildOffroad],
+    ["indu",INSP,5200,700,buildIndu],["port",TPSP,30,2430,buildPortal]];
+  for(const[tag,cell,ox2,oz2,fn]of lmDefs){
+    const ci=Math.round((px-ox2)/cell),cj=Math.round((pz-oz2)/cell);
+    for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){
+      const k=lmKey(tag,i,j);need.add(k);
+      if(!landmarks.has(k)&&built<1){landmarks.set(k,fn(i,j));built++;}
+    }
   }
   }
   for(const[k,g]of landmarks){

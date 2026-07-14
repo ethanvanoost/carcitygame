@@ -117,6 +117,41 @@ function buildVehicleMesh(type,color,top){
     addWheel(g,0,1,0.42,0.16,true);addWheel(g,0,-1,0.42,0.2,false);
     addBlobShadow(g,1.5,3);
     g.userData.camD=11;g.userData.camH=4.4;g.userData.rider=true;
+  }else if(type==="camper"){
+    /* 🚐 a real motorhome: cab in front, tall living box behind, door & windows */
+    const base=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.3,0.55,6.4),mat));base.position.y=0.68;g.add(base);
+    const home=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.3,1.7,4.6),mat));home.position.set(0,1.75,-0.8);g.add(home);
+    const cab=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.2,0.95,1.6),mat));cab.position.set(0,1.35,2.3);g.add(cab);
+    const ws=new THREE.Mesh(new THREE.PlaneGeometry(1.9,0.72),glassMat);ws.position.set(0,1.62,3.06);ws.rotation.x=-0.35;g.add(ws);
+    /* side windows + the door with a little handle */
+    [[-1.16],[1.16]].forEach(p=>{
+      for(let i=0;i<2;i++){
+        const win=new THREE.Mesh(new THREE.PlaneGeometry(1.1,0.6),glassMat);
+        win.position.set(p[0],2.05,0.2-i*1.9);win.rotation.y=p[0]>0?Math.PI/2:-Math.PI/2;g.add(win);
+      }
+    });
+    const door=new THREE.Mesh(new THREE.BoxGeometry(0.06,1.35,0.75),darkTrim);door.position.set(1.16,1.35,-2.4);g.add(door);
+    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.05,6,6),hubMat);knob.position.set(1.2,1.35,-2.1);g.add(knob);
+    /* white roof with a vent + a cheerful awning stripe */
+    const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.34,0.14,4.7),new THREE.MeshLambertMaterial({color:0xf2f5f7})));roof.position.set(0,2.66,-0.8);g.add(roof);
+    const vent=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.18,0.6),darkTrim);vent.position.set(0,2.8,-1.4);g.add(vent);
+    const stripe=new THREE.Mesh(new THREE.BoxGeometry(2.34,0.2,4.62),new THREE.MeshLambertMaterial({color:0xff7f11}));stripe.position.set(0,1.05,-0.8);g.add(stripe);
+    g.userData.tails=[];g.userData.beams=[];
+    [[-0.8],[0.8]].forEach(p=>{
+      const h=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.18,0.08),new THREE.MeshBasicMaterial({color:0xfff2b0}));
+      h.position.set(p[0],0.9,3.22);g.add(h);
+      const t=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.16,0.08),new THREE.MeshBasicMaterial({color:0x8a1420}));
+      t.position.set(p[0],0.9,-3.22);g.add(t);
+      g.userData.tails.push(t);
+      const beam=new THREE.Mesh(new THREE.ConeGeometry(1.5,10,10,1,true),
+        new THREE.MeshBasicMaterial({color:0xfff2b0,transparent:true,opacity:0.09,depthWrite:false,side:THREE.DoubleSide}));
+      beam.rotation.x=-Math.PI/2;beam.position.set(p[0],0.9,8.2);beam.visible=false;g.add(beam);
+      g.userData.beams.push(beam);
+    });
+    addWheel(g,-1.05,2.1,0.46,0.32,true);addWheel(g,1.05,2.1,0.46,0.32,true);
+    addWheel(g,-1.05,-1.9,0.46,0.32,false);addWheel(g,1.05,-1.9,0.46,0.32,false);
+    addBlobShadow(g,3.6,7.4);
+    g.userData.camD=15;g.userData.camH=6;
   }else{
     const fr=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.1,1.6),mat);fr.position.y=0.85;fr.rotation.x=0.12;g.add(fr);
     const st=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.5),mat);st.position.set(0,1.05,-0.55);g.add(st);
@@ -593,19 +628,38 @@ function ensureAudio(){
     startMusic();
   }catch(e){}
 }
-/* REAL music: the mp3s from the Music folder play in a random shuffle */
-const MUSIC_FILES=[
-  "Music/orbit-d0d-main-version-29627-02-39.mp3",
-  "Music/rainy-window-avbe-main-version-18796-01-21.mp3",
-  "Music/soft-mist-movement-tranquilium-main-version-25768-04-42.mp3"
+/* 📻 REAL car radio: pick a station — the mp3s come from the Music folder */
+const RADIO_STATIONS=[
+  {name:"\u{1F4F4} Radio OFF",files:[]},
+  {name:"\u{1F3A7} Chill FM — relaxing driving tunes",files:[
+    "Music/orbit-d0d-main-version-29627-02-39.mp3",
+    "Music/rainy-window-avbe-main-version-18796-01-21.mp3",
+    "Music/soft-mist-movement-tranquilium-main-version-25768-04-42.mp3"
+  ]},
+  {name:"\u{1F525} HITS FM — bangers only!",files:[
+    "Music/radio/Beat It - Michael Jackson (Lyrics).mp3",
+    "Music/radio/Billie Jean - Michael Jackson (Lyrics).mp3",
+    "Music/radio/IShowSpeed - World Cup (Champions) (Lyrics).mp3",
+    "Music/radio/Indian meme song (Original).mp3",
+    "Music/radio/KITSCHKRIEG feat. BLUMENGARTEN & SHIRIN DAVID - Gut Genug (Lyrics).mp3",
+    "Music/radio/Michael Jackson - Smooth Criminal [Lyrics].mp3",
+    "Music/radio/Shakira & Burna Boy - Dai Dai (Lyrics) World Cup Song 2026.mp3",
+    "Music/radio/Subway Surfers Bass Boosted.mp3"
+  ]},
+  {name:"\u{1F5DE} CITY NEWS RADIO — live AI DJ (traffic, accidents & news!)",files:[],dj:true}
 ];
+const RADIO={st:parseInt(localStorage.getItem("vc4radio")||"1",10)||0};
+if(!RADIO_STATIONS[RADIO.st])RADIO.st=1;
 let musicAudio=null,musicIdx=-1;
+function radioStation(){return RADIO_STATIONS[RADIO.st]||RADIO_STATIONS[0];}
 function nextTrack(){
   if(!musicAudio)return;
+  const files=radioStation().files;
+  if(!files.length){musicAudio.pause();return;}
   let i;
-  do{i=Math.floor(Math.random()*MUSIC_FILES.length);}while(MUSIC_FILES.length>1&&i===musicIdx);
+  do{i=Math.floor(Math.random()*files.length);}while(files.length>1&&i===musicIdx);
   musicIdx=i;
-  musicAudio.src=MUSIC_FILES[i];
+  musicAudio.src=encodeURI(files[i]);
   if(SND.music)musicAudio.play().catch(()=>{});
 }
 function startMusic(){
@@ -618,9 +672,19 @@ function startMusic(){
     nextTrack();
   }catch(e){}
 }
+function setStation(i){
+  RADIO.st=i;
+  try{localStorage.setItem("vc4radio",String(i));}catch(e){}
+  try{speechSynthesis.cancel();}catch(e){}
+  if(!musicAudio)startMusic();
+  musicIdx=-1;
+  const st=radioStation();
+  if(st.files.length)nextTrack();
+  else if(musicAudio)musicAudio.pause();
+}
 function setMusicOn(on){
   if(!musicAudio)return;
-  if(on)musicAudio.play().catch(()=>{});
+  if(on&&radioStation().files.length)musicAudio.play().catch(()=>{});
   else musicAudio.pause();
 }
 function playCrash(strength){

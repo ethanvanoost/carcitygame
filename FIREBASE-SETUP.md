@@ -196,14 +196,15 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
        },
        "board": {
          "$week": {
+           ".read": true,
            "$id": {
-             ".read": true,
              ".write": "!data.exists() || data.child('t').val() === newData.child('t').val()",
              ".validate": "newData.hasChildren(['t','n','money'])",
              "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
              "n": { ".validate": "newData.isString() && newData.val().length <= 16" },
              "money": { ".validate": "newData.isNumber()" },
              "km": { ".validate": "newData.isNumber()" },
+             "wins": { ".validate": "newData.isNumber()" },
              "ts": { ".validate": "newData.isNumber()" },
              "$other": { ".validate": false }
            }
@@ -250,9 +251,13 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    create-only winner record — the first player to write it takes the pot.
    The `treasure` part records the **first finder of each daily treasure**
    (create-only, one record per world per day). The `board` part is the
-   **weekly leaderboard**: each player updates their own row (guarded by their
-   token) with their money and kilometers; a new week starts a fresh board,
-   and the #1 player gets a golden crown in the game.
+   **weekly leaderboard & tournament**: each player updates their own row (guarded
+   by their token) with their money, kilometers and race wins; a new week starts a
+   fresh board, and the #1 player gets a golden crown in the game.
+   ⚠️ **IMPORTANT (leaderboard fix):** the `".read": true` line must sit at the
+   `$week` level (as shown above), NOT inside `$id` — otherwise the game cannot
+   read the list and the leaderboard always looks empty. If your leaderboard is
+   empty, re-paste these rules and hit **Publish**.
 
    > Already pasted an older version of the rules? Paste this new version over the old
    > ones and hit **Publish** again — otherwise multiplayer and username claiming
