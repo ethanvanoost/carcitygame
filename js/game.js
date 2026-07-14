@@ -3435,8 +3435,11 @@ async function sendInvite(name,world,mc){
 $("wtSearchBtn").onclick=wtDoSearch;
 $("wtSearch").addEventListener("keydown",e=>{if(e.key==="Enter")wtDoSearch();});
 function wtEnterMc(){
-  if(S.mode!=="game"&&!S.selected){toast("⛏️ First pick a vehicle and start playing — then enter MINECRAFT from the \u{1F30D} Worlds tab or the map!");return;}
-  if(S.mode!=="game"){S.mode="game";$("menu").style.display="none";$("hud").classList.add("show");}
+  if(S.mode!=="game"){
+    /* not playing yet? start the game with your (last) vehicle, then dive in */
+    const v=S.selected||VEHICLES.find(x=>OWN.has(x.name))||VEHICLES[VEHICLES.length-1];
+    startGame(v);
+  }
   enterMc();
 }
 $("wtMc").onclick=wtEnterMc;
