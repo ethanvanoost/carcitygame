@@ -2073,17 +2073,23 @@ function gotoRoom(rm){
   player.y=rm.ry+0.05;player.grounded=true;player.vy=0;
   toast("\u{1F6CE}️ Welcome to your room!");
 }
-function sleepNight(){
+/* jump YOUR clock forward to the next `hour`:00 — works everywhere, even on
+   servers (there it moves your personal time-skew instead of the shared clock) */
+function skipToMorning(hour){
   if(WORLD.name){
-    /* on a server the clock is shared with everyone — the night can't be skipped */
-    HUNGER.v=Math.max(HUNGER.v,60);HUNGER.starveT=0;
-    toast("\u{1F634} Time is shared with everyone on this server, so the night goes on — but you had a lovely nap & breakfast!");
-    return;
+    const fwd=(((hour*60)-CLOCK.min)+1440)%1440||1440;
+    CLOCK.skew=(CLOCK.skew||0)+fwd;
+    try{localStorage.setItem("vc4skew",String(CLOCK.skew));}catch(e){}
+    clockTick(0);   // apply the jump right away
+  }else{
+    if(CLOCK.min>=hour*60)CLOCK.day++;
+    CLOCK.min=hour*60;
   }
-  if(CLOCK.min>=7*60)CLOCK.day++;
-  CLOCK.min=7*60;
+}
+function sleepNight(){
+  skipToMorning(7);
   HUNGER.v=Math.max(HUNGER.v,40);HUNGER.starveT=0;   // breakfast included
-  toast("\u{1F634} Zzz... Good morning! It's 07:00 on day "+CLOCK.day+".");
+  toast("\u{1F634} Zzz... Good morning! It's 07:00 on day "+CLOCK.day+" — the night is GONE!");
 }
 function tryFurniture(){
   if(!player.onFoot||S.world!=="earth")return false;
@@ -4455,14 +4461,9 @@ function openCamper(){
     {label:"❌ Close",value:"cancel"}
   ],v=>{
     if(v==="sleep"){
-      if(typeof WORLD!=="undefined"&&WORLD.name){
-        HUNGER.v=100;HUNGER.starveT=0;
-        toast("\u{1F634}\u{1F31E} You slept like a rock in your camper! (On a server the clock is shared, so time keeps ticking.)");
-      }else{
-        CLOCK.min=8*60;if(isNight())CLOCK.day++;
-        HUNGER.v=100;HUNGER.starveT=0;
-        toast("\u{1F634}\u{1F31E} Good morning! You slept in your camper — it's 08:00 and you're full of energy!");
-      }
+      skipToMorning(8);
+      HUNGER.v=100;HUNGER.starveT=0;
+      toast("\u{1F634}\u{1F31E} Good morning! You slept in your camper — it's 08:00 and you're full of energy!");
       if(typeof PHP!=="undefined"){PHP.v=PHP.max;heartsUI();}
       saveGame();
     }else if(v==="cook"){

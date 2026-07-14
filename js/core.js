@@ -43,13 +43,14 @@ function uConv(k){return S.unit==="kmh"?k:k*0.621371}
 function uLabel(){return S.unit==="kmh"?"km/h":"mph"}
 
 /* ================= GAME TIME (1 real second = 5 game minutes) ================= */
-const CLOCK={min:8*60,day:1};
+const CLOCK={min:8*60,day:1,skew:parseInt(localStorage.getItem("vc4skew")||"0",10)||0};
 /* on a SERVER (named world) everyone shares the same clock: game time is
-   derived from the real-world clock, so all players see the same day & night */
+   derived from the real-world clock. CLOCK.skew is YOUR personal time-jump
+   (in game minutes) — sleeping adds to it, so the night skips for you too. */
 const SHARED_T0=1767225600000;   // 2026-01-01 — shared time starts counting here
 function clockTick(dt){
   if(typeof WORLD!=="undefined"&&WORLD.name){
-    const tm=(Date.now()-SHARED_T0)/200;   // 1 real second = 5 game minutes
+    const tm=(Date.now()-SHARED_T0)/200+(CLOCK.skew||0);   // 1 real second = 5 game minutes
     CLOCK.day=Math.floor(tm/1440)+1;
     CLOCK.min=((tm%1440)+1440)%1440;
     return;
