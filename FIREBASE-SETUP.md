@@ -238,7 +238,10 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    The `payments` part is the **pay-a-player inbox**:
    anyone can drop a payment into someone's inbox (amount 1 to 1 billion), and the
    game collects and deletes them within seconds — a payment can also carry a
-   **dumpling gift** (`d`). Claims now also carry the mansion's **furniture layout**
+   **dumpling gift** (`d`), or a **world invite** (`d` = `INV|kind|worldname`, sent
+   from the 🌍 Worlds tab): the invited player gets a notification the moment they
+   play and the world appears in their "Shared with me" list. Invites reuse this
+   existing inbox, so **no rules change is needed** for them. Claims now also carry the mansion's **furniture layout**
    (`furn`) and **dumpling shop price** (`shop`), so other players see your mansion
    exactly how you decorated it and can buy from your stall. The `guestbook` part
    lets visitors write one-line messages at a mansion (create-only, max 100

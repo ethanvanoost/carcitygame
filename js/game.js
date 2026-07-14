@@ -685,8 +685,7 @@ function renderDump(){
 }
 $("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
-$("dumpOpen").onclick=()=>{
-  if(!DUMP.unopened)return;
+function rollDump(){
   DUMP.unopened--;
   const roll=Math.random(),month=new Date().getMonth();
   let color,hex;
@@ -696,17 +695,36 @@ $("dumpOpen").onclick=()=>{
   else if(roll<0.08){color="Gold";hex="#ffd700";}
   else{const c=DUMP_COLORS[Math.floor(Math.random()*DUMP_COLORS.length)];color=c[0];hex=c[1];}
   const glitter=Math.random()<0.08;   // rainbow + glitter = VERY rare
-  DUMP.owned.push({color,hex,glitter});
-  if(color==="Rainbow"&&glitter){
-    toast("\u{1F308}✨ NO WAY!!! A GLITTER RAINBOW DUMPLING — the rarest of all! ($250)");
+  const d={color,hex,glitter};
+  DUMP.owned.push(d);
+  if(color==="Rainbow"&&glitter)
     pushNews("\u{1F308}✨ BREAKING: "+mpName()+" just opened the LEGENDARY GLITTER RAINBOW dumpling — the rarest in the world!!");
-  }
-  else if(color==="Rainbow"){
-    toast("\u{1F308}\u{1F95F} WOW — a rare RAINBOW dumpling! ($30)");
+  else if(color==="Rainbow")
     pushNews("\u{1F308} "+mpName()+" opened a rare RAINBOW dumpling!");
-  }
+  return d;
+}
+$("dumpOpen").onclick=()=>{
+  if(!DUMP.unopened)return;
+  const d=rollDump(),{color,glitter}=d;
+  if(color==="Rainbow"&&glitter)toast("\u{1F308}✨ NO WAY!!! A GLITTER RAINBOW DUMPLING — the rarest of all! ($250)");
+  else if(color==="Rainbow")toast("\u{1F308}\u{1F95F} WOW — a rare RAINBOW dumpling! ($30)");
   else if(color==="Gold")toast("\u{1F947}\u{1F95F} Shiny — a GOLD"+(glitter?" GLITTER":"")+" dumpling!");
   else toast(glitter?"✨\u{1F95F} WOW — a RARE GLITTER "+color+" dumpling!!":"\u{1F95F} You got a "+color+" dumpling!");
+  renderDump();saveGame();
+};
+/* open EVERY unopened dumpling at once — one big summary at the end */
+$("dumpOpenAll").onclick=()=>{
+  if(!DUMP.unopened){toast("No unopened dumplings — buy them at a \u{1F6D2} MEGA MART!");return;}
+  const opened=[];let best=null,bestVal=-1;
+  while(DUMP.unopened>0){
+    const d=rollDump();
+    opened.push(d);
+    const v=dumpValue(d);
+    if(v>bestVal){bestVal=v;best=d;}
+  }
+  const glit=opened.filter(d=>d.glitter).length;
+  toast("\u{1F389} You opened "+opened.length+" dumplings"+(glit?" ("+glit+" ✨ GLITTER!)":"")
+    +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+best.color+" ($"+fmtMoney(bestVal)+")!");
   renderDump();saveGame();
 };
 $("dumpDisplay").onclick=()=>{
@@ -812,16 +830,19 @@ function buildCaveRoom(){
     else{cone.rotation.x=Math.PI;cone.position.set(sx,y+6.4,sz2);}
     g.add(cone);
   }
-  /* glowing crystals — walk into them to collect ($25 each) */
+  /* glowing crystals — walk into them to collect ($1,000 each!). Each cave
+     remembers which crystals were taken; they respawn after 30 minutes. */
   CAVE.crystals=[];
+  const taken=caveTaken();
   const cols=[0x7df9ff,0xb388ff,0x7cff9e];
   for(let i=0;i<3;i++){
     const a=i*2.1+0.6,d=8+i*3;
     const px=cx+Math.sin(a)*d,pz=cz+Math.cos(a)*d*0.6;
+    const gone=taken[i]&&Date.now()-taken[i]<CAVE_RESPAWN;
     const cr=new THREE.Mesh(new THREE.OctahedronGeometry(0.7),new THREE.MeshBasicMaterial({color:cols[i]}));
-    cr.position.set(px,y+0.9,pz);g.add(cr);
-    const lt=new THREE.PointLight(cols[i],0.8,14);lt.position.set(px,y+2,pz);g.add(lt);
-    CAVE.crystals.push({mesh:cr,x:px,z:pz,got:false});
+    cr.position.set(px,y+0.9,pz);cr.visible=!gone;g.add(cr);
+    const lt=new THREE.PointLight(cols[i],gone?0:0.8,14);lt.position.set(px,y+2,pz);g.add(lt);
+    CAVE.crystals.push({mesh:cr,x:px,z:pz,got:gone,idx:i});
   }
   const lamp=new THREE.PointLight(0xffc38a,0.9,44);lamp.position.set(cx,y+5,cz);g.add(lamp);
   /* glowing exit mat */
@@ -846,10 +867,21 @@ function enterCave(c){
 }
 function exitCave(silent){
   CAVE.in=false;
+  if(BOSS.on)endBoss();
   if(CAVE.room){scene.remove(CAVE.room);disposeGroup(CAVE.room);CAVE.room=null;}
   player.x=CAVE.rx;player.z=CAVE.rz;
   player.y=terrainH(player.x,player.z);player.vy=0;player.grounded=true;
   if(!silent)toast("\u{1F31E} Back outside — the cave stays right here.");
+}
+/* which crystals of THIS cave were taken (and when) — respawn after 30 min */
+const CAVE_RESPAWN=30*60*1000;
+function caveKey(){return "vc4cavec:"+CAVE.cx+","+CAVE.cz;}
+function caveTaken(){
+  try{const d=JSON.parse(localStorage.getItem(caveKey())||"{}");return d&&typeof d==="object"?d:{};}catch(e){return{};}
+}
+function markCaveTaken(i){
+  const d=caveTaken();d[i]=Date.now();
+  try{localStorage.setItem(caveKey(),JSON.stringify(d));}catch(e){}
 }
 function updateCave(){
   if(!CAVE.in)return;
@@ -858,8 +890,229 @@ function updateCave(){
     cr.mesh.rotation.y+=0.03;
     if(Math.hypot(player.x-cr.x,player.z-cr.z)<2){
       cr.got=true;cr.mesh.visible=false;
-      addMoney(25);
-      toast("\u{1F48E} Crystal collected — +$25!");
+      markCaveTaken(cr.idx);
+      addMoney(1000);
+      toast("\u{1F48E} Crystal collected — +$1,000! (it grows back in 30 minutes)");
+    }
+  }
+  updateBoss();
+}
+/* ================= HEARTS: your health (cave boss fights & the Minecraft world) ================= */
+const PHP={v:10,max:10,hurtAt:0,regenT:0};
+const heartsDiv=document.createElement("div");
+heartsDiv.id="hearts";
+heartsDiv.style.cssText="position:absolute;left:50%;transform:translateX(-50%);bottom:92px;font-size:20px;letter-spacing:2px;text-shadow:0 2px 5px rgba(0,0,0,.7);display:none;pointer-events:none;z-index:30";
+$("hud").appendChild(heartsDiv);
+function heartsShow(on){heartsDiv.style.display=on?"block":"none";if(on)heartsUI();}
+function heartsUI(){let s="";for(let i=0;i<PHP.max;i++)s+=i<PHP.v?"❤️":"🖤";heartsDiv.textContent=s;}
+function heartsReset(){PHP.v=PHP.max;PHP.hurtAt=0;heartsUI();}
+function playerHurt(n){
+  const now=performance.now();
+  if(now-PHP.hurtAt<900)return false;   // short mercy time between hits
+  PHP.hurtAt=now;PHP.v=Math.max(0,PHP.v-n);heartsUI();
+  return true;
+}
+function heartsRegen(dt){
+  if(PHP.v>=PHP.max)return;
+  if(performance.now()-PHP.hurtAt<4000)return;   // no regen right after a hit
+  PHP.regenT+=dt;
+  if(PHP.regenT>5){PHP.regenT=0;PHP.v=Math.min(PHP.max,PHP.v+1);heartsUI();}
+}
+/* ================= THE CAVE BOSS: a rock golem deep in every cave =================
+   Win the fight: you GET 10% of your money. Lose all hearts: you LOSE 10%. */
+const BOSS={on:false,hp:0,max:12,g:null,x:0,z:0,cool:0,lastT:0};
+function buildBossMesh(){
+  const g=new THREE.Group();
+  const rockM=new THREE.MeshLambertMaterial({color:0x6b6258});
+  const rockD=new THREE.MeshLambertMaterial({color:0x4a443c});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(2.2,2.2,1.5),rockM);body.position.y=2;g.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(1.3,1.1,1.2),rockD);head.position.y=3.7;g.add(head);
+  const eyeM=new THREE.MeshBasicMaterial({color:0xff3020});
+  [[-0.3],[0.3]].forEach(p=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.18,0.1),eyeM);e.position.set(p[0],3.8,0.63);g.add(e);});
+  [[-1.5],[1.5]].forEach(p=>{
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(0.8,2.4,0.8),rockD);arm.position.set(p[0],2,0);g.add(arm);
+    const fist=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),rockM);fist.position.set(p[0],0.6,0);g.add(fist);
+  });
+  [[-0.6],[0.6]].forEach(p=>{const leg=new THREE.Mesh(new THREE.BoxGeometry(0.85,1,0.9),rockD);leg.position.set(p[0],0.5,0);g.add(leg);});
+  return g;
+}
+function startBoss(){
+  if(BOSS.on)return;
+  BOSS.on=true;BOSS.hp=BOSS.max;BOSS.cool=0;BOSS.lastT=performance.now();
+  BOSS.x=CAVE.cx;BOSS.z=CAVE.cz-10;
+  BOSS.g=buildBossMesh();
+  BOSS.g.position.set(BOSS.x,CAVE.fy,BOSS.z);
+  if(CAVE.room)CAVE.room.add(BOSS.g);
+  heartsReset();heartsShow(true);
+  toast("\u{1F5FF} THE CAVE BOSS AWAKENS! Get close and press T to SWING — don't let it touch you!!");
+}
+function endBoss(){
+  BOSS.on=false;
+  if(BOSS.g&&BOSS.g.parent)BOSS.g.parent.remove(BOSS.g);
+  BOSS.g=null;
+  if(S.world!=="mc")heartsShow(false);
+}
+function bossWin(){
+  const prize=Math.floor(MONEY.v*0.10);
+  endBoss();
+  addMoney(prize);
+  pushNews("\u{1F5FF} "+mpName()+" DEFEATED the cave boss and won $"+fmtMoney(prize)+"!");
+  toast("\u{1F3C6} YOU BEAT THE CAVE BOSS — +10% of your money: $"+fmtMoney(prize)+"!!");
+  saveGame();
+}
+function bossLose(){
+  const lost=Math.floor(MONEY.v*0.10);
+  MONEY.v-=lost;updateMoneyUI();
+  endBoss();
+  exitCave(true);
+  heartsReset();heartsShow(false);
+  toast("\u{1F480} The boss got you... you lost 10% of your money ($"+fmtMoney(lost)+"). Train and try again!");
+  saveGame();
+}
+function bossAttack(){
+  const d=Math.hypot(player.x-BOSS.x,player.z-BOSS.z);
+  if(d>4.5){toast("⚔️ Too far — get closer to the boss and press T!");return;}
+  BOSS.hp--;
+  /* the boss staggers back from your hit */
+  const dx=(BOSS.x-player.x)/(d||1),dz=(BOSS.z-player.z)/(d||1);
+  BOSS.x+=dx*2.2;BOSS.z+=dz*2.2;
+  if(BOSS.hp<=0){bossWin();return;}
+  toast("⚔️ HIT! Boss health: "+BOSS.hp+" / "+BOSS.max);
+}
+function updateBoss(){
+  if(!BOSS.on||!CAVE.in)return;
+  const now=performance.now(),dt=Math.min(0.1,(now-BOSS.lastT)/1000);
+  BOSS.lastT=now;
+  heartsRegen(dt);
+  /* stomp toward the player */
+  const dx=player.x-BOSS.x,dz=player.z-BOSS.z,d=Math.hypot(dx,dz);
+  if(d>1.3){BOSS.x+=dx/d*3.1*dt;BOSS.z+=dz/d*3.1*dt;}
+  /* stay inside the cave room */
+  BOSS.x=Math.max(CAVE.cx-21,Math.min(CAVE.cx+21,BOSS.x));
+  BOSS.z=Math.max(CAVE.cz-15,Math.min(CAVE.cz+15,BOSS.z));
+  if(BOSS.g){
+    BOSS.g.position.set(BOSS.x,CAVE.fy+Math.abs(Math.sin(now/280))*0.25,BOSS.z);
+    BOSS.g.rotation.y=Math.atan2(dx,dz);
+  }
+  /* it caught you! */
+  if(d<1.8&&playerHurt(1)){
+    const kx=dx/(d||1),kz=dz/(d||1);
+    player.x=Math.max(CAVE.cx-21,Math.min(CAVE.cx+21,player.x+kx*4));
+    player.z=Math.max(CAVE.cz-15,Math.min(CAVE.cz+15,player.z+kz*4));
+    if(PHP.v<=0)bossLose();
+    else toast("\u{1F4A5} The boss smashed you! "+PHP.v+" ❤️ left — keep moving!");
+  }
+}
+/* pressing T inside a cave: attack the boss, or open the cave menu */
+function caveT(){
+  if(BOSS.on){bossAttack();return;}
+  showDest("\u{1F573}️ The cave...",[
+    {label:"\u{1F5FF} FIGHT THE CAVE BOSS — win +10% of your money, lose −10%!",value:"boss"},
+    {label:"\u{1F48E} Keep collecting crystals",value:"stay"},
+    {label:"\u{1F31E} Go back outside",value:"exit"}
+  ],v=>{
+    if(v==="boss")startBoss();
+    else if(v==="exit")exitCave();
+  });
+}
+/* ================= ⛏️ THE MINECRAFT WORLD =================
+   Blocky hills, trees & ores to mine, zombies, hearts — every resource
+   sells for REAL game money. Your own adventure (no other players). */
+const MCINV={wood:0,stone:0,coal:0,iron:0,gold:0,diamond:0};
+const MC_PRICES={wood:5,stone:3,coal:10,iron:25,gold:60,diamond:250};
+const MC_EMOJI={wood:"\u{1FAB5}",stone:"\u{1FAA8}",coal:"⚫",iron:"⚙️",gold:"\u{1F947}",diamond:"\u{1F48E}"};
+const MC_YIELD={tree:["wood",3],stone:["stone",2],coal:["coal",2],iron:["iron",1],gold:["gold",1],diamond:["diamond",1]};
+function enterMc(){
+  switchWorld("mc");
+  teleportTo(6,6);
+  heartsReset();
+  toast("⛏️ Welcome to MINECRAFT! Press T near trees & ores to MINE them, T anywhere else to SELL — and watch out for \u{1F9DF} ZOMBIES!");
+}
+function nearMcThing(){
+  let best=null;
+  for(let i=mcThings.length-1;i>=0;i--){
+    const t=mcThings[i];
+    if(offScene(t.g)){mcThings.splice(i,1);continue;}
+    const d=Math.hypot(player.x-t.x,player.z-t.z);
+    if(d<4&&(!best||d<best.d))best={t,d};
+  }
+  return best?best.t:null;
+}
+function mineMc(t){
+  if(t.g.parent)t.g.parent.remove(t.g);
+  const i=mcThings.indexOf(t);if(i>=0)mcThings.splice(i,1);
+  const[res,n]=MC_YIELD[t.kind]||["stone",1];
+  MCINV[res]+=n;
+  toast(MC_EMOJI[res]+" "+(t.kind==="tree"?"CHOP! ":"MINE! ")+"+"+n+" "+res+" (you have "+MCINV[res]+") — worth $"+(MC_PRICES[res]*n));
+  saveGame();
+}
+function mcTotal(){let s=0;for(const k in MCINV)s+=MCINV[k]*MC_PRICES[k];return s;}
+function openMcSell(){
+  const total=mcTotal();
+  const inv=Object.keys(MCINV).map(k=>MC_EMOJI[k]+" "+MCINV[k]).join("  ");
+  showDest("\u{1F392} Your backpack: "+inv,[
+    {label:"\u{1F4B0} SELL EVERYTHING — $"+fmtMoney(total),value:"sell"},
+    {label:"\u{1F3E0} Leave MINECRAFT (back to the city)",value:"leave"},
+    {label:"❌ Keep mining",value:"cancel"}
+  ],v=>{
+    if(v==="leave"){switchWorld("earth");teleportTo(WORLD.ox+6,WORLD.oz+6);toast("\u{1F3E0} Back in the city!");return;}
+    if(v!=="sell")return;
+    if(!total){toast("\u{1F392} Your backpack is empty — chop some trees and mine some ores first!");return;}
+    addMoney(total);
+    for(const k in MCINV)MCINV[k]=0;
+    toast("\u{1F4B0} SOLD! You earned $"+fmtMoney(total)+" — it's in your normal game money!");
+    saveGame();
+  });
+}
+/* zombies: they shamble around, chase you, and hit HALF as hard as the boss */
+const MCMOBS=[];
+function mcDeath(){
+  teleportTo(6,6);
+  heartsReset();
+  for(const m of MCMOBS)if(m.g.parent)m.g.parent.remove(m.g);
+  MCMOBS.length=0;
+  toast("\u{1F480} The zombies got you! You respawned at the spawn — your backpack is safe.");
+}
+function updateMc(dt){
+  if(S.world!=="mc"){
+    if(MCMOBS.length){for(const m of MCMOBS)if(m.g.parent)m.g.parent.remove(m.g);MCMOBS.length=0;}
+    return;
+  }
+  heartsRegen(dt);
+  /* keep ~5 zombies around you (they spawn a bit away, never at spawn pad) */
+  for(let i=MCMOBS.length-1;i>=0;i--){
+    const m=MCMOBS[i];
+    if(Math.hypot(m.x-player.x,m.z-player.z)>110){scene.remove(m.g);MCMOBS.splice(i,1);}
+  }
+  if(MCMOBS.length<5&&Math.random()<0.02){
+    const a=Math.random()*Math.PI*2,d=38+Math.random()*30;
+    const mx=player.x+Math.sin(a)*d,mz=player.z+Math.cos(a)*d;
+    if(Math.hypot(mx-6,mz-6)>22){
+      const g=makeMcMob();
+      g.position.set(mx,terrainH(mx,mz),mz);
+      scene.add(g);
+      MCMOBS.push({g,x:mx,z:mz,yaw:Math.random()*7,t:0});
+    }
+  }
+  const now=performance.now();
+  for(const m of MCMOBS){
+    const dx=player.x-m.x,dz=player.z-m.z,d=Math.hypot(dx,dz);
+    if(d<18&&player.onFoot){
+      /* BRAINS!! (chase) */
+      m.yaw=Math.atan2(dx,dz);
+      if(d>1){m.x+=dx/d*2.9*dt;m.z+=dz/d*2.9*dt;}
+    }else{
+      m.t-=dt;
+      if(m.t<=0){m.t=2+Math.random()*3;m.yaw+=(Math.random()-0.5)*2.4;}
+      m.x+=Math.sin(m.yaw)*1.1*dt;m.z+=Math.cos(m.yaw)*1.1*dt;
+    }
+    m.g.position.set(m.x,terrainH(m.x,m.z)+Math.abs(Math.sin(now/260+m.x))*0.08,m.z);
+    m.g.rotation.y=m.yaw;
+    if(d<1.3&&player.onFoot&&playerHurt(1)){
+      const kx=dx/(d||1),kz=dz/(d||1);
+      player.x+=kx*3.5;player.z+=kz*3.5;
+      if(PHP.v<=0){mcDeath();break;}
+      toast("\u{1F9DF} A zombie bit you! "+PHP.v+" ❤️ left — run or fight back with distance!");
     }
   }
 }
@@ -3069,6 +3322,124 @@ $("serverCreate").onclick=createServer;
 $("serverRefresh").onclick=()=>{SERVERS.loaded=false;renderServers();};
 $("serverSearch").addEventListener("input",()=>{SERVERS.q=$("serverSearch").value.trim();if(SERVERS.loaded)renderServers();});
 $("serverNew").addEventListener("keydown",e=>{if(e.key==="Enter")createServer();});
+/* ================= 🌍 WORLDS TAB: your worlds, shared worlds & invites =================
+   Invites ride the payments inbox (d = "INV|kind|world"), so the moment the
+   invited player is online their game collects it and shows a notification. */
+const SHARED={list:[]};
+function loadShared(){
+  try{const d=JSON.parse(localStorage.getItem("vc4shared")||"[]");
+    if(Array.isArray(d))SHARED.list=d.filter(s=>s&&typeof s.n==="string");}catch(e){}
+}
+function saveShared(){try{localStorage.setItem("vc4shared",JSON.stringify(SHARED.list))}catch(e){}}
+loadShared();
+function addShared(n,from,mc){
+  if(SHARED.list.some(s=>s.n===n&&!!s.mc===!!mc))return;
+  SHARED.list.push({n,from:from||"",mc:!!mc});saveShared();
+  try{renderWorldsTab();}catch(e){}
+}
+function wtRow(parent,name,info,btnLabel,onGo,onDel){
+  const row=document.createElement("div");row.className="srvRow";
+  const nm=document.createElement("div");nm.className="nm";nm.textContent=name;
+  const inf=document.createElement("div");inf.className="inf";inf.textContent=info;
+  const b=document.createElement("button");b.className="btn warn";b.textContent=btnLabel;b.onclick=onGo;
+  row.appendChild(nm);row.appendChild(inf);row.appendChild(b);
+  if(onDel){
+    const x=document.createElement("button");x.className="btn";x.textContent="✕";x.title="Remove";
+    x.onclick=onDel;row.appendChild(x);
+  }
+  parent.appendChild(row);
+}
+function renderWorldsTab(){
+  const mine=$("wtMine");mine.innerHTML="";
+  if(!WORLDS.list.length){
+    const d=document.createElement("div");d.className="srvEmpty";
+    d.textContent="No worlds yet — type a name in the bar at the top and hit \u{1F30D} Create world!";
+    mine.appendChild(d);
+  }
+  WORLDS.list.forEach(n=>{
+    wtRow(mine,"\u{1F30D} "+n,WORLD.name===n?"you are here":"",
+      WORLD.name===n?"✅ Joined":"▶ Join",
+      ()=>{setWorld(n);renderWorldsTab();toast("\u{1F30D} Switched to world \""+n+"\" — pick a vehicle and play!");});
+    const row=mine.lastChild;
+    const inv=document.createElement("button");inv.className="btn";inv.textContent="\u{1F4E8} Invite";
+    inv.onclick=()=>openInviteSearch(n,false);
+    row.appendChild(inv);
+  });
+  const sh=$("wtShared");sh.innerHTML="";
+  if(!SHARED.list.length){
+    const d=document.createElement("div");d.className="srvEmpty";
+    d.textContent="Nothing here yet — when a friend invites you to a world, it appears here!";
+    sh.appendChild(d);
+  }
+  SHARED.list.forEach((s,i)=>{
+    wtRow(sh,(s.mc?"⛏️ Minecraft":"\u{1F30D} "+s.n),s.from?"invited by "+s.from:"",
+      s.mc?"⛏️ Enter":"▶ Join",
+      ()=>{
+        if(s.mc){wtEnterMc();return;}
+        setWorld(s.n);addWorld(s.n);renderWorldsTab();
+        toast("\u{1F30D} Joined "+s.from+"'s world \""+s.n+"\" — pick a vehicle and play!");
+      },
+      ()=>{SHARED.list.splice(i,1);saveShared();renderWorldsTab();});
+  });
+}
+/* invite search: exact username lookup online + whoever is driving around right now */
+let WT_TARGET=null;   // the world the next invite is for (null = ask)
+function openInviteSearch(world,mc){
+  WT_TARGET={world,mc};
+  $("wtSearch").focus();
+  toast("\u{1F4E8} Type your friend's username and hit \u{1F50D} Search to invite them to "+(mc?"MINECRAFT":"\""+world+"\"")+"!");
+}
+async function wtDoSearch(){
+  const q=cleanServerName($("wtSearch").value).slice(0,16);
+  const out=$("wtResults");out.innerHTML="";
+  if(q.length<3){out.innerHTML="<div class='srvEmpty'>Type at least 3 letters of your friend's username.</div>";return;}
+  out.innerHTML="<div class='srvEmpty'>⏳ Searching...</div>";
+  const found=new Map();
+  /* players online right now (substring match) */
+  for(const o of MP.others.values())
+    if(o.name&&o.name.toLowerCase().includes(q.toLowerCase()))found.set(o.name,"\u{1F7E2} online now");
+  /* exact username lookup in the online database */
+  try{
+    if(SERVER_READY){
+      const r=await fetch(SERVER_API+"/usernames/"+payKey(q)+".json",{cache:"no-store"});
+      if(r.ok){const d=await r.json();if(d&&d.name&&!found.has(d.name))found.set(d.name,"registered player");}
+    }
+  }catch(e){}
+  out.innerHTML="";
+  if(!found.size){
+    out.innerHTML="<div class='srvEmpty'>No player called \""+q+"\" found — usernames must match exactly (ask your friend for theirs!).</div>";
+    return;
+  }
+  for(const[name,info]of found){
+    if(payKey(name)===profileKey())continue;   // that's you
+    wtRow(out,"\u{1F464} "+name,info,"\u{1F4E8} Invite",()=>inviteFlow(name));
+  }
+  if(!out.children.length)out.innerHTML="<div class='srvEmpty'>\u{1F914} That's you — invite someone else!</div>";
+}
+function inviteFlow(name){
+  const send=(world,mc)=>sendInvite(name,world,mc);
+  if(WT_TARGET){const t=WT_TARGET;WT_TARGET=null;send(t.world,t.mc);return;}
+  const opts=WORLDS.list.map(n=>({label:"\u{1F30D} "+n,value:"w:"+n}));
+  opts.push({label:"⛏️ The MINECRAFT world",value:"mc"});
+  opts.push({label:"❌ Cancel",value:"cancel"});
+  showDest("\u{1F4E8} Invite "+name+" to which world?",opts,v=>{
+    if(v==="cancel")return;
+    if(v==="mc")send("Minecraft",true);
+    else send(v.slice(2),false);
+  });
+}
+async function sendInvite(name,world,mc){
+  const ok=await sendMoney(name,1,{d:"INV|"+(mc?"mc":"w")+"|"+String(world).slice(0,40)},true);
+  if(ok)toast("\u{1F4E8} Invite sent! "+name+" gets a notification the moment they play"+(mc?" — MINECRAFT together (each in their own blocky world)!":" and your world appears in their \u{1F30D} Worlds tab!"));
+}
+$("wtSearchBtn").onclick=wtDoSearch;
+$("wtSearch").addEventListener("keydown",e=>{if(e.key==="Enter")wtDoSearch();});
+function wtEnterMc(){
+  if(S.mode!=="game"&&!S.selected){toast("⛏️ First pick a vehicle and start playing — then enter MINECRAFT from the \u{1F30D} Worlds tab or the map!");return;}
+  if(S.mode!=="game"){S.mode="game";$("menu").style.display="none";$("hud").classList.add("show");}
+  enterMc();
+}
+$("wtMc").onclick=wtEnterMc;
 /* ---------- multiplayer presence: see other players in your world (Firebase) ----------
    every player writes their position ~5x/second to players/<world>/<id> and
    listens to everyone else's; other players appear as cars/people with name tags. */
@@ -3440,7 +3811,15 @@ async function checkPayments(){
       if(!p||typeof p.amt!=="number"||p.amt<=0)continue;
       fetch(SERVER_API+"/payments/"+k+"/"+id+".json",{method:"DELETE"}).catch(()=>{});
       addMoney(Math.floor(p.amt));
-      if(typeof p.d==="string"){
+      if(typeof p.d==="string"&&p.d.startsWith("INV|")){
+        /* a WORLD INVITE rides the inbox: INV|kind|worldname */
+        const[,kind,wname]=p.d.split("|");
+        const mc=kind==="mc";
+        addShared(mc?"Minecraft":(wname||"world"),p.from||"A player",mc);
+        toast(mc
+          ?"⛏️ "+(p.from||"A player")+" invited you to the MINECRAFT world! Find it under \u{1F30D} Worlds in the garage!"
+          :"\u{1F30D} "+(p.from||"A player")+" invited you to world \""+wname+"\"! Find it under \u{1F30D} Worlds in the garage!");
+      }else if(typeof p.d==="string"){
         /* a dumpling GIFT rides along with the payment */
         const[color,gl]=p.d.split("|");
         const hex=color==="Rainbow"?RAINBOW_CSS:(color==="Gold"?"#ffd700":((DUMP_COLORS.find(c=>c[0]===color)||["White","#f2f5f7"])[1]));
@@ -3502,7 +3881,8 @@ function saveGame(){
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
       world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
-      own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0,hrent:HRENT.on?1:0
+      own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0,hrent:HRENT.on?1:0,
+      mcInv:MCINV
     }));
   }catch(e){}
 }
@@ -3522,6 +3902,7 @@ function loadGame(){
     if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
     PRENT.on=d.prent===1;
     HRENT.on=d.hrent===1;
+    if(d.mcInv&&typeof d.mcInv==="object")for(const k in MCINV)if(typeof d.mcInv[k]==="number")MCINV[k]=Math.max(0,Math.floor(d.mcInv[k]));
   }catch(e){}
 }
 loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();profileLoad();
@@ -3556,8 +3937,8 @@ function tryCall(){
   if(!player.onFoot&&!player.drive)return;
   /* mansion editor open: T closes it */
   if(MEDIT.on){closeMansionEdit();return;}
-  /* inside a cave: T brings you back outside */
-  if(CAVE.in){exitCave();return;}
+  /* inside a cave: attack the boss / open the cave menu */
+  if(CAVE.in){caveT();return;}
   /* indoor stuff first: reception, beds, chairs */
   if(tryFurniture())return;
   /* cave mouths in the mountains */
@@ -3657,6 +4038,12 @@ function tryCall(){
       toast("\u{1F680} A rocket is on its way — "+Math.round(Math.hypot(rocket.x-player.x,rocket.z-player.z))+" m away, watch the sky!");
     }else if(rocket.state==="landed")toast("\u{1F680} The rocket is already here — press F to get in!");
     else toast("The rocket is busy right now.");
+    return;
+  }
+  if(S.world==="mc"){
+    const t=nearMcThing();
+    if(t){mineMc(t);return;}
+    openMcSell();
     return;
   }
   if(S.world!=="earth"){
@@ -4695,6 +5082,12 @@ function updateCamera(dt){
 /* map */
 const mapView={cx:0,cz:0,scale:0.55};
 function mapColor(x,z){
+  if(S.world==="mc"){
+    const h=mcH(x,z);
+    if(h>12)return "#e8ecef";
+    if(h>8.7)return "#8a8f96";
+    return ((Math.floor(x/3)+Math.floor(z/3))%2+2)%2?"#4f9e3f":"#57ab45";
+  }
   if(S.world!=="earth"){
     const P=curPlanet()||PLANETS.moon;
     const h=moonH(x,z);
@@ -5308,6 +5701,10 @@ function mapEntries(q){
         toast(PLANETS[v].emoji+" You're on "+PLANETS[v].name+"!"+(fare>0?" Ticket: $"+fmtMoney(fare)+".":"")+" Try jumping — the gravity is different here!");
       });
     },"warn"],
+    ["⛏️ MINECRAFT world (hearts, zombies & mining!)",()=>{
+      $("mapModal").classList.remove("open");
+      enterMc();
+    },"warn"],
     ["\u{1F30D} Back to EARTH",()=>{
       switchWorld("earth");
       teleportTo(6,6);
@@ -5510,7 +5907,7 @@ function updateCompass(){
 function teleportTo(x,z){
   endRide(true);
   /* the aliens JAM teleporters near their spaceships — you must travel there yourself */
-  if(S.world!=="earth"){
+  if(S.world!=="earth"&&S.world!=="mc"){
     const ci=Math.round((x-3300)/UFOSP),cj=Math.round((z-6600)/UFOSP);
     const s=ufoSpot(ci,cj);
     if(s&&Math.hypot(x-s.x,z-s.z)<400){
@@ -5557,7 +5954,8 @@ function switchWorld(w){
     if(myVehicle)myVehicle.mesh.visible=true;
     if(!player.inRocket&&!player.drive)player.onFoot=true;
   }
-  setAstro(!earth);   // astronaut outfit on the moon
+  setAstro(!earth&&w!=="mc");   // astronaut outfit in space (not in Minecraft!)
+  heartsShow(w==="mc");         // hearts while you're in the Minecraft world
   player.mesh.visible=player.onFoot&&!player.inRocket;
   headLight.intensity=0;
   updateChunks(player.x,player.z,true);updateLandmarks(player.x,player.z);
@@ -5668,7 +6066,7 @@ function updateHint(){
     txt="\u{1F698} Riding along with "+(o?o.name:"a friend")+" — press F to hop out";showF=true;
   }
   else{
-    if(CAVE.in){txt="\u{1F573}️ In the cave — grab the glowing crystals · press T to go back outside";showT=true;}
+    if(CAVE.in){txt=BOSS.on?"\u{1F5FF}⚔️ CAVE BOSS ("+BOSS.hp+" / "+BOSS.max+") — get close and press T to SWING!":"\u{1F573}️ In the cave — grab the $1,000 crystals · press T for the cave menu (boss fight!)";showT=true;}
     else if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
     else if(MEDIT.on){txt="\u{1F6E0} EDITING your mansion — click the floor/lawn to place items · R = rotate · T = done";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
@@ -5755,10 +6153,17 @@ function updateHint(){
         txt=uf.angry>0?"\u{1F47D} THE ALIENS ARE ANGRY — RUN!!":"\u{1F6F8} An ALIEN SPACESHIP — press T to rob it ($10K + a "+(S.world==="moon"?"ALIEN":curPlanet().name.toUpperCase())+" dumpling)... if you dare!";
       if(uf)showT=uf.angry<=0;
     }
-    if(!txt&&S.world!=="earth"&&player.onFoot){
+    if(!txt&&S.world!=="earth"&&S.world!=="mc"&&player.onFoot){
       for(const mc of moonCars){
         if(!offScene(mc.g)&&Math.hypot(player.x-mc.x,player.z-mc.z)<6){txt=curPlanet().emoji+" "+curPlanet().name+" buggy — press F to drive!";showF=true;break;}
       }
+    }
+    /* ⛏️ Minecraft world hints */
+    if(!txt&&S.world==="mc"){
+      const t=nearMcThing();
+      if(t)txt=t.kind==="tree"?"\u{1FAB5} A TREE — press T to CHOP it!":MC_EMOJI[t.kind]+" A "+t.kind.toUpperCase()+" block — press T to MINE it!";
+      else txt="⛏️ MINECRAFT — chop trees, mine ores · press T to open your \u{1F392} backpack ($"+fmtMoney(mcTotal())+" inside)";
+      showT=true;
     }
     /* the ferry */
     if(!txt&&S.world==="earth"){
@@ -7659,7 +8064,7 @@ function frame(now){
       if(player.z-c.position.z>800)c.position.z+=1600;
     });
   }
-  updateRocket(dt);updateUfos(dt);
+  updateRocket(dt);updateUfos(dt);updateMc(dt);
   updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);updateFishing(dt);
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);

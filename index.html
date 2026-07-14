@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=47">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -64,6 +64,7 @@
     <button class="tab" data-f="moto">Motorcycles</button>
     <button class="tab" data-f="bike">Bikes</button>
     <button class="tab" data-f="servers">&#127760; Servers</button>
+    <button class="tab" data-f="worlds">&#127757; Worlds</button>
   </div>
   <div id="grid"></div>
   <div id="serverPanel">
@@ -75,6 +76,22 @@
     </div>
     <div id="serverStatus">&#9203; Loading servers...</div>
     <div id="serverList"></div>
+  </div>
+  <div id="worldsPanel">
+    <h3>&#127757; My worlds</h3>
+    <div style="color:var(--dim);font-size:12px">Create a world with the bar at the top &mdash; then invite friends to it below!</div>
+    <div id="wtMine"></div>
+    <h3>&#129309; Shared with me</h3>
+    <div id="wtShared"></div>
+    <h3>&#128232; Invite a player (type their username)</h3>
+    <div style="display:flex;gap:8px">
+      <input id="wtSearch" maxlength="16" placeholder="friend's username" style="flex:1">
+      <button class="btn warn" id="wtSearchBtn">&#128269; Search</button>
+    </div>
+    <div id="wtResults"></div>
+    <h3>&#9935;&#65039; MINECRAFT world</h3>
+    <div style="color:var(--dim);font-size:12px">A blocky world with &#10084;&#65039; hearts, &#129503; zombies, trees and ores &mdash; mine wood, stone, coal, iron, gold and DIAMONDS and sell them for real game money! (Your own adventure &mdash; no other players there, but you can invite friends to try it too.)</div>
+    <button class="btn warn" id="wtMc" style="align-self:flex-start">&#9935;&#65039; Enter the MINECRAFT world</button>
   </div>
 </div>
 
@@ -258,6 +275,7 @@
     <h2>&#129375; Squishy Dumplings</h2>
     <div id="dumpInfo"></div>
     <button class="btn warn" id="dumpOpen" style="margin-top:10px;width:100%">&#129375; Open a dumpling!</button>
+    <button class="btn warn" id="dumpOpenAll" style="margin-top:6px;width:100%">&#127882; Open ALL dumplings!</button>
     <div style="font-size:12px;color:var(--dim);margin-top:8px">Click a dumpling to hold it in your hands (click again to put it away).</div>
     <div id="dumpList"></div>
     <button class="btn" id="dumpDisplay" style="margin-top:10px;width:100%">&#127984; Display your dumplings at your mansion</button>
@@ -444,9 +462,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=46"></script>
-<script src="js/world.js?v=46"></script>
-<script src="js/vehicles.js?v=46"></script>
-<script src="js/game.js?v=46"></script>
+<script src="js/core.js?v=47"></script>
+<script src="js/world.js?v=47"></script>
+<script src="js/vehicles.js?v=47"></script>
+<script src="js/game.js?v=47"></script>
 </body>
 </html>

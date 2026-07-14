@@ -112,7 +112,7 @@ const skyDome=(function(){
   return m;
 })();
 function updateSky(px,pz){
-  if(S.world!=="earth"){
+  if(S.world!=="earth"&&S.world!=="mc"){
     /* no atmosphere: dark sky in the planet's own tint, stars always out */
     const P=curPlanet()||PLANETS.moon;
     scene.background=new THREE.Color(P.sky);
@@ -407,8 +407,16 @@ function gradeAt(x,z){
   if(!wsum)return h;
   return h*(1-M)+(tsum/wsum)*M;
 }
-function rawH(x,z){return S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
-function terrainH(x,z){return S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
+/* ⛏️ the MINECRAFT world: blocky terraced hills, flat at the spawn */
+function mcH(x,z){
+  let h=Math.floor((fbm(x/130+5.5,z/130+2.2)-0.40)*15);
+  if(h<0)h=0;
+  const d=Math.hypot(x-6,z-6);
+  if(d<60)h=Math.floor(h*sstep(18,60,d));   // flat spawn area
+  return h*1.1;
+}
+function rawH(x,z){return S.world==="mc"?mcH(x,z):S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
+function terrainH(x,z){return S.world==="mc"?mcH(x,z):S.world!=="earth"?moonH(x,z):gradeAt(x,z);}
 function onAnyRoad(x,z){
   if(inAirport(x,z))return true;
   if(nearGridLine(x)<9||nearGridLine(z)<9)return true;
@@ -2393,7 +2401,94 @@ function buildMoonChunk(cx,cz){
   scene.add(g);
   return g;
 }
+/* ---- ⛏️ MINECRAFT chunks: blocky grass, trees to chop, ores to mine ---- */
+const mcThings=[];   // every mineable thing currently in the world
+const MC_ORES=[
+  ["stone",0x8a8f96,0.50],["coal",0x2b2b30,0.25],["iron",0xd8b58a,0.13],
+  ["gold",0xffd700,0.08],["diamond",0x4fd8ff,0.04]
+];
+function buildMcTree(x,z,g){
+  const y=mcH(x,z);
+  const t=new THREE.Group();t.position.set(x,y,z);
+  const trunkM=new THREE.MeshLambertMaterial({color:0x6b4a2b});
+  const leafM=new THREE.MeshLambertMaterial({color:0x2f8f2f});
+  const trunk=new THREE.Mesh(new THREE.BoxGeometry(0.9,3.4,0.9),trunkM);trunk.position.y=1.7;t.add(trunk);
+  const l1=new THREE.Mesh(new THREE.BoxGeometry(3.4,2,3.4),leafM);l1.position.y=4.2;t.add(l1);
+  const l2=new THREE.Mesh(new THREE.BoxGeometry(2,1.4,2),leafM);l2.position.y=5.7;t.add(l2);
+  g.add(t);
+  mcThings.push({kind:"tree",x,z,g:t});
+}
+function buildMcOre(x,z,kind,col,g){
+  const y=mcH(x,z);
+  const t=new THREE.Group();t.position.set(x,y,z);
+  const rock=new THREE.Mesh(new THREE.BoxGeometry(1.7,1.5,1.7),new THREE.MeshLambertMaterial({color:0x7d838c}));
+  rock.position.y=0.75;t.add(rock);
+  if(kind!=="stone"){
+    const m=kind==="diamond"||kind==="gold"?new THREE.MeshBasicMaterial({color:col}):new THREE.MeshLambertMaterial({color:col});
+    for(let i=0;i<5;i++){
+      const s=new THREE.Mesh(new THREE.BoxGeometry(0.32,0.32,0.32),m);
+      s.position.set((i%2-0.5)*0.9,0.5+(i%3)*0.42,(i<2?0.78:i<4?-0.78:0)*(i===4?0:1));
+      if(i===4)s.position.z=0.78;
+      t.add(s);
+    }
+  }
+  g.add(t);
+  mcThings.push({kind,x,z,g:t});
+}
+function buildMcChunk(cx,cz){
+  const g=new THREE.Group();g.userData.recs=[];
+  const ox=cx*CS,oz=cz*CS;
+  const geo=new THREE.PlaneGeometry(CS,CS,SEG,SEG);geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position,cols=[];
+  const g1=new THREE.Color(0x4f9e3f),g2=new THREE.Color(0x5aab48),rk=new THREE.Color(0x8a8f96),sn=new THREE.Color(0xf2f5f7);
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i)+ox,z=pos.getZ(i)+oz,h=mcH(x,z);
+    pos.setY(i,h);
+    /* blocky checker grass; high hills turn to stone, peaks to snow */
+    let c=((Math.floor(x/3)+Math.floor(z/3))%2+2)%2?g1:g2;
+    if(h>8.7)c=rk;
+    if(h>12)c=sn;
+    cols.push(c.r,c.g,c.b);
+  }
+  geo.setAttribute("color",new THREE.Float32BufferAttribute(cols,3));
+  geo.computeVertexNormals();
+  const tm=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,flatShading:true}));
+  tm.position.set(ox,0,oz);tm.receiveShadow=true;g.add(tm);
+  /* trees & ores — not right on the spawn pad */
+  const r=rng(cx*4241+cz*659+77);
+  for(let i=0;i<9;i++){
+    const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS;
+    if(Math.hypot(x-6,z-6)<14)continue;
+    if(mcH(x,z)>8.7)continue;   // no trees on the stone tops
+    buildMcTree(Math.round(x),Math.round(z),g);
+  }
+  for(let i=0;i<7;i++){
+    const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS;
+    if(Math.hypot(x-6,z-6)<14)continue;
+    const roll=r();let acc=0,pick=MC_ORES[0];
+    for(const o of MC_ORES){acc+=o[2];if(roll<acc){pick=o;break;}}
+    buildMcOre(Math.round(x),Math.round(z),pick[0],pick[1],g);
+  }
+  scene.add(g);
+  return g;
+}
+/* a blocky zombie for the Minecraft world */
+function makeMcMob(){
+  const g=new THREE.Group();
+  const skin=new THREE.MeshLambertMaterial({color:0x3e8f4a});
+  const shirt=new THREE.MeshLambertMaterial({color:0x2a6cae});
+  const pants=new THREE.MeshLambertMaterial({color:0x3a3a6e});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.85,0.4),shirt);body.position.y=1.15;g.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.6,0.6),skin);head.position.y=1.9;g.add(head);
+  const eyeM=new THREE.MeshBasicMaterial({color:0x111111});
+  [[-0.14],[0.14]].forEach(p=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,0.05),eyeM);e.position.set(p[0],1.95,0.31);g.add(e);});
+  /* zombie arms straight forward! */
+  [[-0.45],[0.45]].forEach(p=>{const a=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.24,0.8),skin);a.position.set(p[0],1.35,0.45);g.add(a);});
+  [[-0.18],[0.18]].forEach(p=>{const l=new THREE.Mesh(new THREE.BoxGeometry(0.26,0.75,0.3),pants);l.position.set(p[0],0.4,0);g.add(l);});
+  return g;
+}
 function buildChunk(cx,cz){
+  if(S.world==="mc")return buildMcChunk(cx,cz);
   if(S.world!=="earth")return buildMoonChunk(cx,cz);
   const g=new THREE.Group();g.userData.recs=[];
   const ox=cx*CS,oz=cz*CS,x0=ox-CS/2,x1=ox+CS/2,z0=oz-CS/2,z1=oz+CS/2;
@@ -3097,11 +3192,13 @@ function updateLandmarks(px,pz){
   /* build at most ONE new landmark per frame — this runs every frame, so a
      new area fills in within a few frames without a single big hitch */
   let built=0;
-  /* rocket stations exist in BOTH worlds */
-  const ri=Math.round((px-2400)/RCELL),rj=Math.round((pz-2400)/RCELL);
-  for(let i=ri-1;i<=ri+1;i++)for(let j=rj-1;j<=rj+1;j++){
-    const k=lmKey("rkt",i,j);need.add(k);
-    if(!landmarks.has(k)&&built<1){landmarks.set(k,buildRocketStation(i,j));built++;}
+  /* rocket stations exist on Earth, the Moon and all planets — not in Minecraft */
+  if(S.world!=="mc"){
+    const ri=Math.round((px-2400)/RCELL),rj=Math.round((pz-2400)/RCELL);
+    for(let i=ri-1;i<=ri+1;i++)for(let j=rj-1;j<=rj+1;j++){
+      const k=lmKey("rkt",i,j);need.add(k);
+      if(!landmarks.has(k)&&built<1){landmarks.set(k,buildRocketStation(i,j));built++;}
+    }
   }
   if(S.world==="earth"){
   const i0=Math.round(px/ACELL),j0=Math.round(pz/ACELL);
