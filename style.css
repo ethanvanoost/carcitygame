@@ -106,6 +106,23 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 /* round minimap bottom-left: arrow = you, blue line = your route */
 #miniWrap{position:absolute;left:12px;bottom:12px;width:150px;height:150px;border-radius:50%;border:2px solid var(--line);overflow:hidden;pointer-events:none;background:#183020;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #miniWrap canvas{width:100%;height:100%;display:block}
+/* 🚗 the CAR SCREEN: in your car the mini map grows into one rounded panel
+   with the map on the left and the radio song list on the right */
+#carTunes{display:none}
+#miniWrap.car{width:392px;height:164px;border-radius:22px;display:flex;align-items:center;pointer-events:auto;background:rgba(13,17,26,.94);border:2px solid #232b3d}
+#miniWrap.car canvas{width:148px;height:148px;flex:0 0 auto;border-radius:16px;margin:0 0 0 6px}
+#miniWrap.car #carTunes{display:block;flex:1;height:150px;overflow-y:auto;padding:4px 8px 4px 6px;scrollbar-width:thin}
+#carTunes .tuneHead{font-size:10px;color:var(--dim);font-weight:800;letter-spacing:1px;padding:2px 8px}
+.tune{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--fg);font-size:12px;padding:4px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tune:hover{background:rgba(63,208,255,.12)}
+.tune.on{background:rgba(63,208,255,.2);color:#3fd0ff;font-weight:700}
+#hud.tablet #miniWrap.car{width:340px;height:150px}
+#hud.tablet #miniWrap.car canvas{width:136px;height:136px}
+@media (max-width:900px), (max-height:500px){
+  #miniWrap.car,#hud.tablet #miniWrap.car{width:300px;height:120px}
+  #miniWrap.car canvas,#hud.tablet #miniWrap.car canvas{width:106px;height:106px}
+  #miniWrap.car #carTunes{height:112px}
+}
 #hud.tablet #miniWrap{left:14px;bottom:270px;width:110px;height:110px}
 /* distance to your route destination, above the minimap */
 #navDist{position:absolute;left:12px;bottom:170px;background:var(--panel);border:1px solid #2e8bff;color:#7db8ff;border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700;pointer-events:none;display:flex;align-items:center;gap:8px}

@@ -687,6 +687,19 @@ function setMusicOn(on){
   if(on&&radioStation().files.length)musicAudio.play().catch(()=>{});
   else musicAudio.pause();
 }
+/* play ONE chosen song right now (the 🚗 car screen song list uses this) */
+function playTrackFile(src){
+  if(!musicAudio)startMusic();
+  if(!musicAudio)return;
+  try{speechSynthesis.cancel();}catch(e){}
+  /* remember which station this song belongs to, so 'next' shuffles the same station */
+  for(let s=0;s<RADIO_STATIONS.length;s++){
+    const i=RADIO_STATIONS[s].files.indexOf(src);
+    if(i>=0){RADIO.st=s;musicIdx=i;try{localStorage.setItem("vc4radio",String(s));}catch(e){}break;}
+  }
+  musicAudio.src=encodeURI(src);
+  musicAudio.play().catch(()=>{});
+}
 function playCrash(strength){
   if(!audioCtx||!SND.sound)return;
   if(typeof SETTINGS!=="undefined"&&!SETTINGS.crash)return;

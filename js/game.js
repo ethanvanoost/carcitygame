@@ -1168,18 +1168,67 @@ function djReport(){
 setInterval(()=>{
   try{if(S.mode==="game"&&SND.music&&radioStation().dj&&!speechSynthesis.speaking)djReport();}catch(e){}
 },22000);
-$("bRadio").onclick=()=>{
-  const opts=RADIO_STATIONS.map((s,i)=>({label:(i===RADIO.st?"✅ ":"")+s.name,value:"st"+i}));
-  opts.push({label:"❌ Close",value:"cancel"});
-  showDest("\u{1F4FB} CAR RADIO — pick a station",opts,v=>{
-    if(typeof v!=="string"||!v.startsWith("st"))return;
-    const i=parseInt(v.slice(2),10);
-    setStation(i);
-    if(!SND.music&&i>0)toast("\u{1F507} Music is OFF in ⚙ Settings — turn it on to hear the radio!");
-    else toast("\u{1F4FB} "+RADIO_STATIONS[i].name);
-    if(RADIO_STATIONS[i].dj&&SND.music)djSay("You are listening to City News Radio — live traffic, live news, live everything! Stay tuned.");
+/* ================= 🚗 THE CAR SCREEN =================
+   In your car the round mini map becomes ONE wide rounded screen:
+   the map on the left, the song list on the right — tap a song to play it. */
+const CAR_TRACKS=[
+  {name:"\u{1F5DE} CITY NEWS RADIO — live AI DJ",dj:true},
+  {name:"\u{1F3B5} Dai Dai — Shakira & Burna Boy",src:"Music/radio/Shakira & Burna Boy - Dai Dai (Lyrics) World Cup Song 2026.mp3"},
+  {name:"\u{1F3B5} Beat It — Michael Jackson",src:"Music/radio/Beat It - Michael Jackson (Lyrics).mp3"},
+  {name:"\u{1F3B5} Billie Jean — Michael Jackson",src:"Music/radio/Billie Jean - Michael Jackson (Lyrics).mp3"},
+  {name:"\u{1F3B5} Smooth Criminal — Michael Jackson",src:"Music/radio/Michael Jackson - Smooth Criminal [Lyrics].mp3"},
+  {name:"\u{1F3B5} World Cup (Champions) — IShowSpeed",src:"Music/radio/IShowSpeed - World Cup (Champions) (Lyrics).mp3"},
+  {name:"\u{1F3B5} Gut Genug — KitschKrieg & Shirin David",src:"Music/radio/KITSCHKRIEG feat. BLUMENGARTEN & SHIRIN DAVID - Gut Genug (Lyrics).mp3"},
+  {name:"\u{1F3B5} Indian meme song",src:"Music/radio/Indian meme song (Original).mp3"},
+  {name:"\u{1F3B5} Subway Surfers (Bass Boosted)",src:"Music/radio/Subway Surfers Bass Boosted.mp3"},
+  {name:"\u{1F30A} Orbit — chill",src:"Music/orbit-d0d-main-version-29627-02-39.mp3"},
+  {name:"\u{1F327} Rainy Window — chill",src:"Music/rainy-window-avbe-main-version-18796-01-21.mp3"},
+  {name:"\u{1F32B} Soft Mist — chill",src:"Music/soft-mist-movement-tranquilium-main-version-25768-04-42.mp3"},
+  {name:"\u{1F4F4} Radio OFF",off:true}
+];
+let TUNES_SEL=-1;
+function musicOnUI(){
+  if(!SND.music){
+    SND.music=true;
+    $("musTgl").classList.add("on");
+    $("musTgl").innerHTML="\u{1F3B5} Music ON";
+  }
+}
+function renderCarTunes(){
+  const w=$("carTunes");
+  w.innerHTML="<div class='tuneHead'>\u{1F4FB} CAR RADIO</div>";
+  CAR_TRACKS.forEach((t,i)=>{
+    const b=document.createElement("button");
+    b.className="tune"+(i===TUNES_SEL?" on":"");
+    b.textContent=t.name;
+    b.onclick=()=>{
+      TUNES_SEL=i;
+      if(t.off){setStation(0);toast("\u{1F4F4} Radio off.");}
+      else if(t.dj){
+        musicOnUI();ensureAudio();
+        setStation(RADIO_STATIONS.findIndex(s=>s.dj));
+        djSay("You are listening to City News Radio — live traffic, live news, live everything! Stay tuned.");
+        toast("\u{1F5DE} CITY NEWS RADIO — the DJ is live!");
+      }else{
+        musicOnUI();ensureAudio();
+        playTrackFile(t.src);
+        toast("\u{1F3B6} Now playing: "+t.name.replace(/^\S+\s/,""));
+      }
+      renderCarTunes();
+    };
+    w.appendChild(b);
   });
-};
+}
+/* the mini map morphs into the car screen whenever you sit in YOUR vehicle */
+let _carScreenOn=false;
+setInterval(()=>{
+  const inCar=S.mode==="game"&&!!myVehicle&&player.drive===myVehicle;
+  if(inCar!==_carScreenOn){
+    _carScreenOn=inCar;
+    $("miniWrap").classList.toggle("car",inCar);
+    if(inCar)renderCarTunes();
+  }
+},350);
 /* every story stays available for 5 REAL minutes */
 function pruneNews(){
   const now=Date.now();
