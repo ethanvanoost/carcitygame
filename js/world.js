@@ -2494,8 +2494,61 @@ function buildMcChunk(cx,cz){
     for(const o of MC_ORES){acc+=o[2];if(roll<acc){pick=o;break;}}
     buildMcOre(Math.round(x),Math.round(z),pick[0],pick[1],g);
   }
+  /* Trader Steve lives at the spawn */
+  if(MCTRADER.x>=ox-CS/2&&MCTRADER.x<ox+CS/2&&MCTRADER.z>=oz-CS/2&&MCTRADER.z<oz+CS/2)buildMcTraderHut(g);
   scene.add(g);
   return g;
+}
+/* 🟩 a blocky CREEPER: four little legs, no arms... and it goes BOOM */
+function makeMcCreeper(){
+  const g=new THREE.Group();
+  const skin=new THREE.MeshLambertMaterial({color:0x3fae4a});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.95,0.4),skin);body.position.y=1;g.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.55,0.55),skin);head.position.y=1.75;g.add(head);
+  const face=new THREE.MeshBasicMaterial({color:0x111111});
+  [[-0.13],[0.13]].forEach(p=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.13,0.13,0.05),face);e.position.set(p[0],1.85,0.29);g.add(e);});
+  const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.22,0.05),face);mouth.position.set(0,1.62,0.29);g.add(mouth);
+  [[-0.16,0.25],[0.16,0.25],[-0.16,-0.25],[0.16,-0.25]].forEach(p=>{
+    const l=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.5,0.22),skin);l.position.set(p[0],0.25,p[1]);g.add(l);
+  });
+  return g;
+}
+/* 🐷 a blocky pig — chop it for porkchops! */
+function makeMcPig(){
+  const g=new THREE.Group();
+  const pink=new THREE.MeshLambertMaterial({color:0xf0a0a8});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.55,1.1),pink);body.position.y=0.65;g.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.45),pink);head.position.set(0,0.75,0.72);g.add(head);
+  const snout=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.16,0.1),new THREE.MeshLambertMaterial({color:0xd87f88}));
+  snout.position.set(0,0.68,0.97);g.add(snout);
+  const eyeM=new THREE.MeshBasicMaterial({color:0x111111});
+  [[-0.13],[0.13]].forEach(p=>{const e=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.04),eyeM);e.position.set(p[0],0.85,0.95);g.add(e);});
+  [[-0.22,0.35],[0.22,0.35],[-0.22,-0.35],[0.22,-0.35]].forEach(p=>{
+    const l=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.4,0.2),pink);l.position.set(p[0],0.2,p[1]);g.add(l);
+  });
+  return g;
+}
+/* 🧑‍🌾 TRADER STEVE's hut at the Minecraft spawn — he pays 25% MORE */
+const MCTRADER={x:20,z:-8};
+function buildMcTraderHut(g){
+  const hx=MCTRADER.x,hz=MCTRADER.z,y=mcH(hx,hz);
+  const wood=new THREE.MeshLambertMaterial({color:0x8a6b42});
+  const plank=new THREE.MeshLambertMaterial({color:0xa8874f});
+  [[0,-3,10,0.6],[0,3,10,0.6],[-4.7,0,0.6,5.4],[4.7,0,0.6,5.4]].forEach(p=>{
+    const w=new THREE.Mesh(new THREE.BoxGeometry(p[2],3,p[3]),wood);
+    w.position.set(hx+p[0],y+1.5,hz+p[1]);g.add(w);
+  });
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(11,0.5,7.5),plank);roof.position.set(hx,y+3.4,hz);g.add(roof);
+  /* the doorway gap */
+  const counter=new THREE.Mesh(new THREE.BoxGeometry(3,1,0.8),plank);counter.position.set(hx,y+0.5,hz+3);g.add(counter);
+  /* Trader Steve himself */
+  const steve=new THREE.Group();
+  const robe=new THREE.Mesh(new THREE.BoxGeometry(0.7,1.1,0.4),new THREE.MeshLambertMaterial({color:0x7a5a3a}));robe.position.y=0.95;steve.add(robe);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5),new THREE.MeshLambertMaterial({color:0xe8b88a}));head.position.y=1.75;steve.add(head);
+  const nose=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.25,0.12),new THREE.MeshLambertMaterial({color:0xd8a070}));nose.position.set(0,1.68,0.28);steve.add(nose);
+  steve.position.set(hx,y,hz+1.2);g.add(steve);
+  const sign=bigSign("\u{1F9D1}‍\u{1F33E} TRADER STEVE — +25%!","#3a2a10","#ffd75e",10);
+  sign.position.set(hx,y+5,hz+3.4);g.add(sign);
 }
 /* a blocky zombie for the Minecraft world */
 function makeMcMob(){

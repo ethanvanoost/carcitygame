@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=55">
+<link rel="stylesheet" href="style.css?v=54">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -40,7 +40,7 @@
 }
 </style>
 </head>
-<body>
+<body><script>window.__errs=[];window.onerror=function(m,s,l){window.__errs.push(m+" @ "+s+":"+l);return false;};</script>
 <canvas id="c3d"></canvas>
 
 <div id="menu">
@@ -467,9 +467,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=55"></script>
-<script src="js/world.js?v=55"></script>
-<script src="js/vehicles.js?v=55"></script>
-<script src="js/game.js?v=55"></script>
+<script src="js/core.js?v=54"></script>
+<script src="js/world.js?v=54"></script>
+<script src="js/vehicles.js?v=54"></script>
+<script src="js/game.js?v=54"></script>
 </body>
 </html>
+<script>
+setTimeout(function(){
+  try{
+    startGame(VEHICLES[0]);
+    MYRADIO.on=true;MYRADIO.name="E2E Test Radio";MYRADIO.key="e2etest";
+    radioPacket("hello from browser a");
+  }catch(e){window.__errs.push("A: "+e.message);}
+  setTimeout(function(){
+    var d=document.createElement("div");d.id="__syncReport";
+    d.textContent="A-DONE errs="+window.__errs.join("~~");
+    document.body.appendChild(d);
+  },5000);
+},1500);
+</script>
