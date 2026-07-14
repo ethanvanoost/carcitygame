@@ -1197,12 +1197,22 @@ function musicOnUI(){
 function renderCarTunes(){
   const w=$("carTunes");
   w.innerHTML="<div class='tuneHead'>\u{1F4FB} CAR RADIO</div>";
+  /* 🔴 live player radios on top — like "Notch's radio" */
+  for(const[k,r]of LIVERADIOS){
+    if(Date.now()-r.ts>120000){LIVERADIOS.delete(k);continue;}
+    if(payKey(r.owner||"")===profileKey())continue;   // your own station isn't listed for you
+    const b=document.createElement("button");
+    b.className="tune"+(LISTEN.key===k?" on":"");
+    b.textContent="\u{1F534} "+r.name+" — LIVE";
+    b.onclick=()=>tuneLiveRadio(k);
+    w.appendChild(b);
+  }
   CAR_TRACKS.forEach((t,i)=>{
     const b=document.createElement("button");
-    b.className="tune"+(i===TUNES_SEL?" on":"");
+    b.className="tune"+(i===TUNES_SEL&&!LISTEN.key?" on":"");
     b.textContent=t.name;
     b.onclick=()=>{
-      TUNES_SEL=i;
+      TUNES_SEL=i;LISTEN.key=null;
       if(t.off){setStation(0);toast("\u{1F4F4} Radio off.");}
       else if(t.dj){
         musicOnUI();ensureAudio();
@@ -1229,6 +1239,226 @@ setInterval(()=>{
     if(inCar)renderCarTunes();
   }
 },350);
+/* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
+const MIC={rec:null,mode:null};
+function micSupported(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
+function micStop(){
+  const r=MIC.rec;
+  MIC.rec=null;MIC.mode=null;
+  if(r){try{r.onend=null;r.stop();}catch(e){}}
+  micUI();
+}
+function micStart(mode,onResult){
+  if(!micSupported()){toast("\u{1F3A4} This browser has no speech support — use Chrome (or Edge)!");return false;}
+  micStop();
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const rec=new R();
+  rec.lang="en-US";rec.continuous=true;rec.interimResults=false;
+  rec.onresult=e=>{
+    for(let i=e.resultIndex;i<e.results.length;i++)
+      if(e.results[i].isFinal)onResult(e.results[i][0].transcript.trim());
+  };
+  rec.onerror=e=>{
+    if(e.error==="not-allowed"||e.error==="service-not-allowed"){
+      toast("\u{1F3A4}\u{1F6AB} Microphone blocked — click the \u{1F512} in the address bar and ALLOW the microphone!");
+      micStop();
+    }
+  };
+  rec.onend=()=>{if(MIC.rec===rec){try{rec.start();}catch(e){}}};   // keep listening
+  try{rec.start();}catch(e){toast("\u{1F3A4} Couldn't start the microphone!");return false;}
+  MIC.rec=rec;MIC.mode=mode;
+  micUI();
+  return true;
+}
+function micUI(){
+  $("bGoogle").classList.toggle("on",MIC.mode==="assistant");
+  $("bGoogle").innerHTML=MIC.mode==="assistant"?"\u{1F3A4} Google AI \u{1F534}":"\u{1F3A4} Google AI";
+  $("bMyRadio").classList.toggle("on",MIC.mode==="radio");
+  $("bMyRadio").innerHTML=MIC.mode==="radio"?"\u{1F534} Stop Radio":"\u{1F4FB} Create Radio";
+}
+/* ================= 🎤 GOOGLE AI: say "Hey Google, ..." ================= */
+const GA={awake:0};
+function gSay(txt){
+  if(!("speechSynthesis" in window))return;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(txt);
+    u.rate=1.05;u.pitch=1.0;u.volume=1;u.lang="en-US";
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+/* where can the assistant take you? every big place in the game */
+function resolveDest(s){
+  s=" "+s.toLowerCase().replace(/[^a-z0-9 ,.-]/g,"").trim()+" ";
+  const c=s.match(/(-?\d+)[,\s]+(-?\d+)/);
+  if(c)return{x:parseFloat(c[1]),z:parseFloat(c[2]),say:"coordinates "+c[1]+", "+c[2]};
+  const un=b=>b?{x:b.sp.x,z:b.sp.z}:null;
+  const T=[
+    [["airport","airfield","plane"],()=>{const a=nearestAirports(player.x,player.z,1)[0];return{x:a.term.x,z:a.term.z};},"the nearest airport"],
+    [["gas station","gas","fuel"],()=>un(nearestSpot(gasSpot,GSP,286,150,5)),"the nearest gas station"],
+    [["mcdrive","mcdonald","burger"],()=>un(nearestSpot(mcdSpot,MCSP,46,90,6)),"the nearest McDrive"],
+    [["mega mart","megamart","market","shop","store"],()=>un(nearestSpot(hugeShopSpot,HSP,750,390,3)),"the nearest MEGA MART"],
+    [["mansion"],()=>un(nearestSpot(mansionSpot,MSP,1230,870,3)),"the nearest mega mansion"],
+    [["beach","boat","sea"],()=>un(nearestSpot(boatSpot,BOATSP,320,120,8)),"the beach"],
+    [["cinema","movie"],()=>un(nearestSpot((i,j)=>{const p=entPos(i,j);return{x:p.x-24,z:p.z};},ENSP,2000,4200,3)),"the nearest cinema"],
+    [["arcade"],()=>un(nearestSpot(entPos,ENSP,2000,4200,3)),"the nearest arcade"],
+    [["casino"],()=>un(nearestSpot((i,j)=>{const p=entPos(i,j);return{x:p.x+24,z:p.z};},ENSP,2000,4200,3)),"the nearest casino"],
+    [["race track","racetrack","speedway"],()=>{const b=nearestSpot(raceTrackPos,RTSP,4800,3400,2);return b?{x:b.sp.x+38,z:b.sp.z+6}:null;},"the nearest race track"],
+    [["police"],()=>{const b=nearestSpot(civicPos,CVSP2,3700,1300,3);return b?{x:b.sp.x-14,z:b.sp.z}:null;},"the nearest police station"],
+    [["fire station","fire"],()=>{const b=nearestSpot(civicPos,CVSP2,3700,1300,3);return b?{x:b.sp.x+14,z:b.sp.z}:null;},"the nearest fire station"],
+    [["off-road","offroad","off road","dirt"],()=>un(nearestSpot(offroadPos,ORSP,900,2600,3)),"the off-road park"],
+    [["industrial","factory"],()=>un(nearestSpot(induPos,INSP,5200,700,2)),"the industrial zone"],
+    [["portal","time"],()=>un(nearestSpot(portalPos,TPSP,30,2430,2)),"the time portal"],
+    [["cave"],()=>un(nearestSpot(caveSpot,CVSP,740,380,5)),"the nearest cave"],
+    [["rocket","space"],()=>nearestRocketPad(player.x,player.z),"the nearest rocket station"],
+    [["stunt"],()=>un(nearestSpot(stuntPos,3600,1800,600,2)),"the stunt park"],
+    [["museum"],()=>un(nearestSpot(museumSpot,DMUS,520,260,6)),"the dumpling museum"],
+    [["pool","swimming"],()=>un(nearestSpot(poolSpot,PPSP,1710,430,3)),"the pool park"],
+    [["volcano"],()=>un(nearestSpot(volcanoSpot,VOLC,4200,7800,3)),"the volcano island"],
+    [["train station","station"],()=>{const st=nearStationInfo();return st?{x:st.cx+7,z:st.sz}:{x:railC(0,50)+7,z:50};},"the train station"],
+    [["spawn","home"],()=>({x:WORLD.ox+6,z:WORLD.oz+6}),"spawn"]
+  ];
+  for(const[keys,fn,say]of T){
+    if(keys.some(k=>s.includes(k))){
+      let p=null;try{p=fn();}catch(e){}
+      if(p)return{x:p.x,z:p.z,say};
+      return null;
+    }
+  }
+  return null;
+}
+function playByName(q){
+  q=q.toLowerCase().replace(/\bthe\b/g,"").trim();
+  /* live player radios first ("play notch's radio") */
+  for(const[k,r]of LIVERADIOS){
+    if(r.name.toLowerCase().includes(q.replace(/ radio$/,""))||q.includes(r.name.toLowerCase())){
+      tuneLiveRadio(k);gSay("Tuned to "+r.name+".");return;
+    }
+  }
+  const t=CAR_TRACKS.find(t=>!t.off&&t.name.toLowerCase().replace(/[^a-z0-9 ]/g,"").includes(q.replace(/[^a-z0-9 ]/g,"")));
+  if(!t){gSay("Sorry, that is not possible.");return;}
+  TUNES_SEL=CAR_TRACKS.indexOf(t);LISTEN.key=null;
+  if(t.dj){
+    musicOnUI();ensureAudio();
+    setStation(RADIO_STATIONS.findIndex(s=>s.dj));
+    gSay("Playing City News Radio.");
+    setTimeout(djReport,2500);
+  }else{
+    musicOnUI();ensureAudio();
+    playTrackFile(t.src);
+    gSay("Playing "+t.name.replace(/^\S+\s/,"").split("—")[0]+".");
+  }
+  if(_carScreenOn)renderCarTunes();
+}
+function gaCommand(cmd){
+  let m=cmd.match(/^(?:please )?(?:navigate|route|drive|go|bring me|take me) (?:me )?to (.+)$/);
+  if(m){
+    const d=resolveDest(m[1]);
+    if(d){setRoute(d.x,d.z);gSay("Navigating to "+d.say+".");toast("\u{1F9ED} Google: navigating to "+d.say+"!");}
+    else gSay("Sorry, that is not possible.");
+    return;
+  }
+  m=cmd.match(/^teleport (?:me )?to (.+)$/);
+  if(m){
+    const d=resolveDest(m[1]);
+    if(d){teleportTo(d.x,d.z);gSay("Teleported to "+d.say+".");toast("✨ Google: teleported to "+d.say+"!");}
+    else gSay("Sorry, that is not possible.");
+    return;
+  }
+  m=cmd.match(/^play (.+)$/);
+  if(m){playByName(m[1]);return;}
+  if(/^(stop|radio off|stop (the )?(music|radio|song))/.test(cmd)){
+    setStation(0);LISTEN.key=null;
+    if(_carScreenOn)renderCarTunes();
+    gSay("Radio off.");
+    return;
+  }
+  gSay("Sorry, that is not possible.");
+}
+function gaHear(raw){
+  const t=raw.toLowerCase();
+  const woke=/(hey|ok|okay),? goo?gle/.test(t);
+  let cmd=woke?t.replace(/.*?(hey|ok|okay),? goo?gle[,!.?]?\s*/,"").trim():t.trim();
+  if(!woke&&performance.now()>GA.awake)return;   // only listen after "Hey Google"
+  if(!cmd||cmd.length<3){
+    GA.awake=performance.now()+9000;
+    gSay("Yes?");
+    toast("\u{1F3A4} Google: \"Yes?\" — say: NAVIGATE TO ..., TELEPORT TO ..., or PLAY <song>");
+    return;
+  }
+  GA.awake=0;
+  toast("\u{1F3A4} You said: \""+cmd+"\"");
+  gaCommand(cmd);
+}
+$("bGoogle").onclick=()=>{
+  if(MIC.mode==="assistant"){micStop();toast("\u{1F3A4} Google AI is OFF.");return;}
+  if(micStart("assistant",gaHear))
+    toast("\u{1F3A4} Google AI is LISTENING! Say: \"Hey Google\" ... then \"navigate to the nearest airport\", \"teleport to 1200, 300\" or \"play Billie Jean\"!");
+};
+/* ================= 🔴 CREATE RADIO: your own live voice station =================
+   Your speech is turned into text, broadcast over the shared chat channel
+   (auto-deletes after 5 min), and read aloud on every listener's car radio. */
+const MYRADIO={on:false,name:"",key:""};
+const LIVERADIOS=new Map();   // key -> {name, owner, ts}
+const LISTEN={key:null};
+function radioPacket(text){
+  try{
+    firebase.database().ref("chat").push({
+      n:mpName(),
+      m:("\u{1F4FB}|"+MYRADIO.key+"|"+MYRADIO.name+"|"+(text||"~")).slice(0,200),
+      t:Date.now()
+    });
+  }catch(e){}
+}
+function stopMyRadio(){
+  MYRADIO.on=false;
+  micStop();
+  toast("\u{1F4FB} Your radio is off the air. Thanks for the show!");
+}
+$("bMyRadio").onclick=()=>{
+  if(MYRADIO.on||MIC.mode==="radio"){stopMyRadio();return;}
+  if(S.mode!=="game"){toast("Start driving first!");return;}
+  if(!mpInit()){toast("\u{1F534} Your radio needs the online database.");return;}
+  const nm=cleanServerName(prompt("\u{1F4FB} Name your radio station!",mpName()+"'s radio")||"").slice(0,18);
+  if(!nm)return;
+  MYRADIO.name=nm;MYRADIO.key=payKey(mpName());
+  if(!micStart("radio",txt=>{if(txt&&MYRADIO.on)radioPacket(txt);}))return;
+  MYRADIO.on=true;
+  micUI();
+  chatStart();
+  radioPacket("");
+  pushNews("\u{1F4FB}\u{1F534} \""+nm+"\" is ON AIR — tune in on your car radio!");
+  toast("\u{1F534} ON AIR! Everything you SAY goes out live on \""+nm+"\" — press the button again to stop.");
+};
+/* stay discoverable while on air */
+setInterval(()=>{if(MYRADIO.on)radioPacket("");},45000);
+function handleRadioPacket(d){
+  const parts=(d.m||"").split("|");
+  if(parts.length<4)return;
+  const rkey=parts[1],rname=parts[2],text=parts.slice(3).join("|");
+  if(!rkey||!rname)return;
+  if((Date.now()-(d.t||0))>120000)return;
+  LIVERADIOS.set(rkey,{name:rname,owner:d.n||"",ts:d.t||Date.now()});
+  /* tuned in? the radio voice reads it out (never your own echo) */
+  if(LISTEN.key===rkey&&text&&text!=="~"&&payKey(d.n||"")!==profileKey()&&SND.music&&S.mode==="game"){
+    try{
+      const u=new SpeechSynthesisUtterance(text);
+      u.rate=1.02;u.pitch=1.0;u.volume=1;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  if(_carScreenOn)renderCarTunes();
+}
+function tuneLiveRadio(k){
+  const r=LIVERADIOS.get(k);
+  if(!r)return;
+  LISTEN.key=k;TUNES_SEL=-1;
+  setStation(0);           // pause the music — the live voice takes over
+  musicOnUI();
+  chatStart();
+  toast("\u{1F534}\u{1F4FB} Tuned in to \""+r.name+"\" by "+r.owner+" — you'll hear everything they say!");
+  if(_carScreenOn)renderCarTunes();
+}
 /* every story stays available for 5 REAL minutes */
 function pruneNews(){
   const now=Date.now();
@@ -3782,6 +4012,8 @@ function chatAdd(d,key){
   const age=Date.now()-(d.t||0);
   if(age>=CHAT_TTL){chatExpire(key);return;} // already too old — clean it up
   setTimeout(()=>chatExpire(key),CHAT_TTL-age);
+  /* 📻 live player-radio packets ride the chat channel — they never show as chat */
+  if(d.m.startsWith("\u{1F4FB}|")){try{handleRadioPacket(d);}catch(e){}return;}
   const el=$("chatMsgs"),row=document.createElement("div");
   row.dataset.key=key;
   row.className="cmsg"+(d.n===mpName()?" me":"");
