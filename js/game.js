@@ -269,6 +269,7 @@ $("musTgl").onclick=()=>{
 function goSpawn(){
   endRide(true);
   switchWorld("earth");
+  MCD.phase="idle";MCD.target=null;MCD.cd=8;   // spawn always frees the wheel
   const sx=WORLD.ox+6,sz=WORLD.oz+6;
   player.inRocket=false;
   if(CAVE.in)exitCave(true);
@@ -394,7 +395,10 @@ function startGame(v){
   S.selected=v;S.mode="game";
   $("menu").style.display="none";$("hud").classList.add("show");
   $("vehName").textContent=v.name;
-  if(myVehicle)scene.remove(myVehicle.mesh);
+  /* a running job ends here — otherwise the police siren & cruiser mesh
+     would leak onto the newly picked car */
+  if(JOB.type)endJob(true);
+  if(myVehicle){scene.remove(myVehicle.mesh);disposeGroup(myVehicle.mesh);}
   const sx=resume?rx:WORLD.ox+6,sz=resume?rz:WORLD.oz+6;
   S.everPlayed=true;S.lastPlayWorld=WORLD.name;
   const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);
@@ -1113,7 +1117,7 @@ const MCMOBS=[];
 function mcDeath(){
   teleportTo(6,6);
   heartsReset();
-  for(const m of MCMOBS)if(m.g.parent)m.g.parent.remove(m.g);
+  for(const m of MCMOBS){if(m.g.parent)m.g.parent.remove(m.g);disposeGroup(m.g);}
   MCMOBS.length=0;
   toast("\u{1F480} The monsters got you! You respawned at the spawn — your backpack is safe.");
 }
@@ -1121,7 +1125,9 @@ function mcHurtPlayer(n,what){
   /* armor blocks a lot of hits! */
   if(MCTOOLS.armor&&Math.random()<0.45){toast("\u{1F6E1} CLANG! Your armor blocked the "+what+"!");return false;}
   if(!playerHurt(n))return false;
-  if(PHP.v<=0){mcDeath();return true;}
+  /* a killing blow returns false: death shows its own message,
+     so callers must NOT add a "hearts left" toast on top */
+  if(PHP.v<=0){mcDeath();return false;}
   return true;
 }
 function nearMcMob(r){
@@ -1135,6 +1141,7 @@ function nearMcMob(r){
 function killMcMob(m){
   const i=MCMOBS.indexOf(m);
   if(m.g.parent)m.g.parent.remove(m.g);else scene.remove(m.g);
+  disposeGroup(m.g);
   if(i>=0)MCMOBS.splice(i,1);
 }
 function mcAttack(m){
@@ -1166,7 +1173,7 @@ function updateMc(dt){
   /* population: more zombies at NIGHT, a couple of creepers, some tasty pigs */
   for(let i=MCMOBS.length-1;i>=0;i--){
     const m=MCMOBS[i];
-    if(Math.hypot(m.x-player.x,m.z-player.z)>110){scene.remove(m.g);MCMOBS.splice(i,1);}
+    if(Math.hypot(m.x-player.x,m.z-player.z)>110){scene.remove(m.g);disposeGroup(m.g);MCMOBS.splice(i,1);}
   }
   const counts={zombie:0,creeper:0,pig:0};
   for(const m of MCMOBS)counts[m.kind]=(counts[m.kind]||0)+1;
@@ -1204,8 +1211,9 @@ function updateMc(dt){
           killMcMob(m);
           playCrash(40);
           puffSmoke(m.x,terrainH(m.x,m.z)+1,m.z,true);puffSmoke(m.x+1,terrainH(m.x,m.z)+2,m.z-1,true);
-          if(d<5&&player.onFoot)mcHurtPlayer(3,"explosion")&&toast("\u{1F4A5}\u{1F7E9} SSSS... BOOM!! The creeper exploded on you — "+PHP.v+" ❤️ left!");
-          else toast("\u{1F4A5}\u{1F7E9} BOOM! The creeper exploded — that was CLOSE!");
+          if(d<5&&player.onFoot){
+            if(mcHurtPlayer(3,"explosion"))toast("\u{1F4A5}\u{1F7E9} SSSS... BOOM!! The creeper exploded on you — "+PHP.v+" ❤️ left!");
+          }else toast("\u{1F4A5}\u{1F7E9} BOOM! The creeper exploded — that was CLOSE!");
           continue;
         }
       }else if(d<16&&player.onFoot){
@@ -1630,7 +1638,8 @@ function handleRadioPacket(d){
     if(NEWS.length>12)NEWS.shift();
   }
   /* tuned in? the radio voice reads it out (never your own echo) */
-  if(LISTEN.key===rkey&&text&&text!=="~"&&!mine&&SND.music&&S.mode==="game"){
+  /* the live voice only plays while you're actually sitting in your car */
+  if(LISTEN.key===rkey&&text&&text!=="~"&&!mine&&SND.music&&S.mode==="game"&&_carScreenOn){
     try{
       const u=new SpeechSynthesisUtterance(text);
       u.rate=1.02;u.pitch=1.0;u.volume=1;
@@ -4371,7 +4380,7 @@ function mpApply(k,d){
   o.tx=d.x;o.tz=d.z;o.ty=typeof d.y==="number"?d.y:0;o.tyaw=typeof d.r==="number"?d.r:0;
   o.seen=performance.now();
 }
-function mpDrop(k){const o=MP.others.get(k);if(o){scene.remove(o.g);MP.others.delete(k);}}
+function mpDrop(k){const o=MP.others.get(k);if(o){scene.remove(o.g);disposeGroup(o.g);MP.others.delete(k);}}
 function mpTick(dt){
   if(!MP.on)return;
   /* glide the other players toward their latest reported spot */
@@ -4384,6 +4393,18 @@ function mpTick(dt){
     o.yaw+=dy*a;
     o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.yaw;
     o.g.visible=S.world==="earth";
+    /* 🚗 other players' cars are SOLID — you bump into them, not through them */
+    if(S.world==="earth"&&!player.onFoot&&player.drive&&o.kind!=="foot"&&o.kind!=="seat"
+       &&(!RIDE.on||RIDE.key!==k)){
+      const v=player.drive;
+      const dx=v.x-o.x,dz=v.z-o.z,dd=Math.hypot(dx,dz);
+      if(dd<3.4&&Math.abs((v.y||0)-(o.y||0))<2.6){
+        const push=(3.4-dd)/(dd||0.001);
+        v.x+=dx*push;v.z+=dz*push;                 // pushed out of their car
+        if(Math.abs(v.speed)>6){playCrash(Math.abs(v.speed));vehDamage(Math.abs(v.speed)*0.5);}
+        v.speed*=0.4;
+      }
+    }
     /* spinning rotors on other players' helicopters */
     if(o.kind==="heli"&&o.g.children[0].userData.rotor)o.g.children[0].userData.rotor.rotation.y+=dt*24;
     /* the weekly champion wears a golden crown */
@@ -4562,6 +4583,55 @@ setInterval(checkPayments,9000);
 const FRIENDS=new Set();
 try{JSON.parse(localStorage.getItem("vc4friends")||"[]").forEach(n=>{if(typeof n==="string")FRIENDS.add(n);});}catch(e){}
 function saveFriends(){try{localStorage.setItem("vc4friends",JSON.stringify([...FRIENDS]))}catch(e){}}
+/* ---------- ⭐ the FRIENDS list (in the Actions menu) ---------- */
+async function addFriendByName(){
+  const s=cleanServerName(prompt("⭐ Type your friend's player name!")||"").slice(0,16);
+  if(!s)return;
+  if(payKey(s)===payKey(mpName())){toast("\u{1F92D} That's YOU — you can't friend yourself!");return;}
+  if(FRIENDS.has(s)){toast("⭐ "+s+" is already your friend!");openFriends();return;}
+  let known=false;
+  try{
+    const r=await fetch(SERVER_API+"/usernames/"+payKey(s)+".json",{cache:"no-store"});
+    known=r.ok&&(await r.json())!==null;
+  }catch(e){}
+  if(!known){toast("\u{1F914} No player called \""+s+"\" exists (yet) — check the spelling!");return;}
+  FRIENDS.add(s);saveFriends();requestMap();
+  toast("⭐ "+s+" is now your FRIEND — gold on the map when you meet!");
+  openFriends();
+}
+function openFriends(){
+  const online=new Map([...MP.others.values()].map(o=>[o.name,o]));
+  const opts=[...FRIENDS]
+    .sort((a,b)=>((online.has(b)?1:0)-(online.has(a)?1:0))||a.localeCompare(b))
+    .map(n=>({
+      label:online.has(n)
+        ?"\u{1F7E2} "+n+" — HERE! "+fmtDist(Math.hypot(online.get(n).x-player.x,online.get(n).z-player.z))+" away"
+        :"⚪ "+n+" — not in this world right now",
+      value:"f:"+n
+    }));
+  if(!FRIENDS.size)opts.push({label:"\u{1F4A1} No friends yet — add one below, or tap a player on the \u{1F5FA} Map!",value:"cancel"});
+  opts.push({label:"➕ Add a friend by name...",value:"add"});
+  opts.push({label:"❌ Close",value:"cancel"});
+  showDest("⭐ MY FRIENDS ("+FRIENDS.size+")",opts,v=>{
+    if(v==="cancel")return;
+    if(v==="add"){addFriendByName();return;}
+    const n=v.slice(2),o=online.get(n);
+    if(o){choosePlayer(o);return;}
+    /* offline friends: money & gifts land in their inbox for when they play */
+    showDest("⚪ "+n+" — not here right now",[
+      {label:"\u{1F4B8} Send money (lands in their inbox)",value:"pay"},
+      {label:"\u{1F381} Give a dumpling (waits in their inbox)",value:"gift"},
+      {label:"\u{1F494} Remove friend",value:"rm"},
+      {label:"↩️ Back",value:"back"}
+    ],w=>{
+      if(w==="pay")openPay(n);
+      else if(w==="gift")openGift(n);
+      else if(w==="rm"){FRIENDS.delete(n);saveFriends();requestMap();toast("\u{1F494} "+n+" removed from your friends.");openFriends();}
+      else if(w==="back")openFriends();
+    });
+  });
+}
+$("bFriends").onclick=openFriends;
 /* ---------- gift a dumpling to another player (rides the payments inbox) ---------- */
 function openGift(name){
   if(!DUMP.owned.length){toast("\u{1F95F} You have no dumplings to give — buy some at a MEGA MART!");return;}
@@ -7056,6 +7126,8 @@ function switchWorld(w){
   if(S.world===w)return;
   S.world=w;
   SIT.on=false;endRide(true);
+  /* leaving mid McDrive-order? the order is off — normal driving comes back */
+  MCD.phase="idle";MCD.target=null;MCD.cd=8;
   if(player.boat){player.boat=null;player.onFoot=true;player.mesh.visible=true;}
   if(player.inHeli){player.inHeli=false;player.onFoot=true;}
   if(HELI.mesh)HELI.mesh.visible=w==="earth"&&HELI.active;
