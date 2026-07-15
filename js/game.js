@@ -1373,6 +1373,23 @@ setInterval(()=>{
   }
 },350);
 /* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
+/* tiny version badge — so we can always SEE which game version is running */
+const GAMEVER=57;
+const verBadge=document.createElement("div");
+verBadge.style.cssText="position:fixed;right:6px;bottom:4px;z-index:60;font:600 10px 'Segoe UI',sans-serif;color:#7d8aa5;opacity:.6;pointer-events:none";
+verBadge.textContent="v"+GAMEVER;
+document.body.appendChild(verBadge);
+/* live caption bar: shows EVERYTHING the mic hears, while it hears it */
+const micCap=document.createElement("div");
+micCap.style.cssText="position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:rgba(13,17,26,.9);color:#3fd0ff;font:600 15px 'Segoe UI',sans-serif;padding:7px 14px;border-radius:12px;z-index:99;display:none;max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none";
+document.body.appendChild(micCap);
+let micCapT=0;
+function micCaption(t){
+  micCap.textContent="\u{1F3A4} "+t;
+  micCap.style.display="block";
+  clearTimeout(micCapT);
+  micCapT=setTimeout(()=>{micCap.style.display="none";},3500);
+}
 const MIC={rec:null,mode:null};
 function micSupported(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition);}
 function micStop(){
@@ -1388,11 +1405,15 @@ function micStart(mode,onResult){
   const rec=new R();
   /* the assistant listens for ENGLISH commands; your radio speaks YOUR language */
   rec.lang=mode==="assistant"?"en-US":(navigator.language||"en-US");
-  rec.continuous=true;rec.interimResults=false;
+  rec.continuous=true;rec.interimResults=true;
   rec.onresult=e=>{
-    for(let i=e.resultIndex;i<e.results.length;i++)
-      if(e.results[i].isFinal)onResult(e.results[i][0].transcript.trim());
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const txt=e.results[i][0].transcript.trim();
+      if(txt)micCaption(txt);            // LIVE captions — you see what it hears
+      if(e.results[i].isFinal)onResult(txt);
+    }
   };
+  rec.onstart=()=>micCaption(mode==="assistant"?'Listening... say "HEY GOOGLE"!':"ON AIR — everything you say goes out live!");
   rec.onerror=e=>{
     if(e.error==="not-allowed"||e.error==="service-not-allowed"){
       toast("\u{1F3A4}\u{1F6AB} Microphone BLOCKED — click the \u{1F512} next to the address bar, allow the Microphone, then try again!");
@@ -1556,12 +1577,14 @@ const LIVERADIOS=new Map();   // key -> {name, owner, ts}
 const LISTEN={key:null};
 function radioPacket(text){
   try{
-    firebase.database().ref("chat").push({
+    const p=firebase.database().ref("chat").push({
       n:mpName(),
       m:("\u{1F4FB}|"+MYRADIO.key+"|"+MYRADIO.name+"|"+(text||"~")).slice(0,200),
       t:Date.now()
     });
-  }catch(e){}
+    /* if the database says NO, show it — never fail silently */
+    if(p&&p.catch)p.catch(e=>toast("\u{1F534}\u{26A0} Radio couldn't broadcast: "+(e&&e.message||e)));
+  }catch(e){toast("\u{1F534}\u{26A0} Radio couldn't broadcast: "+(e&&e.message||e));}
 }
 function stopMyRadio(){
   MYRADIO.on=false;
@@ -4191,6 +4214,8 @@ function chatAdd(d,key){
   el.appendChild(row);
   while(el.children.length>100)el.removeChild(el.firstChild);
   el.scrollTop=el.scrollHeight;
+  /* fresh messages float above the sender's head (old replayed ones don't) */
+  if(age<12000)try{chatBubbleFor(d.n,d.m.slice(0,80));}catch(e){}
   if(!CHAT.open){CHAT.unread++;chatBtnUI();}
 }
 function chatBtnUI(){
@@ -4224,7 +4249,10 @@ function chatSend(){
   if(!CHAT.on){toast("\u{1F534} Chat is offline right now.");return;}
   CHAT.lastSend=now;
   $("chatInput").value="";
-  try{firebase.database().ref("chat").push({n:mpName(),m,t:Date.now()});}catch(e){}
+  try{
+    const p=firebase.database().ref("chat").push({n:mpName(),m,t:Date.now()});
+    if(p&&p.catch)p.catch(e=>toast("\u{1F4AC}\u{26A0} Message didn't send: "+(e&&e.message||e)));
+  }catch(e){toast("\u{1F4AC}\u{26A0} Message didn't send: "+(e&&e.message||e));}
 }
 $("bChat").onclick=()=>chatToggle();
 $("chatClose").onclick=()=>chatToggle(false);
@@ -4257,6 +4285,50 @@ function mpLeave(){
   try{MP.ref.off();MP.myRef.onDisconnect().cancel();MP.myRef.remove();}catch(e){}
   [...MP.others.keys()].forEach(mpDrop);
   MP.on=false;MP.ref=MP.myRef=null;MP.lastSig="";
+}
+/* 💬 chat bubbles: your message floats above your head for everyone to see */
+function makeChatBubble(text){
+  const cv=document.createElement("canvas");cv.width=512;cv.height=128;
+  const c=cv.getContext("2d");
+  c.font="bold 30px 'Segoe UI',sans-serif";
+  const t=text.length>42?text.slice(0,41)+"…":text;
+  const w=Math.min(496,c.measureText(t).width+40);
+  c.fillStyle="rgba(255,255,255,.96)";
+  if(c.roundRect){c.beginPath();c.roundRect(256-w/2,14,w,66,18);c.fill();}
+  else c.fillRect(256-w/2,14,w,66);
+  /* the little tail pointing down at the speaker */
+  c.beginPath();c.moveTo(244,78);c.lineTo(268,78);c.lineTo(256,100);c.closePath();c.fill();
+  c.fillStyle="#101623";c.textAlign="center";c.fillText(t,256,59);
+  const tex=new THREE.CanvasTexture(cv);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  s.scale.set(8.4,2.1,1);
+  return s;
+}
+function showBubbleOver(obj,text,h){
+  if(!obj||!text)return;
+  const old=obj.userData.bub;
+  if(old){obj.remove(old);try{old.material.map.dispose();old.material.dispose();}catch(e){}}
+  const s=makeChatBubble(text);
+  s.position.y=h;
+  obj.add(s);obj.userData.bub=s;
+  clearTimeout(obj.userData.bubT);
+  obj.userData.bubT=setTimeout(()=>{
+    if(obj.userData.bub===s){
+      obj.remove(s);obj.userData.bub=null;
+      try{s.material.map.dispose();s.material.dispose();}catch(e){}
+    }
+  },6500);
+}
+function chatBubbleFor(name,msg){
+  if(S.mode!=="game")return;
+  if(name===mpName()){
+    /* me: above my car (or above my head on foot) */
+    const mine=player.onFoot?player.mesh:(player.drive&&player.drive.mesh)||player.mesh;
+    showBubbleOver(mine,msg,player.onFoot?3.6:4.1);
+    return;
+  }
+  for(const o of MP.others.values())
+    if(o.name===name){showBubbleOver(o.g,msg,(o.kind==="foot"||o.kind==="seat")?3.8:4.2);break;}
 }
 function mpMakeLabel(name){
   const cv=document.createElement("canvas");cv.width=256;cv.height=64;
