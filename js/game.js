@@ -1319,10 +1319,18 @@ function musicOnUI(){
 function renderCarTunes(){
   const w=$("carTunes");
   w.innerHTML="<div class='tuneHead'>\u{1F4FB} CAR RADIO</div>";
+  /* your OWN station shows first — so you can SEE that you're on air */
+  if(MYRADIO.on){
+    const b=document.createElement("button");
+    b.className="tune on";
+    b.textContent="\u{1F534} "+MYRADIO.name+" — YOU are ON AIR!";
+    b.onclick=()=>toast("\u{1F534} That's YOUR station — everyone else can tune in. Talk away!");
+    w.appendChild(b);
+  }
   /* 🔴 live player radios on top — like "Notch's radio" */
   for(const[k,r]of LIVERADIOS){
     if(Date.now()-r.ts>120000){LIVERADIOS.delete(k);continue;}
-    if(payKey(r.owner||"")===profileKey())continue;   // your own station isn't listed for you
+    if(payKey(r.owner||"")===payKey(mpName()))continue;   // your own station is drawn above
     const b=document.createElement("button");
     b.className="tune"+(LISTEN.key===k?" on":"");
     b.textContent="\u{1F534} "+r.name+" — LIVE";
@@ -1352,13 +1360,16 @@ function renderCarTunes(){
   });
 }
 /* the mini map morphs into the car screen whenever you sit in YOUR vehicle */
-let _carScreenOn=false;
+let _carScreenOn=false,_tunesT=0;
 setInterval(()=>{
   const inCar=S.mode==="game"&&!!myVehicle&&player.drive===myVehicle;
   if(inCar!==_carScreenOn){
     _carScreenOn=inCar;
     $("miniWrap").classList.toggle("car",inCar);
-    if(inCar)renderCarTunes();
+    if(inCar){renderCarTunes();_tunesT=Date.now();}
+  }else if(inCar&&(LIVERADIOS.size||MYRADIO.on)&&Date.now()-_tunesT>5000){
+    /* live stations come & go — keep the list fresh */
+    renderCarTunes();_tunesT=Date.now();
   }
 },350);
 /* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
@@ -1391,6 +1402,9 @@ function micStart(mode,onResult){
       if(MYRADIO.on)stopMyRadio();else micStop();
     }else if(e.error==="network"){
       toast("\u{1F3A4}\u{26A0} The speech service can't be reached — speech only works in Chrome/Edge with internet.");
+    }else if(e.error!=="no-speech"&&e.error!=="aborted"){
+      /* anything unexpected: SHOW it instead of failing silently */
+      toast("\u{1F3A4}\u{26A0} Microphone problem: \""+e.error+"\"");
     }
     /* "no-speech" and "aborted" are normal — the mic just restarts */
   };
@@ -1507,9 +1521,18 @@ function gaCommand(cmd){
 }
 function gaHear(raw){
   const t=raw.toLowerCase();
-  const woke=/(hey|ok|okay),? goo?gle/.test(t);
-  let cmd=woke?t.replace(/.*?(hey|ok|okay),? goo?gle[,!.?]?\s*/,"").trim():t.trim();
-  if(!woke&&performance.now()>GA.awake)return;   // only listen after "Hey Google"
+  /* forgiving wake word: any "google"-ish sound counts ("hey google",
+     "he google", "a googol", ... — accents & mishearings welcome!) */
+  const woke=/goo?gle|googol|googly|koogle|cugle/.test(t);
+  let cmd=woke?t.replace(/.*?(goo?gle|googol|googly|koogle|cugle)[,!.?]?\s*/,"").trim():t.trim();
+  if(!woke&&performance.now()>GA.awake){
+    /* the mic DID hear you — show it, so it never feels broken */
+    if(performance.now()-(GA.hintAt||0)>4000){
+      GA.hintAt=performance.now();
+      toast("\u{1F3A4} I heard: \""+raw.slice(0,60)+"\" — start with \"HEY GOOGLE\"!");
+    }
+    return;
+  }
   if(!cmd||cmd.length<3){
     GA.awake=performance.now()+9000;
     gSay("Yes?");
@@ -1576,14 +1599,15 @@ function handleRadioPacket(d){
   /* a brand-new station? tell this player about it (news is local, so
      the announcement has to happen HERE, on the listener's side) */
   const isNew=!LIVERADIOS.has(rkey);
-  LIVERADIOS.set(rkey,{name:rname,owner:d.n||"",ts:d.t||Date.now()});
-  if(isNew&&payKey(d.n||"")!==profileKey()&&S.mode==="game"){
+  const mine=payKey(d.n||"")===payKey(mpName());
+  LIVERADIOS.set(rkey,{name:rname,owner:d.n||"",ts:Date.now()});
+  if(isNew&&!mine&&S.mode==="game"){
     toast("\u{1F4FB}\u{1F534} \""+rname+"\" by "+(d.n||"a player")+" is ON AIR — hop in your car and tap it in the song list!");
     NEWS.push({t:"\u{1F4FB}\u{1F534} \""+rname+"\" by "+(d.n||"a player")+" is ON AIR — tune in on your car radio!",ts:Date.now()});
     if(NEWS.length>12)NEWS.shift();
   }
   /* tuned in? the radio voice reads it out (never your own echo) */
-  if(LISTEN.key===rkey&&text&&text!=="~"&&payKey(d.n||"")!==profileKey()&&SND.music&&S.mode==="game"){
+  if(LISTEN.key===rkey&&text&&text!=="~"&&!mine&&SND.music&&S.mode==="game"){
     try{
       const u=new SpeechSynthesisUtterance(text);
       u.rate=1.02;u.pitch=1.0;u.volume=1;
