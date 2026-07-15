@@ -3198,14 +3198,48 @@ function buildChurch(){
   const g=new THREE.Group(),cx=CHURCH.x,cz=CHURCH.z,y=terrainH(cx,cz);
   const stone=new THREE.MeshLambertMaterial({color:0xcfc6b8});
   const roofM=new THREE.MeshLambertMaterial({color:0x7a4a2f});
-  /* the nave */
-  const nave=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(10,7,20),stone));
-  nave.position.set(cx,y+3.5,cz);g.add(nave);
+  /* the nave is a REAL walk-in hall: floor, hollow walls & a ceiling */
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(10,0.3,20),new THREE.MeshLambertMaterial({color:0xbfb6a6}));
+  floor.position.set(cx,y+0.15,cz);floor.receiveShadow=true;g.add(floor);
+  const wallE=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.4,7,20),stone));
+  wallE.position.set(cx+5,y+3.5,cz);g.add(wallE);
+  /* west wall has the doorway in the middle */
+  [-6,6].forEach(oz=>{
+    const w=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.4,7,8),stone));
+    w.position.set(cx-5,y+3.5,cz+oz);g.add(w);
+  });
+  const lintel=new THREE.Mesh(new THREE.BoxGeometry(0.4,3,4),stone);
+  lintel.position.set(cx-5,y+5.5,cz);g.add(lintel);
+  [-10,10].forEach(oz=>{
+    const w=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(10,7,0.4),stone));
+    w.position.set(cx,y+3.5,cz+oz);g.add(w);
+  });
+  const ceil=new THREE.Mesh(new THREE.BoxGeometry(10.6,0.3,20.6),new THREE.MeshLambertMaterial({color:0xe8e2d4}));
+  ceil.position.set(cx,y+7.15,cz);g.add(ceil);
+  /* you can only walk in & out through the doorway */
+  regShell(g,cx,cz,5,10,y,[{x:cx-5,z:cz,r:2.2}]);
   /* pitched roof: two slanted panels meeting at the ridge */
   [-1,1].forEach(s=>{
     const r=new THREE.Mesh(new THREE.BoxGeometry(6.6,0.4,20.6),roofM);
     r.position.set(cx+s*2.3,y+8.1,cz);r.rotation.z=s*0.72;g.add(r);
   });
+  /* 🎹 THE ORGAN: silver pipes on a base + a console you can REALLY play */
+  const pipeM=new THREE.MeshLambertMaterial({color:0xb9c0cc});
+  const base=new THREE.Mesh(new THREE.BoxGeometry(4.8,1,1.2),new THREE.MeshLambertMaterial({color:0x5a3a22}));
+  base.position.set(cx,y+0.8,cz+9.2);g.add(base);
+  [2,2.6,3.2,3.9,4.6,3.9,3.2,2.6,2].forEach((h,i)=>{
+    const p2=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,h,8),pipeM);
+    p2.position.set(cx-1.9+i*0.475,y+1.3+h/2,cz+9.2);g.add(p2);
+  });
+  makePiano(cx,cz+7.4,Math.PI,g,y+0.3);
+  /* red carpet down the aisle */
+  const carpet=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.06,16),new THREE.MeshLambertMaterial({color:0x9e2b2b}));
+  carpet.position.set(cx,y+0.34,cz-1);g.add(carpet);
+  /* rows of chairs (you can SIT on them!) facing the organ, aisle in the middle */
+  for(let row=0;row<5;row++){
+    const rz=cz-7.5+row*2.1;
+    [-3.2,-1.9,1.9,3.2].forEach(ox=>makeChair(cx+ox,rz,0,g,y+0.3));
+  }
   /* bell tower with a spire and a golden cross */
   const tow=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(4.6,13,4.6),stone));
   tow.position.set(cx,y+6.5,cz-12.2);g.add(tow);
@@ -3214,14 +3248,12 @@ function buildChurch(){
   const crossM=new THREE.MeshBasicMaterial({color:0xffd75e});
   const c1=new THREE.Mesh(new THREE.BoxGeometry(0.22,2.2,0.22),crossM);c1.position.set(cx,y+19.1,cz-12.2);g.add(c1);
   const c2=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.22,0.22),crossM);c2.position.set(cx,y+19.4,cz-12.2);g.add(c2);
-  /* wooden door facing the square + glowing windows */
-  const door=new THREE.Mesh(new THREE.BoxGeometry(0.3,3.6,2.4),new THREE.MeshLambertMaterial({color:0x5a3a22}));
-  door.position.set(cx-5.05,y+1.8,cz);g.add(door);
+  /* glowing windows set into the walls (visible inside AND outside) */
   const winM=new THREE.MeshBasicMaterial({color:0x9fd8ff});
   for(const dz of[-6,-2,2,6]){
-    const w1=new THREE.Mesh(new THREE.BoxGeometry(0.2,2.6,1.1),winM);
-    w1.position.set(cx-5.02,y+4,cz+dz);g.add(w1);
-    const w2=w1.clone();w2.position.x=cx+5.02;g.add(w2);
+    const w1=new THREE.Mesh(new THREE.BoxGeometry(0.5,2.6,1.1),winM);
+    w1.position.set(cx-5,y+4,cz+dz);g.add(w1);
+    const w2=w1.clone();w2.position.x=cx+5;g.add(w2);
   }
   /* the CAR MEET square: asphalt pad, white lines & a banner */
   const mx=CHURCH.meetX,mz=CHURCH.meetZ;
