@@ -184,6 +184,7 @@ function flatMask(x,z){
   const a=airportLocal(x,z);                                                               // airports repeat
   f=Math.max(f,(1-sstep(50,80,Math.abs(a.lz+40)))*(1-sstep(0,1,Math.max(0,260-a.lx)))*(1-sstep(560,595,a.lx)));
   f=Math.max(f,1-sstep(60,95,Math.hypot(x+340,z-260)));                                    // zoo
+  f=Math.max(f,1-sstep(44,62,Math.hypot(x-450,z-330)));                                    // church square
   f=Math.max(f,1-sstep(34,70,rocketPadDist(x,z)));                                         // rocket pads
   f=Math.max(f,1-sstep(48,84,stuntDist(x,z)));                                             // stunt parks
   return Math.min(1,f);
@@ -2224,6 +2225,7 @@ function keepClear(x,z){
   if(Math.abs(x)<160&&Math.abs(z)<160)return true;
   if(onAnyRoad(x,z))return true;
   if(Math.hypot(x+340,z-260)<95)return true;         // zoo
+  if(Math.hypot(x-450,z-330)<56)return true;         // church & car-meet square
   if(baseH(x,z)<-1)return true;                      // nothing spawns in the water
   if(rocketPadDist(x,z)<40)return true;              // keep rocket pads clear
   /* nothing spawns inside a giant MEGA MART's or MEGA MANSION's block */
@@ -3190,6 +3192,65 @@ function buildZoo(){
   for(let i=0;i<4;i++)spawnQueue.push([zx-20+Math.random()*40,zz+25+Math.random()*10]);
   scene.add(g);return g;
 }
+/* ⛪ the CITY CHURCH & Saturday car-meet square — one per city, like the zoo */
+const CHURCH={x:464,z:330,meetX:428,meetZ:330};
+function buildChurch(){
+  const g=new THREE.Group(),cx=CHURCH.x,cz=CHURCH.z,y=terrainH(cx,cz);
+  const stone=new THREE.MeshLambertMaterial({color:0xcfc6b8});
+  const roofM=new THREE.MeshLambertMaterial({color:0x7a4a2f});
+  /* the nave */
+  const nave=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(10,7,20),stone));
+  nave.position.set(cx,y+3.5,cz);g.add(nave);
+  /* pitched roof: two slanted panels meeting at the ridge */
+  [-1,1].forEach(s=>{
+    const r=new THREE.Mesh(new THREE.BoxGeometry(6.6,0.4,20.6),roofM);
+    r.position.set(cx+s*2.3,y+8.1,cz);r.rotation.z=s*0.72;g.add(r);
+  });
+  /* bell tower with a spire and a golden cross */
+  const tow=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(4.6,13,4.6),stone));
+  tow.position.set(cx,y+6.5,cz-12.2);g.add(tow);
+  const sp=new THREE.Mesh(new THREE.ConeGeometry(3.4,5,4),roofM);
+  sp.position.set(cx,y+15.5,cz-12.2);sp.rotation.y=Math.PI/4;g.add(sp);
+  const crossM=new THREE.MeshBasicMaterial({color:0xffd75e});
+  const c1=new THREE.Mesh(new THREE.BoxGeometry(0.22,2.2,0.22),crossM);c1.position.set(cx,y+19.1,cz-12.2);g.add(c1);
+  const c2=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.22,0.22),crossM);c2.position.set(cx,y+19.4,cz-12.2);g.add(c2);
+  /* wooden door facing the square + glowing windows */
+  const door=new THREE.Mesh(new THREE.BoxGeometry(0.3,3.6,2.4),new THREE.MeshLambertMaterial({color:0x5a3a22}));
+  door.position.set(cx-5.05,y+1.8,cz);g.add(door);
+  const winM=new THREE.MeshBasicMaterial({color:0x9fd8ff});
+  for(const dz of[-6,-2,2,6]){
+    const w1=new THREE.Mesh(new THREE.BoxGeometry(0.2,2.6,1.1),winM);
+    w1.position.set(cx-5.02,y+4,cz+dz);g.add(w1);
+    const w2=w1.clone();w2.position.x=cx+5.02;g.add(w2);
+  }
+  /* the CAR MEET square: asphalt pad, white lines & a banner */
+  const mx=CHURCH.meetX,mz=CHURCH.meetZ;
+  const pad=new THREE.Mesh(new THREE.PlaneGeometry(34,26),new THREE.MeshLambertMaterial({color:0x3a3f47}));
+  pad.rotation.x=-Math.PI/2;pad.position.set(mx,y+0.08,mz);pad.receiveShadow=true;g.add(pad);
+  const lineM=new THREE.MeshBasicMaterial({color:0xf7f7f7});
+  [-1,1].forEach(s=>{
+    const l=new THREE.Mesh(new THREE.PlaneGeometry(34,0.5),lineM);
+    l.rotation.x=-Math.PI/2;l.position.set(mx,y+0.1,mz+s*12.7);g.add(l);
+  });
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#1a1030";c.fillRect(0,0,512,96);
+  c.fillStyle="#ffd75e";c.font="bold 42px Segoe UI";c.textAlign="center";
+  c.fillText("\u{1F3C6} SATURDAY CAR MEET",256,62);
+  const ban=new THREE.Mesh(new THREE.PlaneGeometry(18,3.4),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
+  ban.position.set(mx,y+5.4,mz-13.5);g.add(ban);
+  [-8.4,8.4].forEach(o=>{const p2=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,5.6),poleMat);p2.position.set(mx+o,y+2.8,mz-13.5);g.add(p2);});
+  /* church sign by the road */
+  const cv2=document.createElement("canvas");cv2.width=512;cv2.height=96;
+  const sc=cv2.getContext("2d");sc.fillStyle="#f4f1ea";sc.fillRect(0,0,512,96);
+  sc.fillStyle="#333";sc.font="bold 34px Segoe UI";sc.textAlign="center";
+  sc.fillText("⛪ CITY CHURCH · organ every Sunday",256,60);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(14,2.6),
+    new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv2),side:THREE.DoubleSide}));
+  sg.position.set(cx-4,y+2.6,cz+13.5);g.add(sg);
+  [-6.4,6.4].forEach(o=>{const p2=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,3),poleMat);p2.position.set(cx-4+o,y+1.5,cz+13.5);g.add(p2);});
+  scene.add(g);return g;
+}
 function buildRocketStation(i,j){
   const p=rocketPadPos(i,j),g=new THREE.Group(),y=terrainH(p.x,p.z);
   const pad=new THREE.Mesh(new THREE.CylinderGeometry(13,14,0.6,20),new THREE.MeshLambertMaterial({color:0x4a4f57}));
@@ -3508,6 +3569,8 @@ function updateLandmarks(px,pz){
   }
   if(Math.hypot(px+340,pz-260)<700){const k="zoo:0,0";need.add(k);
     if(!landmarks.has(k)&&built<1){landmarks.set(k,buildZoo());built++;}}
+  if(Math.hypot(px-450,pz-330)<700){const k="church:0,0";need.add(k);
+    if(!landmarks.has(k)&&built<1){landmarks.set(k,buildChurch());built++;}}
   /* stunt parks every ~3.6 km */
   const spi=Math.round((px-1800)/3600),spj=Math.round((pz-600)/3600);
   for(let i=spi-1;i<=spi+1;i++)for(let j=spj-1;j<=spj+1;j++){

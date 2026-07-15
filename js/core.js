@@ -57,6 +57,9 @@ function clockTick(dt){
   }
   CLOCK.min+=dt*300/60; if(CLOCK.min>=1440){CLOCK.min-=1440;CLOCK.day++;}
 }
+/* game weekdays: Day 1 is a Monday — Saturday = car meet, Sunday = church organ */
+const WEEKDAYS=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+function weekday(){return WEEKDAYS[((CLOCK.day-1)%7+7)%7];}
 function dayFrac(){return CLOCK.min/1440;}
 function isNight(){const f=dayFrac();return f<0.23||f>0.81;}
 /* traffic-light phase: 40 game-minutes = 8 real seconds per green, so the
