@@ -3231,7 +3231,18 @@ function buildChurch(){
     const p2=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,h,8),pipeM);
     p2.position.set(cx-1.9+i*0.475,y+1.3+h/2,cz+9.2);g.add(p2);
   });
-  makePiano(cx,cz+7.4,Math.PI,g,y+0.3);
+  /* organ console — just for show: the organ plays ITSELF (it's not a piano!) */
+  const conM=new THREE.MeshLambertMaterial({color:0x4a3320});
+  const con=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.05,0.8),conM);
+  con.position.set(cx,y+0.85,cz+7.6);g.add(con);
+  const keys=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.06,0.3),new THREE.MeshLambertMaterial({color:0xf2efe6}));
+  keys.position.set(cx,y+1.15,cz+7.35);g.add(keys);
+  const bench=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.5),conM);
+  bench.position.set(cx,y+0.78,cz+6.6);g.add(bench);
+  [[-0.7,-0.15],[0.7,-0.15],[-0.7,0.15],[0.7,0.15]].forEach(o=>{
+    const l=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.45,0.1),conM);
+    l.position.set(cx+o[0],y+0.5,cz+6.6+o[1]);g.add(l);
+  });
   /* red carpet down the aisle */
   const carpet=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.06,16),new THREE.MeshLambertMaterial({color:0x9e2b2b}));
   carpet.position.set(cx,y+0.34,cz-1);g.add(carpet);

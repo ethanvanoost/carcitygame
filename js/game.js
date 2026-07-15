@@ -1726,8 +1726,8 @@ function organLoad(){
     .then(ps=>{
       ORGAN.pieces=ps.filter(Boolean);
       ORGAN.total=ORGAN.pieces.reduce((s,q)=>s+q.dur+4,0);
-      if(!ORGAN.pieces.length)ORGAN.pieces=null;
-    });
+      if(!ORGAN.pieces.length){ORGAN.pieces=null;ORGAN.loading=false;}   // retry later
+    }).catch(()=>{ORGAN.loading=false;});
 }
 /* one organ note: layered sine partials = churchy pipe sound */
 function organNote(when,dur,midi,vel){
@@ -1764,7 +1764,10 @@ function organSchedule(from,to,base){
 }
 function organTick(){
   const d=Math.hypot(player.x-CHURCH.x,player.z-CHURCH.z);
-  const want=weekday()==="Sunday"&&S.mode==="game"&&S.world==="earth"&&SND.music&&d<180;
+  const sunday=weekday()==="Sunday";
+  /* SUNDAY: the organ fills the whole square, all game day.
+     Other days: the organist practices — you hear it when you step INSIDE. */
+  const want=S.mode==="game"&&S.world==="earth"&&SND.sound&&(sunday?d<180:d<11);
   if(!want){
     if(ORGAN.on){ORGAN.on=false;if(ORGAN.gain)ORGAN.gain.gain.setTargetAtTime(0,audioCtx?audioCtx.currentTime:0,0.15);}
     return;
@@ -1774,7 +1777,11 @@ function organTick(){
   if(!audioCtx)return;
   try{if(audioCtx.state==="suspended")audioCtx.resume();}catch(e){}
   if(!ORGAN.gain){ORGAN.gain=audioCtx.createGain();ORGAN.gain.gain.value=0;ORGAN.gain.connect(audioCtx.destination);}
-  ORGAN.gain.gain.setTargetAtTime(Math.max(0,1-d/180)*0.6,audioCtx.currentTime,0.25);
+  ORGAN.gain.gain.setTargetAtTime(sunday?Math.max(0,1-d/180)*0.6:0.32,audioCtx.currentTime,0.25);
+  if(sunday&&ORGAN.toastDay!==CLOCK.day&&d<130){
+    ORGAN.toastDay=CLOCK.day;
+    toast("⛪\u{1F3B6} It's SUNDAY — the church organ plays all day long!");
+  }
   /* a different piece opens the service each week; position follows the game clock */
   const week=Math.floor((CLOCK.day-1)/7)%ORGAN.pieces.length;
   let base=0;for(let i=0;i<week;i++)base+=ORGAN.pieces[i].dur+4;
@@ -7591,7 +7598,7 @@ function updateHint(){
     if(!txt&&S.world==="earth"&&meetDist()<44){
       if(meetActive())txt="\u{1F3C6} SATURDAY CAR MEET — park your coolest car! Walk up to a friend's car & press T to vote \u{1F525}";
       else if(weekday()==="Sunday")txt="⛪ CITY CHURCH — shhh... the organ is playing! (Car meet every Saturday!)";
-      else txt="⛪ CITY CHURCH — organ every Sunday · \u{1F3C6} CAR MEET every Saturday!";
+      else txt="⛪ CITY CHURCH — today is "+weekday().toUpperCase()+" · full organ ALL Sunday (step inside to hear the organist practice!) · \u{1F3C6} CAR MEET Saturday";
       showT=meetActive();
     }
     /* the new city places */
