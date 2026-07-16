@@ -101,4 +101,4 @@ $("ctrClose").onclick=()=>$("controls").classList.remove("open");
 $("uKmh").onclick=()=>setUnit("kmh");$("uMph").onclick=()=>setUnit("mph");
 function setUnit(u){S.unit=u;$("uKmh").classList.toggle("on",u==="kmh");$("uMph").classList.toggle("on",u==="mph");
   $("spdUnit").textContent=uLabel().toUpperCase();renderMenu();updateLimitUI();}
-function toast(msg){const t=$("toast");t.textContent=msg;t.style.opacity=1;clearTimeout(t._x);t._x=setTimeout(()=>t.style.opacity=0,2400);}
+function toast(msg){const t=$("toast");t.textContent=msg;t.style.opacity=1;clearTimeout(t._x);t._x=setTimeout(()=>t.style.opacity=0,10000);}   // messages stay 10 s

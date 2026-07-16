@@ -1371,7 +1371,7 @@ setInterval(()=>{
 },350);
 /* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
 /* tiny version badge — so we can always SEE which game version is running */
-const GAMEVER=62;
+const GAMEVER=63;
 const verBadge=document.createElement("div");
 verBadge.style.cssText="position:fixed;right:6px;bottom:4px;z-index:60;font:600 10px 'Segoe UI',sans-serif;color:#7d8aa5;opacity:.6;pointer-events:none";
 verBadge.textContent="v"+GAMEVER;
