@@ -50,7 +50,9 @@ const CLOCK={min:8*60,day:1,skew:parseInt(localStorage.getItem("vc4skew")||"0",1
 const SHARED_T0=1767225600000;   // 2026-01-01 — shared time starts counting here
 function clockTick(dt){
   if(typeof WORLD!=="undefined"&&WORLD.name){
-    const tm=(Date.now()-SHARED_T0)/200+(CLOCK.skew||0);   // 1 real second = 5 game minutes
+    /* shared clock + your sleep skew + the 👑 owner's world-time skew */
+    const wt=(typeof WT!=="undefined"&&WT.skew)||0;
+    const tm=(Date.now()-SHARED_T0)/200+(CLOCK.skew||0)+wt;   // 1 real second = 5 game minutes
     CLOCK.day=Math.floor(tm/1440)+1;
     CLOCK.min=((tm%1440)+1440)%1440;
     return;

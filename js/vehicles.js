@@ -462,7 +462,7 @@ function setTrafficCount(n){
   n=Math.max(0,Math.min(60,n));
   while(traffic.length<n)addTrafficCar();
   while(traffic.length>n){const c=traffic.pop();if(player.drive===c){traffic.push(c);break;}scene.remove(c.mesh);disposeGroup(c.mesh);}
-  $("tCount").textContent=traffic.length;
+  const tc=$("tCount");if(tc)tc.textContent=traffic.length;
 }
 function trafficPos(c){const l=c.lane;const cc=l.c+(c.dodge||0);return l.axis==="z"?{x:cc,z:c.t}:{x:c.t,z:cc};}
 function respawnCar(c){

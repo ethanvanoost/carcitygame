@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=61">
+<link rel="stylesheet" href="style.css?v=62">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -133,7 +133,7 @@
     <button class="btn" id="bGoogle">&#127908; Google AI</button>
     <button class="btn" id="bMyRadio">&#128251; Create Radio</button>
     <button class="btn" id="bChat">&#128172; Chat</button>
-    <button class="btn warn" id="bAdmin">&#128736; Admin</button>
+    <button class="btn warn" id="bAdmin">&#128736; Rules</button>
     </div>
   </div>
   <div id="chatPanel">
@@ -158,22 +158,18 @@
     </div>
   </div>
   <div id="adminPanel">
-    <h3>ADMIN &middot; MAX SPEED</h3>
-    <div class="seg mini" id="admTgt">
-      <button data-t="car" class="on">Car</button>
-      <button data-t="train">Train</button>
-      <button data-t="plane">Plane</button>
-      <button data-t="bus">Bus</button>
-      <button data-t="rocket">&#128640;</button>
-    </div>
-    <div id="limVal">0</div>
-    <div class="grid">
-      <button id="aMM">--</button><button id="aM">-</button><button id="aP">+</button><button id="aPP">++</button>
-    </div>
-    <div id="trafRow">Traffic cars <button id="tMinus">-</button><b id="tCount">24</b><button id="tPlus">+</button></div>
-    <button class="btn on" id="bArrest" style="margin-top:10px;width:100%">&#128110; Arrests: ON</button>
+    <h3>&#9881; GAME RULES</h3>
+    <button class="btn on" id="bArrest" style="width:100%">&#128110; Police chases: ON</button>
     <button class="btn on" id="bHunger" style="margin-top:8px;width:100%">&#127828; Hunger: ON</button>
-    <div id="adminNote">Admin ON also lets you drive the train, plane and bus yourself (W/S, Space = brake/climb).</div>
+    <div id="ownerBox" style="display:none">
+      <h3 style="margin-top:14px">&#128081; OWNER &middot; DAY &amp; TIME</h3>
+      <div class="grid">
+        <button id="otMorn" title="Morning 08:00">&#127749;</button><button id="otNoon" title="Noon 12:00">&#9728;&#65039;</button><button id="otEve" title="Evening 19:00">&#127751;</button><button id="otNight" title="Night 23:00">&#127769;</button>
+      </div>
+      <button class="btn" id="otDay" style="margin-top:8px;width:100%">&#128197; Skip to the NEXT DAY</button>
+      <button class="btn" id="ownUnban" style="margin-top:8px;width:100%">&#9851; Unban a player</button>
+      <div id="adminNote">&#128081; You own this world! Kick or ban players: open the &#128506; map and click their name.</div>
+    </div>
   </div>
   <div id="hint">
     <span id="hintTxt"></span>
@@ -468,9 +464,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=61"></script>
-<script src="js/world.js?v=61"></script>
-<script src="js/vehicles.js?v=61"></script>
-<script src="js/game.js?v=61"></script>
+<script src="js/core.js?v=62"></script>
+<script src="js/world.js?v=62"></script>
+<script src="js/vehicles.js?v=62"></script>
+<script src="js/game.js?v=62"></script>
 </body>
 </html>

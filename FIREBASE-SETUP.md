@@ -26,7 +26,33 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            ".validate": "newData.hasChildren(['name','created'])",
            "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20" },
            "created": { ".validate": "newData.isString() && newData.val().length <= 10" },
+           "owner": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
            "$other": { ".validate": false }
+         }
+       },
+       "worldtime": {
+         "$world": {
+           ".read": true,
+           ".write": true,
+           ".validate": "newData.hasChildren(['skew'])",
+           "skew": { ".validate": "newData.isNumber()" },
+           "by": { ".validate": "newData.isString() && newData.val().length <= 16" },
+           "ts": { ".validate": "newData.isNumber()" },
+           "$other": { ".validate": false }
+         }
+       },
+       "mod": {
+         "$world": {
+           "$player": {
+             ".read": true,
+             ".write": true,
+             ".validate": "newData.hasChildren(['ts'])",
+             "kick": { ".validate": "newData.isNumber()" },
+             "until": { ".validate": "newData.isNumber()" },
+             "by": { ".validate": "newData.isString() && newData.val().length <= 16" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "$other": { ".validate": false }
+           }
          }
        },
        "players": {
@@ -215,7 +241,14 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
    ```
 
    These rules mean: anyone can read the server list and add a server, but **nobody can
-   edit or delete existing servers**, and names are capped at 20 characters. The `players`
+   edit or delete existing servers**, and names are capped at 20 characters. Servers now
+   also record their **creator** (`owner`) — the game shows it under every server and the
+   creator gets the 👑 owner powers. The `worldtime` part stores the **owner's day & time**
+   for a world so everyone in it sees the same clock jump; the `mod` part stores **kicks
+   and bans** (`until` = timestamp the ban ends, a far-future value = banned forever) —
+   the game only shows the kick/ban buttons to the world owner. ⚠️ If you pasted an older
+   version of these rules, paste this new version and hit **Publish** — otherwise server
+   creators, kicks/bans and the owner clock won't work. The `players`
    part is what lets players **see each other driving around**: everyone in a world
    broadcasts their position there a few times per second. The `usernames` part makes
    usernames **unique**: the first player to claim a name owns it (each device saves a

@@ -203,18 +203,14 @@ $("bTraffic").onclick=()=>{
   $("bTraffic").classList.toggle("on",S.traffic);
   traffic.forEach(c=>{c.mesh.visible=S.traffic&&!c.controlled;if(S.traffic)respawnCar(c);});
 };
+/* the old ADMIN mode is gone — this panel only keeps Police chases & Hunger,
+   plus the 👑 OWNER tools (day & time, kick/ban) when this world is yours */
 $("bAdmin").onclick=()=>{
-  S.admin=!S.admin;
-  $("bAdmin").innerHTML=S.admin?"&#128736; Admin: ON":"&#128736; Admin";
-  $("bAdmin").classList.toggle("on",S.admin);
-  $("adminPanel").classList.toggle("show",S.admin);
-  toast(S.admin?"Admin mode ON — speed boosts + manual control of train/plane/bus":"Admin mode OFF");
-  updateLimitUI();
+  const show=!$("adminPanel").classList.contains("show");
+  $("adminPanel").classList.toggle("show",show);
+  $("bAdmin").classList.toggle("on",show);
+  if(show&&typeof refreshOwnerBox==="function")refreshOwnerBox();
 };
-document.querySelectorAll("#admTgt button").forEach(b=>b.onclick=()=>{
-  document.querySelectorAll("#admTgt button").forEach(x=>x.classList.remove("on"));
-  b.classList.add("on");admTarget=b.dataset.t;updateLimitUI();
-});
 function baseLimitFor(t){
   if(t==="car")return S.selected?S.selected.top:200;
   if(t==="train")return 140;
@@ -223,20 +219,13 @@ function baseLimitFor(t){
   return 90; // bus
 }
 function limitFor(t){return baseLimitFor(t)+BONUS[t];}
-function updateLimitUI(){
-  $("limVal").textContent=Math.max(5,Math.round(uConv(limitFor(admTarget))))+" "+uLabel();
-}
-function bump(d){BONUS[admTarget]=Math.max(5-baseLimitFor(admTarget),BONUS[admTarget]+d);updateLimitUI();}
-$("aMM").onclick=()=>bump(-50);$("aM").onclick=()=>bump(-10);
-$("aP").onclick=()=>bump(10);$("aPP").onclick=()=>bump(50);
-$("tMinus").onclick=()=>setTrafficCount(traffic.length-4);
-$("tPlus").onclick=()=>setTrafficCount(traffic.length+4);
+function updateLimitUI(){}   // the old admin MAX-SPEED panel was removed
 $("bArrest").onclick=()=>{
   S.arrest=!S.arrest;
-  $("bArrest").innerHTML="\u{1F46E} Arrests: "+(S.arrest?"ON":"OFF");
+  $("bArrest").innerHTML="\u{1F46E} Police chases: "+(S.arrest?"ON":"OFF");
   $("bArrest").classList.toggle("on",S.arrest);
   if(!S.arrest)for(const c of traffic)if(c.chase)endChase(c);
-  toast(S.arrest?"\u{1F46E} Police arrests ON":"\u{1F60E} Police arrests OFF — the cops will ignore you");
+  toast(S.arrest?"\u{1F46E} Police chases ON":"\u{1F60E} Police chases OFF — the cops will ignore you");
 };
 /* cruise control */
 function toggleACC(){
@@ -1382,7 +1371,7 @@ setInterval(()=>{
 },350);
 /* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
 /* tiny version badge — so we can always SEE which game version is running */
-const GAMEVER=57;
+const GAMEVER=62;
 const verBadge=document.createElement("div");
 verBadge.style.cssText="position:fixed;right:6px;bottom:4px;z-index:60;font:600 10px 'Segoe UI',sans-serif;color:#7d8aa5;opacity:.6;pointer-events:none";
 verBadge.textContent="v"+GAMEVER;
@@ -2617,7 +2606,7 @@ $("bHunger").onclick=()=>{
   $("bHunger").innerHTML="\u{1F354} Hunger: "+(HUNGER.on?"ON":"OFF");
   $("bHunger").classList.toggle("on",HUNGER.on);
   if(!HUNGER.on){HUNGER.v=100;HUNGER.starveT=0;}
-  toast(HUNGER.on?"\u{1F354} Hunger ON — remember to eat!":"\u{1F6AB} Hunger OFF (admin)");
+  toast(HUNGER.on?"\u{1F354} Hunger ON — remember to eat!":"\u{1F6AB} Hunger OFF");
 };
 function updateHunger(dt){
   $("hungerRow").style.display=HUNGER.on?"flex":"none";
@@ -4090,6 +4079,32 @@ function setWorld(n){
   if(n){const o=worldOffset(n);WORLD.name=n;WORLD.ox=o.ox;WORLD.oz=o.oz;}
   else{WORLD.name="";WORLD.ox=0;WORLD.oz=0;}
   applyWorldUI();renderWorldList();saveGame();
+  /* banned players bounce right back out of this world */
+  if(n&&SERVER_READY)fetch(SERVER_API+"/mod/"+worldKeyOf(n)+"/"+payKey(mpName())+".json",{cache:"no-store"})
+    .then(r=>r.json()).then(d=>{
+      if(d&&d.until&&d.until>Date.now()&&WORLD.name===n)
+        bootMe(d.until>=BAN_FOREVER
+          ?"⛔ You are BANNED FOREVER from \""+n+"\" by the owner!"
+          :"⛔ You are banned from \""+n+"\" until "+new Date(d.until).toLocaleString()+"!");
+    }).catch(()=>{});
+}
+/* ---------- world OWNERSHIP: the worlds & servers YOU created ---------- */
+const MYWORLDS={list:[]};
+try{const d=JSON.parse(localStorage.getItem("vc4myworlds")||"[]");
+  if(Array.isArray(d))MYWORLDS.list=d.filter(n=>typeof n==="string"&&n);}catch(e){}
+function myWorldsAdd(n){
+  if(n&&!MYWORLDS.list.includes(n)){
+    MYWORLDS.list.push(n);
+    try{localStorage.setItem("vc4myworlds",JSON.stringify(MYWORLDS.list))}catch(e){}
+  }
+}
+/* am I the 👑 owner of the world I'm in? My own city = always mine.
+   A listed server = whoever created it. A private world = whoever made it. */
+function isOwner(){
+  if(!WORLD.name)return true;   // my own city
+  const srv=SERVERS.list.find(s=>s&&s.name&&s.name.toLowerCase()===WORLD.name.toLowerCase());
+  if(srv&&srv.owner)return payKey(srv.owner)===profileKey();
+  return MYWORLDS.list.includes(WORLD.name);
 }
 /* ---------- your world list (saved in localStorage) ---------- */
 const WORLDS={list:[]};
@@ -4110,7 +4125,7 @@ function renderWorldList(){
     b.className="wchip"+(on?" on":"");b.textContent=label;b.onclick=click;
     w.appendChild(b);return b;
   };
-  mk("\u{1F3D9}️ Default city",!WORLD.name,()=>{setWorld("");toast("\u{1F3D9}️ Back in the default city — pick a vehicle!");});
+  mk("\u{1F3E0} My city (private)",!WORLD.name,()=>{setWorld("");toast("\u{1F3E0} Back in YOUR OWN city — no strangers here, pick a vehicle!");});
   WORLDS.list.forEach(n=>{
     const b=mk("\u{1F30D} "+n,WORLD.name===n,()=>{setWorld(n);toast("\u{1F30D} Switched to world \""+n+"\" — pick a vehicle!");});
     const x=document.createElement("i");
@@ -4126,8 +4141,9 @@ function renderWorldList(){
 $("worldCreate").onclick=()=>{
   const n=$("worldName").value.trim();
   if(!n){toast("Type a world name first!");return;}
+  myWorldsAdd(n);
   setWorld(n);addWorld(n);
-  toast("\u{1F30D} World \""+n+"\" created — pick a vehicle and play!");
+  toast("\u{1F30D} World \""+n+"\" created — you are the \u{1F451} OWNER! Pick a vehicle and play!");
 };
 /* ---------- servers tab: shared online list (Firebase Realtime Database) ----------
    paste your own database URL below — see FIREBASE-SETUP.md (free, ~5 minutes) */
@@ -4176,7 +4192,9 @@ function renderServers(){
     const joined=WORLD.name===s.name;
     const row=document.createElement("div");row.className="srvRow"+(joined?" here":"");
     const nm=document.createElement("div");nm.className="nm";nm.textContent="\u{1F310} "+s.name;
-    const inf=document.createElement("div");inf.className="inf";inf.textContent=s.created?"created "+s.created:"";
+    /* the server creator is always written under the server name */
+    const inf=document.createElement("div");inf.className="inf";
+    inf.textContent="\u{1F451} by "+(s.owner||"unknown")+(s.created?" · created "+s.created:"");
     const b=document.createElement("button");b.className="btn"+(joined?" on":" warn");
     b.textContent=joined?"✅ Joined":"▶ Join";
     b.onclick=()=>joinServer(s.name);
@@ -4201,13 +4219,15 @@ async function createServer(){
   }
   SERVERS.busy=true;
   serverStatus("⏳ Creating server...");
-  const rec={name:n,created:new Date().toISOString().slice(0,10)};
+  const rec={name:n,created:new Date().toISOString().slice(0,10),owner:mpName()};
   try{
     if(!SERVER_READY)throw 0;
-    const r=await fetch(SERVER_API+"/servers.json",{method:"POST",body:JSON.stringify(rec)});
+    let r=await fetch(SERVER_API+"/servers.json",{method:"POST",body:JSON.stringify(rec)});
+    /* old Firebase rules don't accept the owner field yet — retry without it */
+    if(!r.ok)r=await fetch(SERVER_API+"/servers.json",{method:"POST",body:JSON.stringify({name:rec.name,created:rec.created})});
     if(!r.ok)throw 0;
     SERVERS.online=true;
-    toast("\u{1F310} Server \""+n+"\" created for everyone!");
+    toast("\u{1F310} Server \""+n+"\" created for everyone — you are the \u{1F451} OWNER!");
   }catch(e){
     SERVERS.online=false;
     toast("\u{1F534} Offline — server only saved on this device for now.");
@@ -4215,6 +4235,7 @@ async function createServer(){
   SERVERS.list.push(rec);cacheServers();
   SERVERS.busy=false;
   $("serverNew").value="";
+  myWorldsAdd(n);
   joinServer(n);
 }
 $("serverCreate").onclick=createServer;
@@ -4492,13 +4513,24 @@ function mpInit(){
   try{firebase.initializeApp({databaseURL:SERVER_API});MP.sdk=true;}catch(e){}
   return MP.sdk;
 }
-function mpWorldKey(){return (WORLD.name||"default-city").toLowerCase().replace(/[.#$\[\]\/]/g,"_");}
+function worldKeyOf(n){return n.toLowerCase().replace(/[.#$\[\]\/]/g,"_");}
+function localId(){
+  let i=localStorage.getItem("vc4localid");
+  if(!i){i=Math.random().toString(36).slice(2,10);try{localStorage.setItem("vc4localid",i)}catch(e){}}
+  return i;
+}
+/* the "default city" is NOT a shared server anymore — with no world picked you
+   play in your OWN private city (a world key unique to you) */
+function mpWorldKey(){return WORLD.name?worldKeyOf(WORLD.name):"home_"+(profileKey()||localId());}
+/* ⏰ shared world time set by the 👑 owner (extra minutes on top of the shared clock) */
+const WT={skew:0};
 function mpJoin(){
   if(!mpInit())return;
   const key=mpWorldKey();
   if(MP.on&&key===MP.worldKey)return;
   mpLeave();
   MP.worldKey=key;
+  MP.joinTs=Date.now();
   MP.ref=firebase.database().ref("players/"+key);
   MP.myRef=MP.ref.child(MP.id);
   try{MP.myRef.onDisconnect().remove();}catch(e){}
@@ -4506,14 +4538,86 @@ function mpJoin(){
   MP.ref.on("child_added",upd);
   MP.ref.on("child_changed",upd);
   MP.ref.on("child_removed",s=>mpDrop(s.key));
+  /* shared named worlds: listen for the owner's clock + my own kick/ban record */
+  if(WORLD.name){
+    try{
+      MP.wtRef=firebase.database().ref("worldtime/"+key);
+      MP.wtRef.on("value",s=>{const d=s.val();WT.skew=(d&&typeof d.skew==="number")?d.skew:0;});
+      MP.modRef=firebase.database().ref("mod/"+key+"/"+payKey(mpName()));
+      MP.modRef.on("value",s=>applyMod(s.val()));
+    }catch(e){}
+  }else WT.skew=0;
   MP.on=true;
 }
 function mpLeave(){
   if(!MP.on)return;
   try{MP.ref.off();MP.myRef.onDisconnect().cancel();MP.myRef.remove();}catch(e){}
+  try{if(MP.wtRef)MP.wtRef.off();if(MP.modRef)MP.modRef.off();}catch(e){}
+  MP.wtRef=MP.modRef=null;WT.skew=0;
   [...MP.others.keys()].forEach(mpDrop);
   MP.on=false;MP.ref=MP.myRef=null;MP.lastSig="";
 }
+/* ================= 👑 OWNER POWERS: kick, ban & day/time ================= */
+const BAN_FOREVER=9999999999999;
+function applyMod(d){
+  if(!d||!WORLD.name)return;
+  if(d.until&&d.until>Date.now()){
+    bootMe(d.until>=BAN_FOREVER
+      ?"⛔ You are BANNED FOREVER from \""+WORLD.name+"\" by the owner!"
+      :"⛔ You are banned from \""+WORLD.name+"\" until "+new Date(d.until).toLocaleString()+"!");
+    return;
+  }
+  if(d.kick&&d.kick>(MP.joinTs||0))bootMe("\u{1F462} You were KICKED out of \""+WORLD.name+"\" by the owner!");
+}
+function bootMe(msg){
+  if(!WORLD.name)return;
+  setWorld("");
+  toast(msg);
+  if(S.mode==="game"){teleportTo(WORLD.ox+6,WORLD.oz+6);mpJoin();}
+}
+/* the owner writes a kick (one-time boot) or a ban (until a timestamp) */
+async function modPunish(name,until){
+  if(!WORLD.name||!isOwner())return;
+  const body=until?{until,by:mpName(),ts:Date.now()}:{kick:Date.now(),by:mpName(),ts:Date.now()};
+  const ok=await fbPut("/mod/"+mpWorldKey()+"/"+payKey(name),body);
+  if(!ok){toast("\u{1F534} Couldn't reach the database — did you paste the NEW Firebase rules? (FIREBASE-SETUP.md)");return;}
+  toast(until?(until>=BAN_FOREVER?"\u{1F528} "+name+" is BANNED FOREVER from this world.":"⏳ "+name+" is banned for 1 day.")
+             :"\u{1F462} "+name+" was kicked!");
+}
+/* ⏰ the owner changes the day & time — in a shared world EVERYONE sees it */
+function ownerSetTime(min,addDay){
+  if(!isOwner()){toast("\u{1F451} Only the OWNER of this world can change the time!");return;}
+  if(WORLD.name){
+    const delta=addDay?1440:((min-CLOCK.min)+1440)%1440;
+    WT.skew=(WT.skew||0)+delta;
+    fbPut("/worldtime/"+mpWorldKey(),{skew:WT.skew,by:mpName(),ts:Date.now()}).then(ok=>{
+      if(!ok)toast("\u{1F534} Time not shared — paste the NEW Firebase rules (FIREBASE-SETUP.md)");
+    });
+    clockTick(0);
+  }else{
+    if(addDay)CLOCK.day++;
+    else{if(min<CLOCK.min)CLOCK.day++;CLOCK.min=min;}
+  }
+  toast(addDay?"\u{1F4C5} A new day begins — day "+CLOCK.day+"!"
+              :"⏰ Time set to "+String(Math.floor(min/60)).padStart(2,"0")+":00 for everyone in this world!");
+}
+function refreshOwnerBox(){
+  if(!SERVERS.loaded&&WORLD.name)refreshServers();
+  $("ownerBox").style.display=isOwner()?"block":"none";
+}
+$("otMorn").onclick=()=>ownerSetTime(8*60);
+$("otNoon").onclick=()=>ownerSetTime(12*60);
+$("otEve").onclick=()=>ownerSetTime(19*60);
+$("otNight").onclick=()=>ownerSetTime(23*60);
+$("otDay").onclick=()=>ownerSetTime(0,true);
+$("ownUnban").onclick=async()=>{
+  if(!isOwner())return;
+  const n=cleanServerName(prompt("♻ Unban which player? Type their exact username:")||"").slice(0,16);
+  if(!n)return;
+  if(!WORLD.name){toast("Nobody can be banned from your own private city!");return;}
+  const ok=await fbPut("/mod/"+mpWorldKey()+"/"+payKey(n),null);
+  toast(ok?"♻ "+n+" is unbanned — they can join again!":"\u{1F534} Couldn't reach the database.");
+};
 /* 💬 chat bubbles: your message floats above your head for everyone to see */
 function makeChatBubble(text){
   const cv=document.createElement("canvas");cv.width=512;cv.height=128;
@@ -4624,6 +4728,14 @@ function mpTick(dt){
         v.speed*=0.4;
       }
     }
+    /* ...and on FOOT you can't walk through their cars either */
+    if(S.world==="earth"&&player.onFoot&&!RIDE.on&&o.kind!=="foot"&&o.kind!=="seat"){
+      const dx=player.x-o.x,dz=player.z-o.z,dd=Math.hypot(dx,dz);
+      if(dd<3&&Math.abs(player.y-(o.y||0))<2.6){
+        const push=(3-dd)/(dd||0.001);
+        player.x+=dx*push;player.z+=dz*push;
+      }
+    }
     /* spinning rotors on other players' helicopters */
     if(o.kind==="heli"&&o.g.children[0].userData.rotor)o.g.children[0].userData.rotor.rotation.y+=dt*24;
     /* the weekly champion wears a golden crown */
@@ -4633,7 +4745,7 @@ function mpTick(dt){
       o.g.add(o.crown);
     }
   }
-  if(S.mode==="game")$("worldTxt").textContent="\u{1F30D} "+(WORLD.name||"Default city")+" · \u{1F465} "+(MP.others.size+1);
+  if(S.mode==="game")$("worldTxt").textContent="\u{1F30D} "+(WORLD.name||"My city (private)")+" · \u{1F465} "+(MP.others.size+1);
   /* broadcast my own position ~5x per second (only when it changed) */
   MP.sendT+=dt;
   if(MP.sendT<0.2)return;
@@ -6412,11 +6524,46 @@ function updateTraffic(dt){
     c.mesh.rotateX(-slopePitch(p.x,p.z,laneYaw,1.8));   // follow the hill, don't stay flat
     if(c.mesh.userData.beams){const bOn=isNight();c.mesh.userData.beams.forEach(b=>b.visible=bOn);}
     if(c.mesh.userData.wheels)for(const w of c.mesh.userData.wheels)w.spin.rotation.x+=sp/w.r*dt;
-    /* player collision nudge */
-    if(!player.onFoot&&player.drive&&Math.hypot(p.x-player.x,p.z-player.z)<3.4){
-      if(Math.abs(player.drive.speed)>6){playCrash(Math.abs(player.drive.speed));vehDamage(Math.abs(player.drive.speed)*0.7);}
-      player.drive.speed*=0.4;
+    /* 🚗 SOLID traffic: you bump into cars, never through them (driving OR walking) */
+    if(!player.onFoot&&player.drive&&player.drive!==c){
+      const v=player.drive;
+      const dx=v.x-p.x,dz=v.z-p.z,dd=Math.hypot(dx,dz);
+      if(dd<3.4&&Math.abs((v.y||0)-y)<2.6){
+        const push=(3.4-dd)/(dd||0.001);
+        v.x+=dx*push;v.z+=dz*push;                 // pushed out — no ghosting through
+        if(Math.abs(v.speed)>6){playCrash(Math.abs(v.speed));vehDamage(Math.abs(v.speed)*0.7);}
+        v.speed*=0.4;
+      }
+    }else if(player.onFoot&&!RIDE.on){
+      const dx=player.x-p.x,dz=player.z-p.z,dd=Math.hypot(dx,dz);
+      if(dd<2.6&&Math.abs(player.y-y)<2.6){
+        const push=(2.6-dd)/(dd||0.001);
+        player.x+=dx*push;player.z+=dz*push;
+      }
     }
+  }
+}
+/* 🅿️ parked cars are SOLID too — every car in the world blocks you now */
+function solidParked(){
+  if(S.world!=="earth")return;
+  const v=(!player.onFoot&&player.drive)?player.drive:null;
+  if(!v&&(RIDE.on||!player.onFoot))return;
+  const px=v?v.x:player.x,pz=v?v.z:player.z,py=v?(v.y||0):player.y;
+  const rad=v?3.4:2.4;
+  for(let i=parkedCars.length-1;i>=0;i--){
+    const rec=parkedCars[i];
+    if(offScene(rec.g)){parkedCars.splice(i,1);continue;}
+    const gp=rec.g.position;
+    const dx=px-gp.x,dz=pz-gp.z;
+    if(Math.abs(dx)>rad||Math.abs(dz)>rad||Math.abs(py-gp.y)>2.6)continue;
+    const dd=Math.hypot(dx,dz);
+    if(dd>=rad)continue;
+    const push=(rad-dd)/(dd||0.001);
+    if(v){
+      v.x+=dx*push;v.z+=dz*push;
+      if(Math.abs(v.speed)>6){playCrash(Math.abs(v.speed));vehDamage(Math.abs(v.speed)*0.5);}
+      v.speed*=0.3;
+    }else{player.x+=dx*push;player.z+=dz*push;}
   }
 }
 /* ================= CAMERA / HUD / MAP / LOOP ================= */
@@ -6808,17 +6955,27 @@ function drawMap(){
   dot(player.x,player.z,"#ffb02e",7);
 }
 function choosePlayer(o){
-  showDest("\u{1F464} "+o.name,[
+  const opts=[
     {label:"⚡ Teleport (instant)",value:"tp"},
     {label:"\u{1F9ED} Follow route — keeps updating while they move",value:"route"},
     {label:"\u{1F4B8} Send money",value:"pay"},
     {label:"\u{1F381} Give a dumpling",value:"gift"},
-    {label:FRIENDS.has(o.name)?"\u{1F494} Remove friend":"⭐ Add friend",value:"friend"},
-    {label:"❌ Cancel",value:"cancel"}
-  ],v=>{
+    {label:FRIENDS.has(o.name)?"\u{1F494} Remove friend":"⭐ Add friend",value:"friend"}
+  ];
+  /* 👑 owner powers: kick & ban (only in a shared world you own) */
+  if(WORLD.name&&isOwner()&&o.name&&payKey(o.name)!==profileKey()){
+    opts.push({label:"\u{1F462} \u{1F451} KICK "+o.name+" out of this world",value:"kick"});
+    opts.push({label:"⏳ \u{1F451} BAN "+o.name+" for 1 DAY",value:"ban1"});
+    opts.push({label:"\u{1F528} \u{1F451} BAN "+o.name+" FOREVER",value:"banx"});
+  }
+  opts.push({label:"❌ Cancel",value:"cancel"});
+  showDest("\u{1F464} "+o.name,opts,v=>{
     if(v==="cancel")return;
     if(v==="pay"){openPay(o.name);return;}
     if(v==="gift"){openGift(o.name);return;}
+    if(v==="kick"){modPunish(o.name,0);return;}
+    if(v==="ban1"){modPunish(o.name,Date.now()+86400000);return;}
+    if(v==="banx"){modPunish(o.name,BAN_FOREVER);return;}
     if(v==="friend"){
       if(FRIENDS.has(o.name)){FRIENDS.delete(o.name);toast("\u{1F494} "+o.name+" removed from your friends.");}
       else{FRIENDS.add(o.name);toast("⭐ "+o.name+" is now your FRIEND — gold on the map!");}
@@ -9457,7 +9614,20 @@ const UPDATE_PAGES=[
 <li>A real <b>downtown skyline</b>: tall towers with antennas and blinking warning lights.</li>
 <li><b>Street furniture everywhere</b>: fire hydrants, mailboxes and trash bins — plus <b>cars parked along the curbs</b>.</li>
 <li>Houses got wooden <b>siding texture</b> instead of flat plastic walls.</li>
-<li><b>Living sound</b>: a soft city hum, \u{1F426} birdsong in the day, \u{1F997} crickets at night.</li></ul>`}
+<li><b>Living sound</b>: a soft city hum, \u{1F426} birdsong in the day, \u{1F997} crickets at night.</li></ul>`},
+{t:"Round 29 — SOLID cars, \u{1F451} world owners, kick & ban, your own private city",h:`
+<h4>\u{1F697} EVERY CAR IS SOLID NOW</h4><ul>
+<li>Traffic cars, other players' cars and even the parked cars along the curb — you <b>bump into them, never through them</b>, whether you're driving or walking.</li></ul>
+<h4>\u{1F3E0} YOUR OWN PRIVATE CITY</h4><ul>
+<li>The default city is <b>not a shared server anymore</b> — it's automatically YOUR own private world. Nobody else spawns there; join a \u{1F310} server or a friend's world to play together.</li></ul>
+<h4>\u{1F451} WORLD OWNERS</h4><ul>
+<li>Every server in the \u{1F310} Servers tab now shows <b>who created it</b>, right under the name.</li>
+<li>The creator is the OWNER — and you're always the owner of your own city and the worlds you create.</li>
+<li>Owners can <b>change the DAY &amp; TIME for everyone</b> in the ⚙ Rules panel (\u{1F305} morning, ☀️ noon, \u{1F307} evening, \u{1F319} night, \u{1F4C5} next day).</li>
+<li>Owners can <b>\u{1F462} KICK</b> players, <b>⏳ BAN them for a day</b> or <b>\u{1F528} BAN FOREVER</b> — open the \u{1F5FA} map and click their name. Unban from the Rules panel.</li></ul>
+<h4>\u{1F6E0} ADMIN REMOVED</h4><ul>
+<li>The old admin panel (speed boosts, driving the train/plane/bus, traffic count) is gone.</li>
+<li>Only two switches remain in the ⚙ Rules panel: \u{1F46E} <b>Police chases ON/OFF</b> and \u{1F354} <b>Hunger ON/OFF</b>.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -9519,7 +9689,7 @@ function frame(now){
   updateEngine(speedMS,!!player.drive&&player.drive.type!=="bike"&&FUEL.km>0);
   if(S.world==="earth"){
     updateEvents(dt);updatePortals(dt);
-    updateTrains(dt);updatePlanes(dt);updateBuses(dt);updateTraffic(dt);
+    updateTrains(dt);updatePlanes(dt);updateBuses(dt);updateTraffic(dt);solidParked();
     updatePeds(dt);updateAnimals(dt);updateDoors(dt);updateCollapses(dt);
     updateTrafficLights();updateGates(dt);
     updateCrowd(dt);updateMuseums(dt);

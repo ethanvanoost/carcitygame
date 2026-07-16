@@ -2269,6 +2269,9 @@ function deckYAt(x,z,y){
   return best;
 }
 let parkedCarBuilder=null; // set later (needs vehicle mesh builder)
+/* every parked car on Earth is SOLID — you bump into it, never through it */
+const parkedCars=[];
+function registerParked(mesh){parkedCars.push({g:mesh});}
 /* ---- ALIEN SPACESHIPS: one every ~1000 km on the MOON — a real expedition! ---- */
 const UFOSP=1000000;
 const ufos=[];
@@ -2722,7 +2725,7 @@ function buildChunk(cx,cz){
           const pc=parkedCarBuilder(COLORS[Math.floor(h2i(Math.round(pz),Math.round(lx))*COLORS.length)]);
           pc.position.set(lx+5.85,terrainH(lx+5.85,pz),pz);
           pc.rotation.y=h2i(Math.round(lx+pz),7)<0.5?0:Math.PI;
-          g.add(pc);
+          g.add(pc);registerParked(pc);
         }
       }
     }
@@ -2848,7 +2851,7 @@ function buildChunk(cx,cz){
           lot.rotation.x=-Math.PI/2;lot.position.set(px,py+0.12,pz);lot.receiveShadow=true;g.add(lot);
           for(let i=0;i<3;i++)if(r()<0.75&&parkedCarBuilder){
             const pc=parkedCarBuilder(COLORS[Math.floor(r()*COLORS.length)]);
-            pc.position.set(px-8+i*7,py+0.12,pz-3.5);pc.rotation.y=Math.PI;g.add(pc);
+            pc.position.set(px-8+i*7,py+0.12,pz-3.5);pc.rotation.y=Math.PI;g.add(pc);registerParked(pc);
           }
           /* register the shop for cleanup too — before this, every shop ever
              built stayed in the global buildings list forever and the
@@ -2881,7 +2884,7 @@ function buildChunk(cx,cz){
           ramp:{x:gx+22,z0:gz-7,z1:gz+7,y0:gy,y1:gy+3.65}});
         if(parkedCarBuilder)for(let i=0;i<3;i++){
           const pc=parkedCarBuilder(COLORS[Math.floor(r()*COLORS.length)]);
-          pc.position.set(gx-12+i*10,gy+0.05,gz+6);g.add(pc);
+          pc.position.set(gx-12+i*10,gy+0.05,gz+6);g.add(pc);registerParked(pc);
         }
         const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,2.4),parkSignMat());
         sign.position.set(gx,gy+11.4,gz+13.1);g.add(sign);
@@ -3499,7 +3502,7 @@ function buildCivic(i,j){
     CIVIC.push({kind:d[0],x:bx,z:bz+7.5,g});
     /* a parked emergency vehicle out front */
     const veh=buildEmergencyMesh?buildEmergencyMesh(d[0]==="police"?"police":"fire"):null;
-    if(veh){veh.position.set(bx+5,y,bz+10);veh.rotation.y=Math.PI/2;g.add(veh);}
+    if(veh){veh.position.set(bx+5,y,bz+10);veh.rotation.y=Math.PI/2;g.add(veh);registerParked(veh);}
   });
   scene.add(g);return g;
 }
