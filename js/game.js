@@ -651,6 +651,25 @@ function buildDumpTable(m){
   m.g.add(tg);m.tableG=tg;
 }
 window.onMansionBuilt=m=>{if(DISPLAYS.has(m.id))buildDumpTable(m);buildMansionFurniture(m);};
+/* build a HUGE list in chunks of 1000 so the page never freezes —
+   the first 1000 show right away, the rest keep loading by themselves */
+function chunkedList(list,items,makeEl,chunk=1000){
+  const token=(list._chunkToken=(list._chunkToken||0)+1);
+  let i=0;
+  (function step(){
+    if(token!==list._chunkToken)return;   // a newer render started — stop this one
+    const frag=document.createDocumentFragment(),end=Math.min(items.length,i+chunk);
+    for(;i<end;i++)frag.appendChild(makeEl(items[i],i));
+    list.appendChild(frag);
+    if(i<items.length){
+      const more=document.createElement("div");
+      more.style.cssText="color:var(--dim);font-size:13px;padding:4px";
+      more.textContent="Loading more… "+i+" / "+items.length;
+      list.appendChild(more);
+      setTimeout(()=>{if(token===list._chunkToken)more.remove();step();},0);
+    }
+  })();
+}
 function renderDump(){
   $("dumpInfo").textContent=DUMP.unopened
     ?"You have "+DUMP.unopened+" unopened dumpling"+(DUMP.unopened>1?"s":"")+" — open one!"
@@ -662,7 +681,7 @@ function renderDump(){
     d.textContent="Your collection is empty.";
     list.appendChild(d);
   }
-  DUMP.owned.forEach(d=>{
+  chunkedList(list,DUMP.owned,d=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(d.glitter?" glitter":"")+(HOLD.d===d?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+d.hex+"'></span>"
@@ -670,7 +689,7 @@ function renderDump(){
       +" <span style='color:var(--dim)'>$"+dumpValue(d)+"</span>"
       +(HOLD.d===d?" ✋ holding":"");
     el.onclick=()=>holdDump(d);
-    list.appendChild(el);
+    return el;
   });
   const m=nearMansion();
   $("dumpDisplay").textContent=m&&DISPLAYS.has(m.id)?"\u{1F3F0} Remove the dumpling display":"\u{1F3F0} Display your dumplings at your mansion";
@@ -705,20 +724,33 @@ $("dumpOpen").onclick=()=>{
   else toast(glitter?"✨\u{1F95F} WOW — a RARE GLITTER "+color+" dumpling!!":"\u{1F95F} You got a "+color+" dumpling!");
   renderDump();saveGame();
 };
-/* open EVERY unopened dumpling at once — one big summary at the end */
+/* open EVERY unopened dumpling at once — in batches of 1000 so the page
+   never freezes, with one big summary at the end */
+let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
+  if(OPENALL_BUSY)return;
   if(!DUMP.unopened){toast("No unopened dumplings — buy them at a \u{1F6D2} MEGA MART!");return;}
-  const opened=[];let best=null,bestVal=-1;
-  while(DUMP.unopened>0){
-    const d=rollDump();
-    opened.push(d);
-    const v=dumpValue(d);
-    if(v>bestVal){bestVal=v;best=d;}
-  }
-  const glit=opened.filter(d=>d.glitter).length;
-  toast("\u{1F389} You opened "+opened.length+" dumplings"+(glit?" ("+glit+" ✨ GLITTER!)":"")
-    +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+best.color+" ($"+fmtMoney(bestVal)+")!");
-  renderDump();saveGame();
+  OPENALL_BUSY=true;
+  const total=DUMP.unopened;
+  let opened=0,glit=0,best=null,bestVal=-1;
+  (function step(){
+    let n=0;
+    while(DUMP.unopened>0&&n<1000){
+      const d=rollDump();n++;opened++;
+      if(d.glitter)glit++;
+      const v=dumpValue(d);
+      if(v>bestVal){bestVal=v;best=d;}
+    }
+    if(DUMP.unopened>0){
+      toast("\u{1F95F} Opening dumplings… "+opened+" / "+total);
+      setTimeout(step,0);
+    }else{
+      OPENALL_BUSY=false;
+      toast("\u{1F389} You opened "+opened+" dumplings"+(glit?" ("+glit+" ✨ GLITTER!)":"")
+        +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+best.color+" ($"+fmtMoney(bestVal)+")!");
+      renderDump();saveGame();
+    }
+  })();
 };
 $("dumpDisplay").onclick=()=>{
   const m=nearMansion();
@@ -2531,13 +2563,13 @@ function renderSell(){
     d.textContent="You have no dumplings — buy them at a MEGA MART and open them first!";
     list.appendChild(d);
   }
-  DUMP.owned.forEach((d,i)=>{
+  chunkedList(list,DUMP.owned,(d,i)=>{
     const b=document.createElement("button");
     b.className="dumpItem"+(d.glitter?" glitter":"")+(SELL.sel.has(i)?" sel":"");
     b.innerHTML=(SELL.sel.has(i)?"✅ ":"")+"<span class='swatch' style='background:"+d.hex+"'></span>"
       +(d.glitter?"✨ GLITTER ":"")+d.color+" — $"+dumpValue(d);
     b.onclick=()=>{SELL.sel.has(i)?SELL.sel.delete(i):SELL.sel.add(i);renderSell();};
-    list.appendChild(b);
+    return b;
   });
   let tot=0;SELL.sel.forEach(i=>tot+=dumpValue(DUMP.owned[i]));
   $("sellDo").textContent="\u{1F4B5} Sell selected — $"+tot;
