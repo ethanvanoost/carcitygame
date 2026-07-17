@@ -9778,7 +9778,7 @@ function frame(now){
 /* ================= AUTO-UPDATE: everyone always plays the newest version =================
    every minute we peek at index.html on the server — if the version number
    went up, show "Refresh for new update" and auto-refresh after 30 seconds */
-const GAME_V=67;
+/* GAME_V lives in core.js — it's also shown in the menu header */
 let _updSeen=false;
 async function checkUpdate(){
   if(_updSeen)return;

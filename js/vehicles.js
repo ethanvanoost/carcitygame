@@ -250,16 +250,18 @@ function buildVehicleMesh(type,color,top,name,lite){
     }
     if(K.fin){const fy=surf(-0.68);const fn=new THREE.Mesh(gBox(0.06,0.28,1.2),mat);fn.position.set(0,fy+0.12,-zH*0.68);g.add(fn);}
     if(K.stripeC!==undefined){
+      /* stripes are tall thin boxes SUNK INTO the body — only a 4 cm ridge
+         shows above the paint, so they can never float in the air */
       const sm=lambMat(K.stripeC);
       [[-0.28],[0.28]].forEach(p=>{
         const t1=0.62;
-        const s1=new THREE.Mesh(gBox(0.2,0.02,1.05),sm);
-        s1.position.set(p[0],surf(t1)+0.012,zH*t1);s1.rotation.x=Math.atan(-slp(t1));g.add(s1);
-        if(K.roof){const s2=new THREE.Mesh(gBox(0.2,0.02,K.cabL-0.5),sm);s2.position.set(p[0],surf(K.cabZ/zH)+0.012,K.cabZ);g.add(s2);}
+        const s1=new THREE.Mesh(gBox(0.2,0.24,1.05),sm);
+        s1.position.set(p[0],surf(t1)-0.08,zH*t1);s1.rotation.x=Math.atan(-slp(t1));g.add(s1);
+        if(K.roof){const s2=new THREE.Mesh(gBox(0.2,0.24,K.cabL-0.5),sm);s2.position.set(p[0],surf(K.cabZ/zH)-0.08,K.cabZ);g.add(s2);}
         if(K.tail==="deck"){
           const t3=-0.72;
-          const s3=new THREE.Mesh(gBox(0.2,0.02,0.65),sm);
-          s3.position.set(p[0],surf(t3)+0.012,zH*t3);s3.rotation.x=Math.atan(-slp(t3));g.add(s3);
+          const s3=new THREE.Mesh(gBox(0.2,0.24,0.65),sm);
+          s3.position.set(p[0],surf(t3)-0.08,zH*t3);s3.rotation.x=Math.atan(-slp(t3));g.add(s3);
         }
       });
     }

@@ -1,5 +1,7 @@
 /* ================= DATA ================= */
+const GAME_V=68;   // the game version — shown in the menu & used by the auto-updater
 const $=id=>document.getElementById(id);
+{const vt=document.querySelector("#menu .tag");if(vt)vt.textContent+=" · v"+GAME_V;}
 function rng(seed){let a=seed;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const COLORS=[0xd7263d,0x1b98e0,0xf4d35e,0x2ec4b6,0xff7f11,0x9b5de5,0xefefef,0x3a3a3a,0x8ac926,0xff5d8f,0x0f4c81,0xb56576];
 const EMOJI={car:"\u{1F697}",moto:"\u{1F3CD}\uFE0F",bike:"\u{1F6B2}",camper:"\u{1F690}"};
