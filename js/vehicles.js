@@ -202,7 +202,13 @@ function buildVehicleMesh(type,color,top,name,lite){
         back.position.set(p[0],tubY+0.14,K.cabZ-0.4);g.add(back);
       });
     }
-    [-(zH+0.02),zH+0.02].forEach(pz=>{const b=new THREE.Mesh(gBox(K.wid+0.08,0.22,0.24),darkTrim);b.position.set(0,K.baseY-0.2,pz);g.add(b);});
+    [-(zH-0.04),zH-0.04].forEach(pz=>{const b=new THREE.Mesh(gBox(K.wid-0.3,0.2,0.2),darkTrim);b.position.set(0,0.4,pz);g.add(b);});
+    /* remember the exact surface anchors — garage customization uses these */
+    g.userData.body={zH,wid:K.wid,cabZ:K.cabZ,cabL:K.cabL,
+      hoodY:surf(0.62),hoodA:Math.atan(-slp(0.62)),
+      roofY:surf(K.cabZ/zH),
+      deckY:surf(-0.72),deckA:Math.atan(-slp(-0.72)),
+      tailY:surf(-(zH-0.25)/zH)};
     const noseTop=surf(1),rearTop=surf(-1);   // exact front & rear face heights
     if(K.nose){
       const grille=new THREE.Mesh(gBox(1.1,0.16,0.06),darkTrim);grille.position.set(0,Math.min(0.62,noseTop-0.2),zH+0.02);g.add(grille);
@@ -228,9 +234,9 @@ function buildVehicleMesh(type,color,top,name,lite){
     if(!lite){
       /* side mirrors, license plates & door handles */
       [[-1],[1]].forEach(p=>{const m=new THREE.Mesh(gBox(0.1,0.12,0.24),mat);m.position.set(p[0]*(K.wid/2+0.06),K.cabY+0.08,K.cabZ+K.cabL/2+0.05);g.add(m);});
-      [[zH+0.155,0],[-(zH+0.155),Math.PI]].forEach(p=>{
+      [[zH+0.07,0],[-(zH+0.07),Math.PI]].forEach(p=>{
         const pl=new THREE.Mesh(gBox(0.52,0.15,0.03),plateMat);
-        pl.position.set(0,K.baseY-0.2,p[0]);pl.rotation.y=p[1];g.add(pl);});
+        pl.position.set(0,0.4,p[0]);pl.rotation.y=p[1];g.add(pl);});
       [[-1],[1]].forEach(p=>{const dh=new THREE.Mesh(gBox(0.03,0.05,0.3),hubMat);
         dh.position.set(p[0]*(K.wid/2-0.02),topY+0.1,K.cabZ+0.1);g.add(dh);});
     }

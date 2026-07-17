@@ -8410,33 +8410,37 @@ const RIMS=[["Standard",0],["Gold",0xffd700],["Red",0xff3333],["Aqua",0x00ffcc],
 const STRIPES=[["None",0],["White",0xffffff],["Black",0x111111],["Red",0xff3333],["Blue",0x00cfff]];
 function applyCustom(mesh,v,cfg){
   if(!v||v.type!=="car"||!cfg)return;
+  /* the exact body-surface anchors saved by buildVehicleMesh */
+  const B=mesh.userData.body||{zH:2.3,wid:2.08,cabZ:-0.25,cabL:2.25,hoodY:0.98,hoodA:-0.16,roofY:1.39,deckY:1.05,deckA:0.12,tailY:1.0};
   if(cfg.sp&&!((v.top||0)>=340)){
     [[-0.7],[0.7]].forEach(p=>{
-      const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.3,0.1),darkTrim);
-      st.position.set(p[0],1.22,-2.05);mesh.add(st);
+      const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.1),darkTrim);
+      st.position.set(p[0],B.tailY+0.19,-(B.zH-0.25));mesh.add(st);
     });
     const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
-    wing.position.set(0,1.4,-2.1);mesh.add(wing);
+    wing.position.set(0,B.tailY+0.38,-(B.zH-0.2));mesh.add(wing);
   }
   if(cfg.neon){
     const nc=NEONS[cfg.neon][1];
-    const gl=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.9),
+    const gl=new THREE.Mesh(new THREE.PlaneGeometry(B.wid+0.5,B.zH*2+0.3),
       new THREE.MeshBasicMaterial({color:nc,transparent:true,opacity:0.55,depthWrite:false}));
     gl.rotation.x=-Math.PI/2;gl.position.y=0.14;mesh.add(gl);
   }
   if(cfg.rim){
     const rc=RIMS[cfg.rim][1];
     for(const w of mesh.userData.wheels){
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.62,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.66,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
       ring.rotation.y=Math.PI/2;
+      ring.position.x=(w.pivot.position.x>0?1:(w.pivot.position.x<0?-1:0))*0.17;
       w.spin.add(ring);
     }
   }
   if(cfg.stripe){
+    /* sunk into the body like the factory stripes — a ridge, never floating */
     const sc=new THREE.MeshLambertMaterial({color:STRIPES[cfg.stripe][1]});
-    [[1.13,1.55,1.15],[1.67,-0.25,1.95],[1.14,-1.8,0.8]].forEach(s=>{
-      const b=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.03,s[2]),sc);
-      b.position.set(0,s[0],s[1]);mesh.add(b);
+    [[B.hoodY,B.hoodA,B.zH*0.62,1.05],[B.roofY,0,B.cabZ,B.cabL-0.5],[B.deckY,B.deckA,-B.zH*0.72,0.65]].forEach(s=>{
+      const b=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.24,s[3]),sc);
+      b.position.set(0,s[0]-0.08,s[2]);b.rotation.x=s[1];mesh.add(b);
     });
   }
   if(cfg.plate){
@@ -8448,9 +8452,9 @@ function applyCustom(mesh,v,cfg){
     c.fillText(cfg.plate.toUpperCase().slice(0,7),70,24);
     const pm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
     /* mounted ON the bumper faces, clearly visible front & back */
-    [[2.475,0],[-2.475,Math.PI]].forEach(p=>{
+    [[B.zH+0.08,0],[-(B.zH+0.08),Math.PI]].forEach(p=>{
       const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.56,0.17),pm);
-      pl.position.set(0,0.42,p[0]);pl.rotation.y=p[1];mesh.add(pl);
+      pl.position.set(0,0.4,p[0]);pl.rotation.y=p[1];mesh.add(pl);
     });
   }
 }
