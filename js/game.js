@@ -313,7 +313,7 @@ function buildGarageRoom(){
 }
 function garageSetMesh(){
   if(GAR.mesh){GAR.room.remove(GAR.mesh);disposeGroup(GAR.mesh);}
-  const m=buildVehicleMesh(GAR.v.type,GAR.color,GAR.v.top);
+  const m=buildVehicleMesh(GAR.v.type,GAR.color,GAR.v.top,GAR.v.name);
   if(m.userData.riderMesh)m.userData.riderMesh.visible=false;
   applyCustom(m,GAR.v,custOf(GAR.v.name));
   m.position.set(0,GAR.cy+0.38,0);
@@ -390,7 +390,7 @@ function startGame(v){
   if(myVehicle){scene.remove(myVehicle.mesh);disposeGroup(myVehicle.mesh);}
   const sx=resume?rx:WORLD.ox+6,sz=resume?rz:WORLD.oz+6;
   S.everPlayed=true;S.lastPlayWorld=WORLD.name;
-  const mesh=buildVehicleMesh(v.type,paintOf(v),v.top);
+  const mesh=buildVehicleMesh(v.type,paintOf(v),v.top,v.name);
   applyCustom(mesh,v,custOf(v.name));
   scene.add(mesh);
   myVehicle={mesh,type:v.type==="camper"?"car":v.type,top:v.top,x:sx,z:sz,yaw:Math.PI,speed:0,vy:0,y:0,grounded:true,roll:0,camper:v.type==="camper"};
@@ -3593,7 +3593,7 @@ function buildMansionFurniture(man){
     /* YOUR mansion: your 3 fastest owned cars park on the driveway */
     VEHICLES.filter(v=>v.type==="car"&&OWN.has(v.name)).sort((a,b)=>b.top-a.top).slice(0,3)
       .forEach((v,i)=>{
-        const c=buildVehicleMesh("car",paintOf(v),v.top);
+        const c=buildVehicleMesh("car",paintOf(v),v.top,v.name);
         const cx=man.x-24+i*11,cz=man.z+44;
         c.position.set(cx,terrainH(cx,cz)+0.1,cz);c.rotation.y=Math.PI;fg.add(c);
       });

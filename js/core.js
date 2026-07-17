@@ -11,11 +11,88 @@ const CAMPER_PRICE={};CAMPERS.forEach(c=>CAMPER_PRICE[c[0]]=c[2]);
 const CARS=[["Koenigsegg Jesko Absolut",500],["Bugatti Chiron Super Sport",490],["Hennessey Venom F5",484],["SSC Tuatara",474],["Koenigsegg Agera RS",447],["Bugatti Veyron Super Sport",431],["Rimac Nevera",412],["McLaren Speedtail",403],["Aston Martin Valkyrie",402],["Tesla Roadster",400],["Koenigsegg Gemera",400],["Pagani Huayra",383],["Lamborghini Aventador SVJ",352],["Mercedes-AMG One",352],["Ferrari LaFerrari",350],["Lamborghini Revuelto",350],["McLaren P1",350],["Ferrari Enzo",350],["Ferrari SF90 Stradale",340],["McLaren 720S",341],["Ferrari 488 Pista",340],["Ferrari F8 Tributo",340],["Aston Martin DBS Superleggera",340],["Bentley Continental GT Speed",335],["Porsche Carrera GT",334],["Audi R8 V10 Performance",331],["Porsche 911 Turbo S",330],["Dodge Challenger SRT Hellcat",327],["Lamborghini Huracan Evo",325],["Mercedes-AMG GT Black Series",325],["Lexus LFA",325],["Maserati MC20",325],["Tesla Model S Plaid",322],["Cadillac CT5-V Blackwing",322],["Lotus Evija",320],["Dodge Charger SRT",320],["Chevrolet Camaro ZL1",318],["Nissan GT-R Nismo",315],["Aston Martin Vantage",314],["Chevrolet Corvette Z06",312],["Honda NSX",307],["BMW M5 CS",305],["Audi RS6 Avant",305],["Jaguar F-Type R",300],["Ford Mustang Shelby GT500",290],["Mercedes-AMG C63 S",290],["BMW M3 Competition",290],["Lotus Emira",290],["Honda Civic Type R",272],["Volkswagen Golf R",270],["Ford Focus RS",266],["Kia EV6 GT",260],["Renault Megane RS Trophy",260],["Porsche Taycan Turbo S",260],["Subaru WRX STI",255],["Toyota GR Supra",250],["Alpine A110",250],["Hyundai i30 N",250],["Mini John Cooper Works",246],["Mazda MX-5",219]];
 const MOTOS=[["Kawasaki Ninja H2R",400],["Kawasaki Ninja H2",337],["Suzuki Hayabusa",312],["Aprilia RSV4 Factory",305],["BMW S1000RR",303],["MV Agusta F4",302],["Ducati Panigale V4 R",299],["Honda CBR1000RR-R Fireblade",299],["Yamaha YZF-R1",299],["Suzuki GSX-R1000",299],["Kawasaki ZX-10R",299],["Ducati Streetfighter V4",290],["KTM 1290 Super Duke R",289],["Aprilia Tuono V4",270],["Triumph Speed Triple RS",260],["Ducati Monster",250],["Triumph Rocket 3",250],["Yamaha MT-09",230],["Yamaha YZF-R7",222],["BMW R1250GS",219],["Honda Africa Twin",214],["Harley-Davidson Sportster S",190],["Honda Gold Wing",180],["Harley-Davidson Fat Boy",180],["KTM 390 Duke",167]];
 const BIKES=[["Trek Madone SLR 9",48],["Specialized S-Works Tarmac",47],["Pinarello Dogma F",47],["Cervelo S5",47],["Canyon Aeroad CFR",46],["Bianchi Oltre RC",46],["Cannondale SuperSix Evo",46],["Giant TCR Advanced",45],["Scott Foil RC",45],["BMC Teammachine",44],["Santa Cruz Hightower",38],["Trek Marlin 8",32],["Giant Talon 1",30],["VanMoof S5",27],["Gazelle CityGo",25]];
+/* ---- REAL-CAR LOOKS: every car gets its real body style, its real-life
+   signature paint color and its signature details.
+   s: hyper | super | gt | muscle | sedan | wagon | hatch | roadster | ev
+   c: signature paint — stripeC: racing stripes — sideC: side stripe
+   roofC: two-tone roof — hub: rim color — fin: dorsal fin — scoop: hood scoop
+   wing: none | lip | gt | hyper — nose:false = smooth EV nose ---- */
+const CAR_LOOKS={
+"Koenigsegg Jesko Absolut":{s:"hyper",c:0xf4f7fb,wing:"none",fin:true},
+"Bugatti Chiron Super Sport":{s:"hyper",c:0x14161c,sideC:0xff7f11,wing:"none"},
+"Hennessey Venom F5":{s:"hyper",c:0x8a2232},
+"SSC Tuatara":{s:"hyper",c:0xe8ecf2,fin:true},
+"Koenigsegg Agera RS":{s:"hyper",c:0xf4f7fb,stripeC:0xff7f11},
+"Bugatti Veyron Super Sport":{s:"hyper",c:0x17181d,sideC:0xff7f11,wing:"lip"},
+"Rimac Nevera":{s:"hyper",c:0x2e6f62,nose:false,wing:"lip"},
+"McLaren Speedtail":{s:"hyper",c:0x39485e,wing:"none"},
+"Aston Martin Valkyrie":{s:"hyper",c:0x1d5c46},
+"Tesla Roadster":{s:"hyper",c:0xb01f2e,nose:false,wing:"none"},
+"Koenigsegg Gemera":{s:"hyper",c:0x5a1f28,wing:"none"},
+"Pagani Huayra":{s:"hyper",c:0x9aa4b2,wing:"lip"},
+"Lamborghini Aventador SVJ":{s:"super",c:0x3fae4a},
+"Mercedes-AMG One":{s:"hyper",c:0xb8bec7,fin:true,stripeC:0x00a19b},
+"Ferrari LaFerrari":{s:"super",c:0xd0202a,wing:"none"},
+"Lamborghini Revuelto":{s:"super",c:0xe0742a},
+"McLaren P1":{s:"super",c:0xf7c948},
+"Ferrari Enzo":{s:"super",c:0xd0202a,wing:"none"},
+"Ferrari SF90 Stradale":{s:"super",c:0xd0202a,wing:"none"},
+"McLaren 720S":{s:"super",c:0xff8000,wing:"lip"},
+"Ferrari 488 Pista":{s:"super",c:0xd0202a,stripeC:0x2456c4},
+"Ferrari F8 Tributo":{s:"super",c:0xd0202a,wing:"lip"},
+"Aston Martin DBS Superleggera":{s:"gt",c:0x123524},
+"Bentley Continental GT Speed":{s:"gt",c:0x1e4d2b},
+"Porsche Carrera GT":{s:"roadster",c:0xc9cfd8,len:4.6,wid:2.08,wing:"gt"},
+"Audi R8 V10 Performance":{s:"super",c:0x6b7280,wing:"lip"},
+"Porsche 911 Turbo S":{s:"gt",c:0xc9cfd8,len:4.55,wing:"lip"},
+"Dodge Challenger SRT Hellcat":{s:"muscle",c:0x4b4f55},
+"Lamborghini Huracan Evo":{s:"super",c:0xff8c1a,wing:"lip"},
+"Mercedes-AMG GT Black Series":{s:"gt",c:0xff7f2a,wing:"gt"},
+"Lexus LFA":{s:"super",c:0xf4f7fb,wing:"lip"},
+"Maserati MC20":{s:"super",c:0xeef2f7,wing:"none"},
+"Tesla Model S Plaid":{s:"ev",c:0xb01f2e},
+"Cadillac CT5-V Blackwing":{s:"sedan",c:0x1a1c20,wing:"lip"},
+"Lotus Evija":{s:"hyper",c:0xaed136,nose:false},
+"Dodge Charger SRT":{s:"sedan",c:0x14161a,len:5.05,scoop:true,wing:"lip"},
+"Chevrolet Camaro ZL1":{s:"muscle",c:0xf7c700,stripeC:0x17181d},
+"Nissan GT-R Nismo":{s:"gt",c:0xf4f7fb,sideC:0xd7263d,wing:"gt"},
+"Aston Martin Vantage":{s:"gt",c:0x9ecb3a,len:4.5},
+"Chevrolet Corvette Z06":{s:"super",c:0xd0342a,wing:"lip"},
+"Honda NSX":{s:"super",c:0xc42433,wing:"none"},
+"BMW M5 CS":{s:"sedan",c:0x2b4a3e},
+"Audi RS6 Avant":{s:"wagon",c:0x9aa0a6},
+"Jaguar F-Type R":{s:"gt",c:0x1a4736,len:4.5},
+"Ford Mustang Shelby GT500":{s:"muscle",c:0x1d4ed8,stripeC:0xf4f7fb},
+"Mercedes-AMG C63 S":{s:"sedan",c:0xb8bec7},
+"BMW M3 Competition":{s:"sedan",c:0x0e7a4f},
+"Lotus Emira":{s:"super",c:0x2456a8,len:4.4,wing:"none"},
+"Honda Civic Type R":{s:"hatch",c:0xf4f7fb,sideC:0xd7263d,wing:"gt"},
+"Volkswagen Golf R":{s:"hatch",c:0x2b5fd9,wing:"lip"},
+"Ford Focus RS":{s:"hatch",c:0x2384c4,wing:"gt"},
+"Kia EV6 GT":{s:"ev",c:0x7d838c,len:4.7},
+"Renault Megane RS Trophy":{s:"hatch",c:0xf7d117},
+"Porsche Taycan Turbo S":{s:"ev",c:0xeef2f7,len:4.95},
+"Subaru WRX STI":{s:"sedan",c:0x1a4fc4,hub:0xd4af37,wing:"gt",scoop:true},
+"Toyota GR Supra":{s:"gt",c:0xc22a33,len:4.4,wing:"lip"},
+"Alpine A110":{s:"super",c:0x2f7dd1,len:4.2,wing:"none"},
+"Hyundai i30 N":{s:"hatch",c:0x2775b8,wing:"lip"},
+"Mini John Cooper Works":{s:"hatch",c:0x1e4d2b,roofC:0xf4f7fb,len:3.9,wid:1.9,wing:"none"},
+"Mazda MX-5":{s:"roadster",c:0xa32638}
+};
+/* real brand colors for motorcycles & bicycles (Kawasaki green, KTM orange...) */
+const BRAND_COLORS=[["Kawasaki",0x33b04a],["Ducati",0xd7263d],["Yamaha",0x2456c4],
+ ["Suzuki",0x2f6bd8],["BMW",0xeef2f7],["Honda",0xd0202a],["Aprilia",0x17181d],
+ ["KTM",0xff7f11],["Harley",0x14161a],["MV Agusta",0xc22a33],["Triumph",0x2f3542],
+ ["Trek",0xc22a33],["Specialized",0x17181d],["Pinarello",0x101216],["Cervelo",0xd7263d],
+ ["Canyon",0x8a8f98],["Bianchi",0x2ec4b6],["Cannondale",0x2ec46a],["Giant",0x2456c4],
+ ["Scott",0xf4d35e],["BMC",0xd7263d],["Santa Cruz",0x2ec4b6],["VanMoof",0x3a3a3a],["Gazelle",0xd7263d]];
+function brandColor(n){for(const[b,c]of BRAND_COLORS)if(n.startsWith(b))return c;return null;}
 const VEHICLES=[];
 {const r=rng(5);
- CARS.forEach((c,i)=>VEHICLES.push({type:"car",name:c[0],top:c[1],color:i===0?0xffb02e:COLORS[Math.floor(r()*COLORS.length)]}));
- MOTOS.forEach(c=>VEHICLES.push({type:"moto",name:c[0],top:c[1],color:COLORS[Math.floor(r()*COLORS.length)]}));
- BIKES.forEach(c=>VEHICLES.push({type:"bike",name:c[0],top:c[1],color:COLORS[Math.floor(r()*COLORS.length)]}));
+ CARS.forEach((c,i)=>VEHICLES.push({type:"car",name:c[0],top:c[1],
+   color:(CAR_LOOKS[c[0]]&&CAR_LOOKS[c[0]].c!==undefined)?CAR_LOOKS[c[0]].c:(i===0?0xffb02e:COLORS[Math.floor(r()*COLORS.length)])}));
+ MOTOS.forEach(c=>{const bc=brandColor(c[0]);VEHICLES.push({type:"moto",name:c[0],top:c[1],color:bc!==null?bc:COLORS[Math.floor(r()*COLORS.length)]});});
+ BIKES.forEach(c=>{const bc=brandColor(c[0]);VEHICLES.push({type:"bike",name:c[0],top:c[1],color:bc!==null?bc:COLORS[Math.floor(r()*COLORS.length)]});});
  CAMPERS.forEach(c=>VEHICLES.push({type:"camper",name:c[0],top:c[1],color:COLORS[Math.floor(r()*COLORS.length)]}));}
 const TYPE_LABEL={car:"Car",moto:"Motorcycle",bike:"Bicycle",camper:"Camper — live & sleep in it!"};
 /* ---- vehicle ownership: you start with one of each, the rest cost money ---- */

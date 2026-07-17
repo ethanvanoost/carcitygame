@@ -1,5 +1,5 @@
 /* ================= THREE / SKY ================= */
-const renderer=new THREE.WebGLRenderer({canvas:$("c3d"),antialias:true});
+const renderer=new THREE.WebGLRenderer({canvas:$("c3d"),antialias:true,powerPreference:"high-performance"});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 /* filmic tone mapping + sRGB output = much richer, more realistic light & colors */
@@ -25,17 +25,30 @@ renderer.domElement.addEventListener("webglcontextlost",e=>{e.preventDefault();l
 const hemi=new THREE.HemisphereLight(0xcfe8ff,0x5a7d4a,0.9);scene.add(hemi);
 /* a simple sky/ground environment map: metallic car paint & glass REFLECT it */
 {
-  const faces=[];
+  /* a richer sky: brighter zenith, glowing horizon band and a real SUN hotspot —
+     clear-coat car paint and glass mirror all of it */
+  const S2=128,faces=[];
   for(let i=0;i<6;i++){
-    const cv=document.createElement("canvas");cv.width=cv.height=64;
+    const cv=document.createElement("canvas");cv.width=cv.height=S2;
     const c=cv.getContext("2d");
-    if(i===2){c.fillStyle="#7fb8e8";c.fillRect(0,0,64,64);}          // up: blue sky
-    else if(i===3){c.fillStyle="#5b6b52";c.fillRect(0,0,64,64);}     // down: ground
+    if(i===2){
+      const rg=c.createRadialGradient(S2/2,S2/2,6,S2/2,S2/2,S2*0.75);
+      rg.addColorStop(0,"#9fd4f6");rg.addColorStop(1,"#6fb0e4");
+      c.fillStyle=rg;c.fillRect(0,0,S2,S2);                          // up: blue sky
+    }else if(i===3){c.fillStyle="#5b6b52";c.fillRect(0,0,S2,S2);}    // down: ground
     else{
-      const gr=c.createLinearGradient(0,0,0,64);
-      gr.addColorStop(0,"#8ec9f0");gr.addColorStop(0.6,"#e8f2fa");
+      const gr=c.createLinearGradient(0,0,0,S2);
+      gr.addColorStop(0,"#7fbcec");gr.addColorStop(0.5,"#cfe8f8");
+      gr.addColorStop(0.6,"#fdf3dd");                                // horizon glow
       gr.addColorStop(0.62,"#77876b");gr.addColorStop(1,"#55624e");
-      c.fillStyle=gr;c.fillRect(0,0,64,64);
+      c.fillStyle=gr;c.fillRect(0,0,S2,S2);
+      if(i===0){ /* the sun itself lives on the +x face */
+        const sg=c.createRadialGradient(S2*0.7,S2*0.28,2,S2*0.7,S2*0.28,S2*0.22);
+        sg.addColorStop(0,"rgba(255,250,230,1)");
+        sg.addColorStop(0.25,"rgba(255,240,190,0.85)");
+        sg.addColorStop(1,"rgba(255,232,170,0)");
+        c.fillStyle=sg;c.fillRect(0,0,S2,S2);
+      }
     }
     faces.push(cv);
   }
