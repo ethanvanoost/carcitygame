@@ -20,7 +20,7 @@ addEventListener("keydown",e=>{
   if(e.key.toLowerCase()==="c")$("controls").classList.toggle("open");
   if(e.key.toLowerCase()==="v")toggleACC();
   if(e.key.toLowerCase()==="r"){
-    if(MEDIT.on){MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — the next item you place faces a new way");}
+    if(MEDIT.on){MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — the next item you place faces a new way");if(GHOST.lastE)updateGhost(GHOST.lastE);}
     else eatSelected();
   }
 });
@@ -3716,6 +3716,7 @@ function openMansionEdit(man){
 function closeMansionEdit(){
   const man=MEDIT.man;
   MEDIT.on=false;MEDIT.man=null;
+  killGhost();
   $("meditBar").classList.remove("show");
   toast("\u{1F3F0} Mansion saved — enjoy your home!");
   saveGame();
@@ -3745,8 +3746,8 @@ $("meditShop").onclick=()=>{
   toast("\u{1F6D2}\u{1F95F} Your dumpling shop is OPEN at $"+price+" each — other players' money lands in your inbox!");
 };
 $("meditDone").onclick=()=>closeMansionEdit();
-$("meditRotate").onclick=()=>{MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — next item faces a new way");};
-$("meditRemove").onclick=()=>{MEDIT.tool=MEDIT.tool==="remove"?"place":"remove";renderMeditBar();
+$("meditRotate").onclick=()=>{MEDIT.rot+=Math.PI/2;toast("\u{1F504} Rotated — next item faces a new way");if(GHOST.lastE)updateGhost(GHOST.lastE);};
+$("meditRemove").onclick=()=>{MEDIT.tool=MEDIT.tool==="remove"?"place":"remove";renderMeditBar();killGhost();
   toast(MEDIT.tool==="remove"?"\u{1F5D1} REMOVE mode — click an item to sell it back (full refund)":"Placing items again.");};
 /* click on the ground to place / remove */
 function meditGroundPoint(e,y){
@@ -3757,6 +3758,59 @@ function meditGroundPoint(e,y){
   if(t<0)return null;
   return rc.ray.origin.clone().addScaledVector(rc.ray.direction,t);
 }
+/* 👻 GHOST PREVIEW: a see-through copy of the item follows your mouse and
+   shows EXACTLY where (and how, after rotating) it will be placed —
+   green = you can place it here, red = not allowed */
+const GHOST_OK=keep(new THREE.MeshBasicMaterial({color:0x4ade80,transparent:true,opacity:0.42,depthWrite:false}));
+const GHOST_BAD=keep(new THREE.MeshBasicMaterial({color:0xff5c5c,transparent:true,opacity:0.42,depthWrite:false}));
+const GHOST={g:null,t:null,rot:null,lastE:null};
+function killGhost(){
+  if(GHOST.g){scene.remove(GHOST.g);disposeGroup(GHOST.g);GHOST.g=null;GHOST.t=null;}
+}
+function ghostBuild(man){
+  killGhost();
+  /* build the real item, but WITHOUT registering beds/chairs/TVs/pools etc. */
+  const lens=[hotelBeds.length,chairs.length,TVS.length,TRAMPS.length,POOLS.length,pianos.length];
+  const wrap=new THREE.Group();
+  try{buildFurnPiece(MEDIT.sel,0,0,0,MEDIT.rot,wrap,man);}catch(e){}
+  hotelBeds.length=lens[0];chairs.length=lens[1];TVS.length=lens[2];
+  TRAMPS.length=lens[3];POOLS.length=lens[4];pianos.length=lens[5];
+  /* footprint square under the item */
+  const fp=new THREE.Mesh(new THREE.PlaneGeometry(3,3),GHOST_OK);
+  fp.rotation.x=-Math.PI/2;fp.position.y=0.05;wrap.add(fp);
+  wrap.traverse(o=>{if(o.isMesh){o.material=GHOST_OK;o.castShadow=false;o.receiveShadow=false;}});
+  scene.add(wrap);
+  GHOST.g=wrap;GHOST.t=MEDIT.sel;GHOST.rot=MEDIT.rot;
+}
+function updateGhost(e){
+  if(!MEDIT.on||MEDIT.tool!=="place"||!MEDIT.sel||!MEDIT.man||!e||e.target!==renderer.domElement){killGhost();return;}
+  const man=MEDIT.man,def=furnDef(MEDIT.sel);
+  if(!def){killGhost();return;}
+  const pt=meditGroundPoint(e,man.baseY+0.3);
+  if(!pt){killGhost();return;}
+  if(!GHOST.g||GHOST.t!==MEDIT.sel||GHOST.rot!==MEDIT.rot)ghostBuild(man);
+  GHOST.g.position.set(pt.x,pt.y,pt.z);
+  /* same rules as really placing it — so the color never lies */
+  const dx=pt.x-man.x,dz=pt.z-man.z;
+  let ok=true;
+  if(man.plot)ok=Math.abs(dx)<=15&&Math.abs(dz)<=15;
+  else{
+    ok=Math.abs(dx)<=49&&Math.abs(dz)<=49.5;
+    if(ok&&def.out!==2){
+      const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
+      if(!def.out&&!inside)ok=false;
+      if(def.out===1&&Math.abs(dz)<39)ok=false;
+    }
+  }
+  if(MONEY.v<def.p)ok=false;
+  const m=ok?GHOST_OK:GHOST_BAD;
+  GHOST.g.traverse(o=>{if(o.isMesh)o.material=m;});
+}
+addEventListener("mousemove",e=>{
+  if(!MEDIT.on)return;
+  GHOST.lastE=e;
+  updateGhost(e);
+});
 addEventListener("mousedown",e=>{
   if(!MEDIT.on||e.button!==0||e.target!==renderer.domElement)return;
   const man=MEDIT.man;
@@ -3791,6 +3845,7 @@ addEventListener("mousedown",e=>{
   items.push({t:def.t,dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot});
   buildMansionFurniture(man);saveGame();
   toast("✅ "+def.n+" placed! ($"+fmtMoney(def.p)+")");
+  if(GHOST.lastE)updateGhost(GHOST.lastE);   // ghost color updates (money changed)
 });
 /* ================= PIANOS: play them yourself + MIDI + the concert crowd ================= */
 const PIANO={open:false,cur:null,midi:false};
