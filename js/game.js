@@ -9775,5 +9775,28 @@ function frame(now){
   autoSave(dt);
   renderer.render(scene,camera);
 }
+/* ================= AUTO-UPDATE: everyone always plays the newest version =================
+   every minute we peek at index.html on the server — if the version number
+   went up, show "Refresh for new update" and auto-refresh after 30 seconds */
+const GAME_V=67;
+let _updSeen=false;
+async function checkUpdate(){
+  if(_updSeen)return;
+  try{
+    const r=await fetch("index.html",{cache:"no-store"});
+    if(!r.ok)return;
+    const m=(await r.text()).match(/js\/core\.js\?v=(\d+)/);
+    if(m&&parseInt(m[1],10)>GAME_V){
+      _updSeen=true;
+      toast("\u{1F195} NEW UPDATE! Refresh for new update — auto-refreshing in 30 seconds...");
+      setTimeout(()=>{
+        try{saveGame();}catch(e){}
+        location.reload();
+      },30000);
+    }
+  }catch(e){}
+}
+setTimeout(checkUpdate,15000);
+setInterval(checkUpdate,60000);
 renderMenu();
 requestAnimationFrame(frame);

@@ -73,14 +73,18 @@ function addWheel(g,x,z,r,w,front,hubM){
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
   const tire=new THREE.Mesh(gCyl(r,r,w,18),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
-  /* real rim: center cap + six spokes that visibly rotate */
-  const hub=new THREE.Mesh(gCyl(r*0.2,r*0.2,w+0.03,8),hubM);hub.rotation.z=Math.PI/2;spin.add(hub);
+  /* real rim: it STICKS OUT of the tire so you can actually see it —
+     center cap + six spokes that visibly rotate + a shiny outer ring */
+  const hub=new THREE.Mesh(gCyl(r*0.22,r*0.22,w+0.1,8),hubM);hub.rotation.z=Math.PI/2;spin.add(hub);
   for(let i=0;i<3;i++){
-    const sp=new THREE.Mesh(gBox(w+0.02,r*1.16,r*0.14),hubM);
+    const sp=new THREE.Mesh(gBox(w+0.08,r*1.3,r*0.16),hubM);
     sp.rotation.x=i*Math.PI/3;spin.add(sp);
   }
-  const ring=new THREE.Mesh(gTor(r*0.6,r*0.07,6,18),hubM);
-  ring.rotation.y=Math.PI/2;spin.add(ring);
+  const side=x>0?1:(x<0?-1:0);
+  (side?[side]:[1,-1]).forEach(s=>{   // cars: outer face — motos/bikes: both sides
+    const ring=new THREE.Mesh(gTor(r*0.66,r*0.08,6,18),hubM);
+    ring.rotation.y=Math.PI/2;ring.position.x=s*(w/2+0.02);spin.add(ring);
+  });
   g.add(pivot);
   (g.userData.wheels=g.userData.wheels||[]).push({pivot,spin,r,front:!!front});
 }
@@ -112,6 +116,36 @@ const CAR_PROFILES={
   roadster:[[1,0.55],[0.75,0.72],[0.3,0.82],[0.1,0.95],[-0.2,0.92],[-0.6,0.96],[-1,0.82]],
   ev:[[1,0.55],[0.8,0.72],[0.4,0.85],[0.1,1.2],[-0.35,1.28],[-0.8,1.12],[-1,0.92]]
 };
+/* EXACT surface math: the shell's real height & slope at any point, so every
+   part (stripes, wings, scoops) sits precisely ON the body — no guessing */
+function profY(prof,t){
+  const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
+  if(t>=P[0][0])return P[0][1];
+  for(let i=1;i<P.length;i++){
+    if(t>=P[i][0]){
+      const a=P[i-1],b=P[i];
+      return a[1]+(t-a[0])/(b[0]-a[0])*(b[1]-a[1]);
+    }
+  }
+  return P[P.length-1][1];
+}
+function profSlope(prof,t,zH){
+  const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
+  for(let i=1;i<P.length;i++){
+    if(t>=P[i][0]){
+      const a=P[i-1],b=P[i];
+      return (a[1]-b[1])/((a[0]-b[0])*zH);
+    }
+  }
+  return 0;
+}
+/* TINTED window glass — smoked dark, like a real sports car */
+const TINTC=new Map();
+function glassTint(color){
+  let m=TINTC.get(color);
+  if(!m){m=keep(new THREE.MeshStandardMaterial({color,transparent:true,opacity:0.86,metalness:0.25,roughness:0.08,envMapIntensity:1.5}));TINTC.set(color,m);}
+  return m;
+}
 const SHELLC=new Map();
 function carShellGeo(prof,len,wid){
   const key=prof+"|"+len+"|"+wid;
@@ -137,45 +171,52 @@ function buildVehicleMesh(type,color,top,name,lite){
     const LK=(name&&typeof CAR_LOOKS!=="undefined"&&CAR_LOOKS[name])||{};
     const K=Object.assign({},CAR_BASE,CAR_STYLES[LK.s]||{},LK);
     const zH=K.len/2,cabW=K.wid-0.22,topY=K.baseY+K.bodyH/2,wheelZ=zH-0.8;
+    /* exact shell-surface height & slope at any z (0.11 = the bevel) */
+    const surf=t=>profY(K.prof,t)+0.11,slp=t=>profSlope(K.prof,t,zH);
+    const glass=glassTint(K.glassC!==undefined?K.glassC:0x18222e);   // smoked TINTED windows
     /* ONE smooth curved shell — the car's real silhouette */
     const shell=shadowBox(new THREE.Mesh(carShellGeo(K.prof,K.len,K.wid),mat));
     shell.rotation.y=-Math.PI/2;g.add(shell);
     if(K.roof){
-      /* wraparound window band poking through the greenhouse — reads as glass */
-      const band=new THREE.Mesh(gBox(K.wid+0.03,0.32,K.cabL),glassMat);
+      /* wraparound tinted window band poking through the greenhouse */
+      const band=new THREE.Mesh(gBox(K.wid+0.03,0.32,K.cabL),glass);
       band.position.set(0,K.cabY+0.04,K.cabZ);g.add(band);
-      const ws=new THREE.Mesh(gPlane(cabW-0.2,0.5),glassMat);
+      const ws=new THREE.Mesh(gPlane(cabW-0.2,0.5),glass);
       ws.position.set(0,K.cabY+0.06,K.cabZ+K.cabL/2+0.02);ws.rotation.x=-0.5;g.add(ws);
       if(K.roofC!==undefined){ /* two-tone roof cap (hello, Mini!) */
+        const roofTop=Math.max(...(CAR_PROFILES[K.prof]||CAR_PROFILES.default).map(p=>p[1]))+0.11;
         const cap=new THREE.Mesh(gBox(K.wid-0.6,0.07,K.cabL-0.4),paintMat(K.roofC));
-        cap.position.set(0,K.roofT,K.cabZ);g.add(cap);
+        cap.position.set(0,roofTop+0.02,K.cabZ);g.add(cap);
       }
     }else{
       /* roadster: open cockpit — dark tub, low windshield, visible seats */
+      const tc=K.cabZ/zH,tubY=surf(tc);
       const tub=new THREE.Mesh(gBox(cabW-0.3,0.14,K.cabL),darkTrim);
-      tub.position.set(0,K.tailT+0.02,K.cabZ);g.add(tub);
-      const ws=new THREE.Mesh(gPlane(cabW-0.3,0.42),glassMat);
-      ws.position.set(0,K.hoodT+0.24,K.cabZ+K.cabL/2+0.1);ws.rotation.x=-0.4;g.add(ws);
+      tub.position.set(0,tubY+0.02,K.cabZ);g.add(tub);
+      const wt=(K.cabZ+K.cabL/2)/zH;
+      const ws=new THREE.Mesh(gPlane(cabW-0.3,0.42),glass);
+      ws.position.set(0,surf(wt)+0.18,K.cabZ+K.cabL/2+0.1);ws.rotation.x=-0.4;g.add(ws);
       const seatM=lambMat(0x2a2f3a);
       [[-0.4],[0.4]].forEach(p=>{
         const back=new THREE.Mesh(gBox(0.5,0.34,0.14),seatM);
-        back.position.set(p[0],K.tailT+0.14,K.cabZ-0.4);g.add(back);
+        back.position.set(p[0],tubY+0.14,K.cabZ-0.4);g.add(back);
       });
     }
     [-(zH+0.02),zH+0.02].forEach(pz=>{const b=new THREE.Mesh(gBox(K.wid+0.08,0.22,0.24),darkTrim);b.position.set(0,K.baseY-0.2,pz);g.add(b);});
+    const noseTop=surf(1),rearTop=surf(-1);   // exact front & rear face heights
     if(K.nose){
-      const grille=new THREE.Mesh(gBox(1.1,0.16,0.06),darkTrim);grille.position.set(0,K.noseT-0.32,zH+0.02);g.add(grille);
+      const grille=new THREE.Mesh(gBox(1.1,0.16,0.06),darkTrim);grille.position.set(0,Math.min(0.62,noseTop-0.2),zH+0.02);g.add(grille);
     }else{
       /* electric cars: smooth nose with a glowing light bar */
-      const bar=new THREE.Mesh(gBox(K.wid*0.62,0.05,0.05),evBarMat);bar.position.set(0,K.noseT-0.12,zH+0.03);g.add(bar);
+      const bar=new THREE.Mesh(gBox(K.wid*0.62,0.05,0.05),evBarMat);bar.position.set(0,noseTop-0.06,zH+0.03);g.add(bar);
     }
     g.userData.tails=[];g.userData.beams=[];
     [[-0.72],[0.72]].forEach(p=>{
       const h=new THREE.Mesh(gBox(0.34,0.14,0.08),headMat);
-      h.position.set(p[0],K.noseT-0.14,zH+0.03);g.add(h);
+      h.position.set(p[0],noseTop-0.12,zH+0.03);g.add(h);
       /* tail lights: dim when cruising, BRIGHT red when braking, white in reverse */
       const t=new THREE.Mesh(gBox(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0x8a1420}));
-      t.position.set(p[0],K.baseY+0.2,-(zH+0.03));g.add(t);
+      t.position.set(p[0],rearTop-0.14,-(zH+0.03));g.add(t);
       g.userData.tails.push(t);
       /* visible headlight BEAMS at night */
       const beam=new THREE.Mesh(gCone(1.5,10,10,1,true),beamMat);
@@ -201,15 +242,25 @@ function buildVehicleMesh(type,color,top,name,lite){
     const spl=new THREE.Mesh(gBox(K.wid-0.18,0.08,0.3),darkTrim);spl.position.set(0,K.baseY-0.3,zH-0.02);g.add(spl);
     [[-0.5],[0.5]].forEach(p=>{const ex=new THREE.Mesh(gCyl(0.07,0.07,0.24,8),hubMat);
       ex.rotation.x=Math.PI/2;ex.position.set(p[0],K.baseY-0.2,-(zH+0.04));g.add(ex);});
-    /* signature details: hood scoop, dorsal fin, racing stripes, side stripe */
-    if(K.scoop){const sc=new THREE.Mesh(gBox(0.56,0.14,0.7),darkTrim);sc.position.set(0,K.hoodT+0.06,zH-0.85);g.add(sc);}
-    if(K.fin){const fn=new THREE.Mesh(gBox(0.06,0.28,1.2),mat);fn.position.set(0,K.tailT+0.16,-zH*0.68);g.add(fn);}
+    /* signature details — each one sits EXACTLY on the shell surface */
+    if(K.scoop){
+      const ts=(zH-0.85)/zH;
+      const sc=new THREE.Mesh(gBox(0.56,0.14,0.7),darkTrim);
+      sc.position.set(0,surf(ts)+0.05,zH-0.85);sc.rotation.x=Math.atan(-slp(ts));g.add(sc);
+    }
+    if(K.fin){const fy=surf(-0.68);const fn=new THREE.Mesh(gBox(0.06,0.28,1.2),mat);fn.position.set(0,fy+0.12,-zH*0.68);g.add(fn);}
     if(K.stripeC!==undefined){
       const sm=lambMat(K.stripeC);
       [[-0.28],[0.28]].forEach(p=>{
-        const s1=new THREE.Mesh(gBox(0.2,0.02,1.1),sm);s1.position.set(p[0],K.hoodT+0.03,zH*0.62);s1.rotation.x=-0.16;g.add(s1);
-        if(K.roof){const s2=new THREE.Mesh(gBox(0.2,0.02,K.cabL-0.5),sm);s2.position.set(p[0],K.roofT+0.03,K.cabZ);g.add(s2);}
-        if(K.tail==="deck"){const s3=new THREE.Mesh(gBox(0.2,0.02,0.7),sm);s3.position.set(p[0],K.tailT+0.03,-zH*0.72);s3.rotation.x=0.1;g.add(s3);}
+        const t1=0.62;
+        const s1=new THREE.Mesh(gBox(0.2,0.02,1.05),sm);
+        s1.position.set(p[0],surf(t1)+0.012,zH*t1);s1.rotation.x=Math.atan(-slp(t1));g.add(s1);
+        if(K.roof){const s2=new THREE.Mesh(gBox(0.2,0.02,K.cabL-0.5),sm);s2.position.set(p[0],surf(K.cabZ/zH)+0.012,K.cabZ);g.add(s2);}
+        if(K.tail==="deck"){
+          const t3=-0.72;
+          const s3=new THREE.Mesh(gBox(0.2,0.02,0.65),sm);
+          s3.position.set(p[0],surf(t3)+0.012,zH*t3);s3.rotation.x=Math.atan(-slp(t3));g.add(s3);
+        }
       });
     }
     if(K.sideC!==undefined){
@@ -219,10 +270,12 @@ function buildVehicleMesh(type,color,top,name,lite){
     /* the rear wing: lip spoiler, GT wing or full HYPERCAR wing */
     const wing=K.wing==="auto"?((top||0)>=340?"gt":"none"):K.wing;
     if(wing==="lip"){
-      const lip=shadowBox(new THREE.Mesh(gBox(cabW-0.2,0.07,0.32),mat));lip.position.set(0,K.tailT+0.08,-(zH-0.3));g.add(lip);
+      const tl=-(zH-0.3)/zH;
+      const lip=shadowBox(new THREE.Mesh(gBox(cabW-0.2,0.07,0.32),mat));
+      lip.position.set(0,surf(tl)+0.05,-(zH-0.3));lip.rotation.x=Math.atan(-slp(tl));g.add(lip);
     }else if(wing==="gt"||wing==="hyper"){
-      const hy=wing==="hyper",wy=K.tailT+(hy?0.6:0.42);
-      [[-0.7],[0.7]].forEach(p=>{const st=new THREE.Mesh(gBox(0.08,hy?0.5:0.32,0.1),darkTrim);st.position.set(p[0],K.tailT+(hy?0.32:0.2),-(zH-0.25));g.add(st);});
+      const hy=wing==="hyper",tw=-(zH-0.25)/zH,baseT=surf(tw),wy=baseT+(hy?0.56:0.38);
+      [[-0.7],[0.7]].forEach(p=>{const st=new THREE.Mesh(gBox(0.08,hy?0.56:0.38,0.1),darkTrim);st.position.set(p[0],baseT+(hy?0.28:0.19),-(zH-0.25));g.add(st);});
       const wm=shadowBox(new THREE.Mesh(gBox(hy?K.wid:1.9,0.07,0.5),mat));wm.position.set(0,wy,-(zH-0.2));g.add(wm);
       if(hy)[[-1],[1]].forEach(p=>{const ep=new THREE.Mesh(gBox(0.06,0.24,0.5),darkTrim);ep.position.set(p[0]*(K.wid/2-0.03),wy+0.08,-(zH-0.2));g.add(ep);});
     }
