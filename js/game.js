@@ -4933,17 +4933,17 @@ $("pName").addEventListener("change",async()=>{
     ?"\u{1F464} You are now \""+res.name+"\" (offline — not reserved online yet)"
     :"\u{1F464} Username \""+res.name+"\" is yours!");
 });
-/* ---------- your avatar: shirt, pants, hair & skin ---------- */
-const AVATAR={shirt:0x2563eb,pants:0x30395c,hair:0x4a2f1d,skin:0xf1c39a};
+/* ---------- your avatar: shirt, pants, hair, skin & shoes ---------- */
+const AVATAR={shirt:0x2563eb,pants:0x30395c,hair:0x4a2f1d,skin:0xf1c39a,shoes:0x23262b};
 try{
   const a=JSON.parse(localStorage.getItem("vc4avatar")||"null");
-  if(a)for(const k of["shirt","pants","hair","skin"])if(typeof a[k]==="number")AVATAR[k]=a[k];
+  if(a)for(const k of["shirt","pants","hair","skin","shoes"])if(typeof a[k]==="number")AVATAR[k]=a[k];
 }catch(e){}
-function avString(){return[AVATAR.shirt,AVATAR.pants,AVATAR.hair,AVATAR.skin].map(c=>c.toString(16)).join(",");}
+function avString(){return[AVATAR.shirt,AVATAR.pants,AVATAR.hair,AVATAR.skin,AVATAR.shoes].map(c=>c.toString(16)).join(",");}
 function parseAv(s){
   const a=String(s||"").split(",").map(x=>parseInt(x,16));
-  if(a.length<4||a.some(isNaN))return null;
-  return{shirt:a[0],pants:a[1],hair:a[2],skin:a[3]};
+  if(a.length<4||a.slice(0,4).some(isNaN))return null;
+  return{shirt:a[0],pants:a[1],hair:a[2],skin:a[3],shoes:(a.length>4&&!isNaN(a[4]))?a[4]:0x23262b};
 }
 function applyAvatar(save){
   /* rebuild your (earth) body with the chosen colors */
@@ -4964,12 +4964,13 @@ const AV_PALETTES={
   shirt:[0x2563eb,0xd7263d,0xff7f11,0xf4d35e,0x8ac926,0x2ec4b6,0x9b5de5,0xff5d8f,0xefefef,0x111111],
   pants:[0x30395c,0x3a3a3a,0x4a3728,0x24405e,0xd7263d,0x0f7a3d,0xb56576,0x111111,0xefefef,0x6d28d9],
   hair:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a,0xd7263d,0x9b5de5,0x2f8f46,0x1b98e0,0xefefef,0xff5d8f],
-  skin:[0xf1c39a,0xd9a06b,0x8c5a2b,0x6b4226,0xffdbac,0xc68642]
+  skin:[0xf1c39a,0xd9a06b,0x8c5a2b,0x6b4226,0xffdbac,0xc68642],
+  shoes:[0x23262b,0xf4f7fb,0xd7263d,0x2456c4,0x8ac926,0xff5d8f,0xffb02e,0x9b5de5,0x6f4e37,0x111111]
 };
-const AV_LABELS={shirt:"\u{1F455} Shirt",pants:"\u{1F456} Pants",hair:"\u{1F487} Hair",skin:"\u{1F9CD} Skin"};
+const AV_LABELS={shirt:"\u{1F455} Shirt",pants:"\u{1F456} Pants",hair:"\u{1F487} Hair",skin:"\u{1F9CD} Skin",shoes:"\u{1F45F} Shoes"};
 function renderAvatarRows(){
   const w=$("avatarRows");w.innerHTML="";
-  for(const key of["shirt","pants","hair","skin"]){
+  for(const key of["shirt","pants","hair","skin","shoes"]){
     const row=document.createElement("div");
     row.style.cssText="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap";
     const lab=document.createElement("span");
@@ -8521,13 +8522,21 @@ function makeCrown(){
 const CUSTOM={};
 try{Object.assign(CUSTOM,JSON.parse(localStorage.getItem("vc4custom")||"{}"));}catch(e){}
 function saveCustom(){try{localStorage.setItem("vc4custom",JSON.stringify(CUSTOM))}catch(e){}}
-function custOf(n){return CUSTOM[n]||(CUSTOM[n]={sp:0,neon:0,rim:0,stripe:0,plate:""});}
+function custOf(n){
+  const c=CUSTOM[n]||(CUSTOM[n]={sp:0,neon:0,rim:0,stripe:0,plate:""});
+  if(c.tint===undefined)c.tint=0;   // older saves get the new options too
+  if(c.spc===undefined)c.spc=0;
+  return c;
+}
 const NEONS=[["OFF",0],["Cyan",0x00ffff],["Pink",0xff00ff],["Green",0x39ff14],["Red",0xff3333]];
-const RIMS=[["Standard",0],["Gold",0xffd700],["Red",0xff3333],["Aqua",0x00ffcc],["Black",0x0a0a0a]];
+const RIMS=[["Standard",0],["Gold",0xffd700],["Red",0xff3333],["Aqua",0x00ffcc],["Black",0x0a0a0a],["White",0xf4f7fb],["Bronze",0xb8862c]];
 const STRIPES=[["None",0],["White",0xffffff],["Black",0x111111],["Red",0xff3333],["Blue",0x00cfff]];
-/* which customizations each vehicle type supports (campers & bicycles never get a spoiler) */
-const CUST_OPTS={car:{sp:1,neon:1,rim:1,stripe:1,plate:1},moto:{sp:1,neon:1,rim:1,stripe:1,plate:1},
-  camper:{sp:0,neon:1,rim:1,stripe:1,plate:1},bike:{sp:0,neon:1,rim:1,stripe:1,plate:0}};
+const TINTS=[["Factory",null],["Light smoke",0x2a3644],["Dark smoke",0x0b0f14],["Blue",0x1b3f6e],["Green",0x1e4d3a],["Gold",0x6e5a1b],["Purple",0x3a1b5e]];
+const SPOILER_COLORS=[["Carbon",0x181a20],["Body color",null],["White",0xf4f7fb],["Red",0xd7263d],["Blue",0x1b98e0],["Gold",0xd4af37]];
+/* which customizations each vehicle type supports (campers & bicycles never get a spoiler,
+   bicycles have no glass to tint and no license plate) */
+const CUST_OPTS={car:{sp:1,neon:1,rim:1,stripe:1,plate:1,tint:1},moto:{sp:1,neon:1,rim:1,stripe:1,plate:1,tint:1},
+  camper:{sp:0,neon:1,rim:1,stripe:1,plate:1,tint:1},bike:{sp:0,neon:1,rim:1,stripe:1,plate:0,tint:0}};
 function applyCustom(mesh,v,cfg){
   if(!v||!cfg)return;
   const opts=CUST_OPTS[v.type]||CUST_OPTS.car;
@@ -8539,20 +8548,34 @@ function applyCustom(mesh,v,cfg){
         :v.type==="bike"?{w:0.6,l:2.2}
         :{w:B.wid,l:B.zH*2,plateY:0.4,plateZ:B.zH+0.08};
   if(cfg.sp&&opts.sp){
+    /* your chosen spoiler color — "Body color" matches the paint, in REAL clear-coated metal */
+    const spc=SPOILER_COLORS[cfg.spc||0];
+    const wingMat=new THREE.MeshPhysicalMaterial({color:spc[1]===null?paintOf(v):spc[1],
+      metalness:0.7,roughness:0.3,clearcoat:0.8,clearcoatRoughness:0.1,envMapIntensity:1.2});
     if(v.type==="moto"){
       /* a sporty little tail wing above the rear light */
       const st=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.22,0.08),darkTrim);
       st.position.set(0,1.3,-0.88);mesh.add(st);
-      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.05,0.26),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
+      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.05,0.26),wingMat));
       wing.position.set(0,1.42,-0.9);mesh.add(wing);
     }else{
       [[-0.7],[0.7]].forEach(p=>{
         const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.1),darkTrim);
         st.position.set(p[0],B.tailY+0.19,-(B.zH-0.25));mesh.add(st);
       });
-      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
+      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),wingMat));
       wing.position.set(0,B.tailY+0.38,-(B.zH-0.2));mesh.add(wing);
+      /* wing end plates for the full racing look */
+      [[-0.92],[0.92]].forEach(p=>{
+        const ep=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.16,0.44),darkTrim);
+        ep.position.set(p[0],B.tailY+0.42,-(B.zH-0.2));mesh.add(ep);
+      });
     }
+  }
+  if(cfg.tint&&opts.tint&&mesh.userData.glassMeshes&&mesh.userData.glassMeshes.length){
+    /* swap every window to your chosen tint */
+    const gm=glassTint(TINTS[cfg.tint][1]);
+    mesh.userData.glassMeshes.forEach(x=>x.material=gm);
   }
   if(cfg.neon&&opts.neon){
     const nc=NEONS[cfg.neon][1];
@@ -8561,16 +8584,11 @@ function applyCustom(mesh,v,cfg){
     gl.rotation.x=-Math.PI/2;gl.position.y=0.14;mesh.add(gl);
   }
   if(cfg.rim&&opts.rim){
-    const rc=RIMS[cfg.rim][1];
-    for(const w of mesh.userData.wheels){
-      const side=w.pivot.position.x>0?[1]:(w.pivot.position.x<0?[-1]:[1,-1]);   // motos & bikes: both sides
-      for(const s of side){
-        const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.66,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
-        ring.rotation.y=Math.PI/2;
-        ring.position.x=s*(w.pivot.position.x?0.17:0.12);
-        w.spin.add(ring);
-      }
-    }
+    /* the WHOLE wheel gets your color now: hub, spokes and outer rings —
+       tires stay black, the brake disc & caliper stay real */
+    const rm=hubMatFor(RIMS[cfg.rim][1]);
+    for(const w of mesh.userData.wheels)
+      w.spin.traverse(o=>{if(o.isMesh&&o.material!==tireMat)o.material=rm;});
   }
   if(cfg.stripe&&opts.stripe){
     const sc=new THREE.MeshLambertMaterial({color:STRIPES[cfg.stripe][1]});
@@ -8624,20 +8642,26 @@ function cuUI(){
   if(!GAR.v)return;
   const c=custOf(GAR.v.name),opts=CUST_OPTS[GAR.v.type]||CUST_OPTS.car;
   $("cuSpoiler").style.display=opts.sp?"":"none";
+  $("cuSpc").style.display=(opts.sp&&c.sp)?"":"none";   // spoiler color only when a spoiler is on
+  $("cuTint").style.display=opts.tint?"":"none";
   $("cuPlate").style.display=opts.plate?"":"none";
   $("cuSpoiler").innerHTML="\u{1F3CE} Spoiler: "+(c.sp?"ON":"OFF");
+  $("cuSpc").innerHTML="\u{1F3A8} Spoiler color: "+SPOILER_COLORS[c.spc][0];
   $("cuNeon").innerHTML="\u{1F4A1} Neon: "+NEONS[c.neon][0];
-  $("cuRim").innerHTML="⭕ Rims: "+RIMS[c.rim][0];
+  $("cuRim").innerHTML="⭕ Wheels: "+RIMS[c.rim][0];
   $("cuStripe").innerHTML="\u{1F3F3} Stripe: "+STRIPES[c.stripe][0];
+  $("cuTint").innerHTML="\u{1FA9F} Tint: "+TINTS[c.tint][0];
   $("cuPlate").innerHTML="\u{1F520} Plate: "+(c.plate?c.plate.toUpperCase():"—");
 }
-["cuSpoiler","cuNeon","cuRim","cuStripe"].forEach((id,k)=>{
+["cuSpoiler","cuNeon","cuRim","cuStripe","cuTint","cuSpc"].forEach((id,k)=>{
   $(id).onclick=()=>{
     const c=custOf(GAR.v.name);
     if(k===0)c.sp=c.sp?0:1;
     else if(k===1)c.neon=(c.neon+1)%NEONS.length;
     else if(k===2)c.rim=(c.rim+1)%RIMS.length;
-    else c.stripe=(c.stripe+1)%STRIPES.length;
+    else if(k===3)c.stripe=(c.stripe+1)%STRIPES.length;
+    else if(k===4)c.tint=(c.tint+1)%TINTS.length;
+    else c.spc=(c.spc+1)%SPOILER_COLORS.length;
     saveCustom();garageSetMesh();cuUI();
   };
 });
@@ -9849,7 +9873,18 @@ const UPDATE_PAGES=[
 <li>You now start with the <b>SLOWEST</b> of each type: the Toyota AE86, Vespa GTS 300, Cortina U4 Transport — and a free Citroen Type H WildCamp camper!</li>
 <li>The Mazda MX-5, KTM 390 Duke and Gazelle CityGo aren't free anymore — earn money and buy them!</li></ul>
 <h4>\u{1F6CF} ROOMS MENU</h4><ul>
-<li>Clicking a room in \u{1F6CF} Rooms now asks: <b>⚡ TELEPORT</b> right there, or <b>\u{1F9ED} ROUTE</b> — follow the blue line and drive there yourself.</li></ul>`}
+<li>Clicking a room in \u{1F6CF} Rooms now asks: <b>⚡ TELEPORT</b> right there, or <b>\u{1F9ED} ROUTE</b> — follow the blue line and drive there yourself.</li></ul>`},
+{t:"Round 31 — WAY more realistic cars, next-level tuning & a real avatar",h:`
+<h4>\u{1F697} CARS LOOK REAL NOW</h4><ul>
+<li>Every car got a <b>detail pass</b>: windshield wipers, a shark-fin antenna, a chrome nose badge, orange turn signals, fog lights, a third brake light, a fuel filler cap, a rear diffuser with fins and visible door seams.</li>
+<li><b>Real brakes</b>: steel brake discs and red calipers peek through the spokes of every wheel — and the calipers steer with the front wheels.</li></ul>
+<h4>\u{1F527} NEXT-LEVEL GARAGE TUNING</h4><ul>
+<li><b>\u{1FA9F} Glass tint</b>: factory, light smoke, dark smoke, blue, green, gold or purple — every window changes.</li>
+<li><b>⭕ Wheel color</b>: the WHOLE wheel (hub, spokes &amp; rings) gets your color now, in 6 finishes — tires stay black, brakes stay real.</li>
+<li><b>\u{1F3A8} Spoiler color</b>: carbon, body color, white, red, blue or gold — in real clear-coated metal paint, with racing end plates.</li></ul>
+<h4>\u{1F9CD} A REAL AVATAR</h4><ul>
+<li>Your character has a real face now: white eyes with pupils, eyebrows, ears, a mouth, fuller hair down the back of the head — plus a chest, a belt and <b>real sneakers with rubber soles</b>.</li>
+<li>New <b>\u{1F45F} Shoes color</b> row in the ⚙ Settings avatar editor — other players see your kicks too!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

@@ -704,23 +704,42 @@ function makeBush(x,z,s,parent,y){
 }
 /* ================= PEOPLE / ANIMALS / DOORS ================= */
 const eyeMat=keep(new THREE.MeshLambertMaterial({color:0x1c1c1e}));
+const eyeWhiteMat=keep(new THREE.MeshLambertMaterial({color:0xf6f8fb}));
+const soleMat=keep(new THREE.MeshLambertMaterial({color:0xe6e9ee}));
+const beltMat=keep(new THREE.MeshLambertMaterial({color:0x2a2118}));
+const mouthMat=keep(new THREE.MeshLambertMaterial({color:0x9c4f43}));
 const shoeMat=keep(new THREE.MeshLambertMaterial({color:0x23262b}));
 function makePerson(scale,shirtColor,av){
-  /* av = optional avatar colors {skin,pants,hair} — random when not given */
+  /* av = optional avatar colors {skin,pants,hair,shoes} — random when not given */
   const g=new THREE.Group(),s=scale||1;
   const skin=new THREE.MeshLambertMaterial({color:av&&av.skin!==undefined?av.skin:[0xf1c39a,0xd9a06b,0x8c5a2b][Math.floor(Math.random()*3)]});
   const shirt=new THREE.MeshLambertMaterial({color:shirtColor!==undefined&&shirtColor!==null?shirtColor:COLORS[Math.floor(Math.random()*COLORS.length)]});
   const pants=new THREE.MeshLambertMaterial({color:av&&av.pants!==undefined?av.pants:[0x30395c,0x3a3a3a,0x4a3728,0x24405e][Math.floor(Math.random()*4)]});
+  const shoes=new THREE.MeshLambertMaterial({color:av&&av.shoes!==undefined?av.shoes:[0x23262b,0xf4f7fb,0xd7263d,0x2456c4][Math.floor(Math.random()*4)]});
+  const hairM=new THREE.MeshLambertMaterial({color:av&&av.hair!==undefined?av.hair:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a][Math.floor(Math.random()*4)]});
+  /* torso with a real chest and a belt over the hips */
   const torso=new THREE.Mesh(new THREE.BoxGeometry(0.56*s,0.72*s,0.3*s),shirt);torso.position.y=1.28*s;torso.castShadow=true;g.add(torso);
+  const chest=new THREE.Mesh(new THREE.BoxGeometry(0.6*s,0.28*s,0.33*s),shirt);chest.position.y=1.5*s;g.add(chest);
+  const belt=new THREE.Mesh(new THREE.BoxGeometry(0.57*s,0.08*s,0.31*s),beltMat);belt.position.y=0.95*s;g.add(belt);
   /* shoulders round the silhouette a little */
   [[-0.28],[0.28]].forEach(p=>{const sh=new THREE.Mesh(new THREE.SphereGeometry(0.11*s,7,7),shirt);sh.position.set(p[0]*s,1.56*s,0);g.add(sh);});
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.07*s,0.08*s,0.12*s,7),skin);neck.position.y=1.68*s;g.add(neck);
   const head=new THREE.Mesh(new THREE.SphereGeometry(0.23*s,10,10),skin);head.position.y=1.9*s;g.add(head);
-  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),new THREE.MeshLambertMaterial({color:av&&av.hair!==undefined?av.hair:[0x4a2f1d,0x1c1c1e,0xc9a35a,0x8a4b2a][Math.floor(Math.random()*4)]}));
+  /* fuller hair: a cap on top + real hair down the back of the head */
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.24*s,10,10,0,Math.PI*2,0,Math.PI/2),hairM);
   hair.position.y=1.95*s;g.add(hair);
-  /* a real face: two eyes + a tiny nose */
-  [[-0.08],[0.08]].forEach(p=>{const e=new THREE.Mesh(new THREE.SphereGeometry(0.028*s,6,6),eyeMat);e.position.set(p[0]*s,1.93*s,0.2*s);g.add(e);});
+  const hairB=new THREE.Mesh(new THREE.SphereGeometry(0.235*s,10,10,0,Math.PI*2,0,Math.PI*0.62),hairM);
+  hairB.position.set(0,1.93*s,-0.03*s);hairB.rotation.x=-0.5;g.add(hairB);
+  /* ears */
+  [[-0.22],[0.22]].forEach(p=>{const e=new THREE.Mesh(new THREE.SphereGeometry(0.05*s,6,6),skin);e.position.set(p[0]*s,1.9*s,0);g.add(e);});
+  /* a REAL face: white eyes with dark pupils, eyebrows, nose & mouth */
+  [[-0.08],[0.08]].forEach(p=>{
+    const w=new THREE.Mesh(new THREE.SphereGeometry(0.036*s,7,7),eyeWhiteMat);w.position.set(p[0]*s,1.93*s,0.195*s);g.add(w);
+    const e=new THREE.Mesh(new THREE.SphereGeometry(0.018*s,6,6),eyeMat);e.position.set(p[0]*s,1.93*s,0.226*s);g.add(e);
+    const br=new THREE.Mesh(new THREE.BoxGeometry(0.09*s,0.02*s,0.02*s),hairM);br.position.set(p[0]*s,1.995*s,0.21*s);g.add(br);
+  });
   const nose=new THREE.Mesh(new THREE.SphereGeometry(0.035*s,6,6),skin);nose.position.set(0,1.87*s,0.225*s);g.add(nose);
+  const mouth=new THREE.Mesh(new THREE.BoxGeometry(0.09*s,0.018*s,0.02*s),mouthMat);mouth.position.set(0,1.8*s,0.217*s);g.add(mouth);
   function limb(mat,len,r){const p=new THREE.Group();
     const m=new THREE.Mesh(new THREE.CylinderGeometry(r*s,r*0.85*s,len*s,7),mat);m.position.y=-len*s/2;p.add(m);return p;}
   const lA=limb(shirt,0.6,0.085);lA.position.set(-0.38*s,1.56*s,0);g.add(lA);
@@ -729,7 +748,11 @@ function makePerson(scale,shirtColor,av){
   [lA,rA].forEach(a=>{const h=new THREE.Mesh(new THREE.SphereGeometry(0.07*s,6,6),skin);h.position.y=-0.64*s;a.add(h);});
   const lL=limb(pants,0.76,0.1);lL.position.set(-0.16*s,0.76*s,0);g.add(lL);
   const rL=limb(pants,0.76,0.1);rL.position.set(0.16*s,0.76*s,0);g.add(rL);
-  [lL,rL].forEach(l=>{const f=new THREE.Mesh(new THREE.BoxGeometry(0.17*s,0.1*s,0.32*s),shoeMat);f.position.set(0,-0.76*s,0.07*s);l.add(f);});
+  /* real sneakers: a colored upper on a light rubber sole */
+  [lL,rL].forEach(l=>{
+    const f=new THREE.Mesh(new THREE.BoxGeometry(0.17*s,0.08*s,0.32*s),shoes);f.position.set(0,-0.755*s,0.07*s);l.add(f);
+    const so=new THREE.Mesh(new THREE.BoxGeometry(0.18*s,0.035*s,0.34*s),soleMat);so.position.set(0,-0.81*s,0.07*s);l.add(so);
+  });
   g.userData.limbs={lA,rA,lL,rL};
   return g;
 }

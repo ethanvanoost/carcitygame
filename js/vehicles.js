@@ -43,6 +43,8 @@ function lambMat(color){
   return m;
 }
 const headMat=keep(new THREE.MeshBasicMaterial({color:0xfff2b0}));
+const indMat=keep(new THREE.MeshBasicMaterial({color:0xffa021}));   // turn signals
+const brakeMat=keep(new THREE.MeshBasicMaterial({color:0xd7263d})); // third brake light
 const plateMat=keep(new THREE.MeshLambertMaterial({color:0xf4f7fb}));
 const evBarMat=keep(new THREE.MeshBasicMaterial({color:0xdfefff}));
 const beamMat=keep(new THREE.MeshBasicMaterial({color:0xfff2b0,transparent:true,opacity:0.09,depthWrite:false,side:THREE.DoubleSide}));
@@ -68,11 +70,17 @@ function hubMatFor(color){
   if(!m){m=keep(new THREE.MeshStandardMaterial({color,metalness:0.85,roughness:0.3,envMapIntensity:1.2}));HUBC.set(color,m);}
   return m;
 }
+const discMat=keep(new THREE.MeshStandardMaterial({color:0x9aa2ac,metalness:0.9,roughness:0.35}));
+const calMat=keep(new THREE.MeshLambertMaterial({color:0xc22c2c}));
 function addWheel(g,x,z,r,w,front,hubM){
   hubM=hubM||hubMat;
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
   const tire=new THREE.Mesh(gCyl(r,r,w,18),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
+  if(w>=0.16){ /* real brakes: a steel disc + a red caliper peeking through the spokes */
+    const disc=new THREE.Mesh(gCyl(r*0.5,r*0.5,w*0.55,14),discMat);disc.rotation.z=Math.PI/2;pivot.add(disc);
+    const cal=new THREE.Mesh(gBox(w*0.62,r*0.4,r*0.2),calMat);cal.position.set(0,r*0.16,r*0.42);pivot.add(cal);
+  }
   /* real rim: it STICKS OUT of the tire so you can actually see it —
      center cap + six spokes that visibly rotate + a shiny outer ring */
   const hub=new THREE.Mesh(gCyl(r*0.22,r*0.22,w+0.1,8),hubM);hub.rotation.z=Math.PI/2;spin.add(hub);
@@ -164,7 +172,7 @@ function carShellGeo(prof,len,wid){
   return geo;
 }
 function buildVehicleMesh(type,color,top,name,lite){
-  const g=new THREE.Group();g.userData.wheels=[];
+  const g=new THREE.Group();g.userData.wheels=[];g.userData.glassMeshes=[];   // tinted in the garage
   const mat=paintMat(color);
   if(type==="car"){
     /* look up this car's REAL look: body style + signature details */
@@ -180,9 +188,9 @@ function buildVehicleMesh(type,color,top,name,lite){
     if(K.roof){
       /* wraparound tinted window band poking through the greenhouse */
       const band=new THREE.Mesh(gBox(K.wid+0.03,0.32,K.cabL),glass);
-      band.position.set(0,K.cabY+0.04,K.cabZ);g.add(band);
+      band.position.set(0,K.cabY+0.04,K.cabZ);g.add(band);g.userData.glassMeshes.push(band);
       const ws=new THREE.Mesh(gPlane(cabW-0.2,0.5),glass);
-      ws.position.set(0,K.cabY+0.06,K.cabZ+K.cabL/2+0.02);ws.rotation.x=-0.5;g.add(ws);
+      ws.position.set(0,K.cabY+0.06,K.cabZ+K.cabL/2+0.02);ws.rotation.x=-0.5;g.add(ws);g.userData.glassMeshes.push(ws);
       if(K.roofC!==undefined){ /* two-tone roof cap (hello, Mini!) */
         const roofTop=Math.max(...(CAR_PROFILES[K.prof]||CAR_PROFILES.default).map(p=>p[1]))+0.11;
         const cap=new THREE.Mesh(gBox(K.wid-0.6,0.07,K.cabL-0.4),paintMat(K.roofC));
@@ -195,7 +203,7 @@ function buildVehicleMesh(type,color,top,name,lite){
       tub.position.set(0,tubY+0.02,K.cabZ);g.add(tub);
       const wt=(K.cabZ+K.cabL/2)/zH;
       const ws=new THREE.Mesh(gPlane(cabW-0.3,0.42),glass);
-      ws.position.set(0,surf(wt)+0.18,K.cabZ+K.cabL/2+0.1);ws.rotation.x=-0.4;g.add(ws);
+      ws.position.set(0,surf(wt)+0.18,K.cabZ+K.cabL/2+0.1);ws.rotation.x=-0.4;g.add(ws);g.userData.glassMeshes.push(ws);
       const seatM=lambMat(0x2a2f3a);
       [[-0.4],[0.4]].forEach(p=>{
         const back=new THREE.Mesh(gBox(0.5,0.34,0.14),seatM);
@@ -239,6 +247,45 @@ function buildVehicleMesh(type,color,top,name,lite){
         pl.position.set(0,0.4,p[0]);pl.rotation.y=p[1];g.add(pl);});
       [[-1],[1]].forEach(p=>{const dh=new THREE.Mesh(gBox(0.03,0.05,0.3),hubMat);
         dh.position.set(p[0]*(K.wid/2-0.02),topY+0.1,K.cabZ+0.1);g.add(dh);});
+      /* ---- DETAIL PASS: the little things that make a car look REAL ---- */
+      if(K.roof){
+        /* windshield wipers resting at the base of the glass */
+        [[-0.32],[0.14]].forEach(p=>{
+          const wp=new THREE.Mesh(gBox(0.03,0.02,0.5),darkTrim);
+          wp.position.set(p[0],K.cabY-0.1,K.cabZ+K.cabL/2+0.32);wp.rotation.y=0.45;g.add(wp);
+        });
+        /* shark-fin antenna at the back of the roof */
+        const finA=new THREE.Mesh(gBox(0.04,0.09,0.22),darkTrim);
+        finA.position.set(0,surf(K.cabZ/zH)+0.12,K.cabZ-K.cabL/2+0.3);g.add(finA);
+      }
+      /* chrome badge on the nose */
+      const badge=new THREE.Mesh(gCyl(0.045,0.045,0.04,10),hubMat);
+      badge.rotation.x=Math.PI/2;badge.position.set(0,Math.min(0.82,noseTop-0.06),zH+0.03);g.add(badge);
+      /* orange turn signals at the front corners + fog lights low in the bumper */
+      [[-1],[1]].forEach(p=>{
+        const ts=new THREE.Mesh(gBox(0.14,0.08,0.06),indMat);
+        ts.position.set(p[0]*(K.wid/2-0.14),noseTop-0.26,zH+0.02);g.add(ts);
+        const fl=new THREE.Mesh(gCyl(0.05,0.05,0.04,8),headMat);
+        fl.rotation.x=Math.PI/2;fl.position.set(p[0]*0.62,K.baseY-0.12,zH+0.02);g.add(fl);
+      });
+      /* third brake light at the top of the tail */
+      const tbl=new THREE.Mesh(gBox(0.42,0.045,0.03),brakeMat);
+      tbl.position.set(0,rearTop-0.03,-(zH+0.02));g.add(tbl);
+      /* fuel filler cap on the rear right flank */
+      const cap=new THREE.Mesh(gCyl(0.07,0.07,0.02,10),hubMat);
+      cap.rotation.z=Math.PI/2;cap.position.set(K.wid/2+0.035,K.baseY+0.22,-zH*0.55);g.add(cap);
+      /* rear diffuser with fins */
+      const dif=new THREE.Mesh(gBox(K.wid-0.5,0.1,0.26),darkTrim);
+      dif.position.set(0,K.baseY-0.32,-(zH-0.06));g.add(dif);
+      [[-0.35],[0],[0.35]].forEach(p=>{
+        const fn2=new THREE.Mesh(gBox(0.025,0.15,0.24),darkTrim);
+        fn2.position.set(p[0],K.baseY-0.3,-(zH-0.05));g.add(fn2);
+      });
+      /* door seam lines on both flanks */
+      [[-1],[1]].forEach(p=>{[K.cabZ+K.cabL/2-0.1,K.cabZ-K.cabL/2+0.3].forEach(zz=>{
+        const seam=new THREE.Mesh(gBox(0.015,0.36,0.02),darkTrim);
+        seam.position.set(p[0]*(K.wid/2+0.045),K.baseY+0.1,zz);g.add(seam);
+      });});
     }
     /* wheel arches + side skirts */
     [[-1,1],[1,1],[-1,-1],[1,-1]].forEach(p=>{
@@ -301,7 +348,7 @@ function buildVehicleMesh(type,color,top,name,lite){
     const exh=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,1),hubMat);exh.rotation.x=Math.PI/2;exh.position.set(0.26,0.55,-0.7);g.add(exh);
     /* fairing nose, windscreen, front fender, headlight & tail light */
     const fair=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.46,0.36,0.5),mat));fair.position.set(0,1.28,0.78);fair.rotation.x=-0.25;g.add(fair);
-    const scr=new THREE.Mesh(new THREE.PlaneGeometry(0.4,0.3),glassMat);scr.position.set(0,1.52,0.86);scr.rotation.x=-0.6;g.add(scr);
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(0.4,0.3),glassMat);scr.position.set(0,1.52,0.86);scr.rotation.x=-0.6;g.add(scr);g.userData.glassMeshes.push(scr);
     const fen=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.1,0.7),mat);fen.position.set(0,1.02,1);g.add(fen);
     const hl=new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8),new THREE.MeshBasicMaterial({color:0xfff2b0}));hl.position.set(0,1.3,1.05);g.add(hl);
     const tl=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.08,0.06),new THREE.MeshBasicMaterial({color:0xd7263d}));tl.position.set(0,1.16,-0.94);g.add(tl);
@@ -313,12 +360,13 @@ function buildVehicleMesh(type,color,top,name,lite){
     const base=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.3,0.55,6.4),mat));base.position.y=0.68;g.add(base);
     const home=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.3,1.7,4.6),mat));home.position.set(0,1.75,-0.8);g.add(home);
     const cab=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.2,0.95,1.6),mat));cab.position.set(0,1.35,2.3);g.add(cab);
-    const ws=new THREE.Mesh(new THREE.PlaneGeometry(1.9,0.72),glassMat);ws.position.set(0,1.62,3.06);ws.rotation.x=-0.35;g.add(ws);
+    const ws=new THREE.Mesh(new THREE.PlaneGeometry(1.9,0.72),glassMat);ws.position.set(0,1.62,3.06);ws.rotation.x=-0.35;g.add(ws);g.userData.glassMeshes.push(ws);
     /* side windows + the door with a little handle */
     [[-1.16],[1.16]].forEach(p=>{
       for(let i=0;i<2;i++){
         const win=new THREE.Mesh(new THREE.PlaneGeometry(1.1,0.6),glassMat);
         win.position.set(p[0],2.05,0.2-i*1.9);win.rotation.y=p[0]>0?Math.PI/2:-Math.PI/2;g.add(win);
+        g.userData.glassMeshes.push(win);
       }
     });
     const door=new THREE.Mesh(new THREE.BoxGeometry(0.06,1.35,0.75),darkTrim);door.position.set(1.16,1.35,-2.4);g.add(door);
