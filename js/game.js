@@ -2536,7 +2536,7 @@ async function profileLoad(){
     if(d&&d.t===myToken()){
       if(typeof d.v==="number"&&d.v>MONEY.v)MONEY.v=d.v;
       if(MONEY.v>=1000)MONEY.rainbow=true;
-      (typeof d.own==="string"?d.own.split("|"):[]).forEach(n=>{if(n)OWN.add(fixVehName(n));});
+      (typeof d.own==="string"?d.own.split("|"):[]).forEach(n=>{n=fixVehName(n);if(n&&!OLD_DEFAULTS.includes(n))OWN.add(n);});
       updateMoneyUI();renderMenu();saveGame();
     }
     profileSave(true);
@@ -2630,8 +2630,18 @@ function renderRooms(){
     row.style.cssText="display:flex;gap:6px;align-items:stretch";
     const b=document.createElement("button");
     b.style.flex="1";
-    b.innerHTML=rm.label+" <span style='color:var(--dim)'>— teleport</span>";
-    b.onclick=()=>{$("roomsModal").classList.remove("open");gotoRoom(rm);};
+    b.innerHTML=rm.label+" <span style='color:var(--dim)'>— teleport or route</span>";
+    b.onclick=()=>{
+      $("roomsModal").classList.remove("open");
+      showDest(rm.label,[
+        {label:"⚡ TELEPORT — go there right now",value:"tp"},
+        {label:"\u{1F9ED} ROUTE — show the way, drive there yourself",value:"route"},
+        {label:"❌ Close",value:"x"}
+      ],a=>{
+        if(a==="tp")gotoRoom(rm);
+        else if(a==="route"){setRoute(rm.x,rm.z);toast("\u{1F9ED} Route set to "+rm.label+" — follow the blue line!");}
+      });
+    };
     row.appendChild(b);
     /* give the place back — your placed items get deleted */
     const u=document.createElement("button");
@@ -5165,7 +5175,7 @@ function loadGame(){
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
     if(d.world&&d.world.name){WORLD.name=d.world.name;WORLD.ox=d.world.ox||0;WORLD.oz=d.world.oz||0;}
     S.km=d.km||0;
-    (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(fixVehName(n));});
+    (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n!=="string")return;n=fixVehName(n);if(!OLD_DEFAULTS.includes(n))OWN.add(n);});
     if(d.paint&&typeof d.paint==="object")for(const k in d.paint)if(typeof d.paint[k]==="number")PAINT[k]=d.paint[k];
     if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
     PRENT.on=d.prent===1;
@@ -9834,7 +9844,12 @@ const UPDATE_PAGES=[
 <h4>\u{1F4B8} FINES GO INTO THE MINUS</h4><ul>
 <li>Can't afford a fine? It gets paid anyway — your money can go <b>negative</b> now (it shows red). Earn it back!</li></ul>
 <h4>\u{1F3AF} TIGHTER HITBOXES</h4><ul>
-<li>Cars, houses, apartments and mansions have <b>much tighter hitboxes</b> — no more crashing into invisible walls a meter from the building.</li></ul>`}
+<li>Cars, houses, apartments and mansions have <b>much tighter hitboxes</b> — no more crashing into invisible walls a meter from the building.</li></ul>
+<h4>\u{1F6EB} NEW STARTER VEHICLES</h4><ul>
+<li>You now start with the <b>SLOWEST</b> of each type: the Toyota AE86, Vespa GTS 300, Cortina U4 Transport — and a free Citroen Type H WildCamp camper!</li>
+<li>The Mazda MX-5, KTM 390 Duke and Gazelle CityGo aren't free anymore — earn money and buy them!</li></ul>
+<h4>\u{1F6CF} ROOMS MENU</h4><ul>
+<li>Clicking a room in \u{1F6CF} Rooms now asks: <b>⚡ TELEPORT</b> right there, or <b>\u{1F9ED} ROUTE</b> — follow the blue line and drive there yourself.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

@@ -1,5 +1,5 @@
 /* ================= DATA ================= */
-const GAME_V=71;   // the game version — shown in the menu & used by the auto-updater
+const GAME_V=72;   // the game version — shown in the menu & used by the auto-updater
 const $=id=>document.getElementById(id);
 {const vt=document.querySelector("#menu .tag");if(vt)vt.textContent+=" · v"+GAME_V;}
 function rng(seed){let a=seed;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -233,8 +233,11 @@ const VEHICLES=[];
  CAMPERS.forEach(c=>VEHICLES.push({type:"camper",name:c[0],top:c[1],color:c[3]!==undefined?c[3]:COLORS[Math.floor(r()*COLORS.length)]}));}
 {const t=document.querySelector('#tabs .tab[data-f="all"]');if(t)t.textContent="All "+VEHICLES.length;}
 const TYPE_LABEL={car:"Car",moto:"Motorcycle",bike:"Bicycle",camper:"Camper — live & sleep in it!"};
-/* ---- vehicle ownership: you start with one of each, the rest cost money ---- */
-const DEFAULT_OWNED=["Mazda MX-5","KTM 390 Duke","Gazelle CityGo"];
+/* ---- vehicle ownership: you start with the SLOWEST of each type, the rest cost money ---- */
+const DEFAULT_OWNED=["car","moto","bike","camper"].map(t=>
+  VEHICLES.filter(v=>v.type===t).reduce((a,b)=>a.top<=b.top?a:b).name);
+/* the old starters (Mazda MX-5 & friends) are not free anymore — strip them from saves */
+const OLD_DEFAULTS=["Mazda MX-5","KTM 390 Duke","Gazelle CityGo"];
 const OWN=new Set(DEFAULT_OWNED);
 const PAINT={};   // vehicle name -> the paint color you chose in the garage
 /* car prices scale with top speed: slowest car $20K ... fastest car $300K */
