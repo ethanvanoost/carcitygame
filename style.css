@@ -356,3 +356,31 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 .seg button.on{transform:scale(1.05)}
 #speedo,#clockBox{border-radius:18px}
 #miniWrap{border-color:#33405c}
+
+/* ================= LIGHT THEME (☀️ switch in Settings) ================= */
+body.light{--bg:#eef2f8;--panel:rgba(255,255,255,.92);--line:#c4cfdf;--ink:#1a2233;--dim:#5a6a85;--acc:#c47a00;--acc2:#0e7fae;--good:#15803d;--bad:#d02a2a}
+body.light #menu{background:radial-gradient(1200px 600px at 70% -10%,rgba(14,127,174,.10),transparent),radial-gradient(900px 500px at 10% 110%,rgba(255,176,46,.12),transparent),var(--bg)}
+body.light kbd{background:#e2e8f2;border-color:#b8c4d8;color:#0e7fae}
+body.light .modal .box{background:rgba(250,252,255,.97);border-color:#c4cfdf}
+body.light #clockBox,body.light #speedo,body.light #adminPanel,body.light #garTop,body.light #garBottom{background:rgba(255,255,255,.9)}
+body.light #destList button,body.light #mcdList button,body.light #shopList button,body.light #packList button,
+body.light #roomsList button,body.light .dumpItem,body.light .fitem,body.light .srvRow{background:#f2f5fa;color:var(--ink)}
+body.light #destList button:hover{background:#e5ecf6}
+body.light #mapSearch,body.light #worldBar input,body.light #serverBar input,body.light #chatRow input,
+body.light #accRow input,body.light #pName,body.light #nameInput,body.light #worldsPanel input{background:#fff;color:var(--ink)}
+body.light #hungerBar,body.light #fuelBar{background:#dfe6f0}
+body.light .qbtn{background:rgba(255,255,255,.9)}
+body.light .pedal{background:rgba(255,255,255,.9)}
+body.light #actionsMenu{background:rgba(255,255,255,.95)}
+body.light #meditBar{background:rgba(248,250,255,.96)}
+body.light .tab{color:var(--dim)}
+body.light .tab.on{color:#151004}
+body.light .seg button.on{color:#04222e}
+body.light #toast{background:rgba(255,255,255,.95)}
+body.light ::-webkit-scrollbar-thumb{background:#b8c4d8}
+body.light #spdVal{text-shadow:none}
+body.light #moneyTxt{text-shadow:none}
+body.light .cmsg.sys{color:var(--dim)}
+body.light #chatPanel{background:rgba(255,255,255,.94)}
+body.light .wchip{color:var(--dim)}
+body.light #miniWrap{border-color:#b8c4d8}

@@ -336,7 +336,7 @@ function openGarage(v){
   $("garName").textContent=EMOJI[v.type]+" "+v.name;
   $("garInfo").textContent=TYPE_LABEL[v.type]+" · top speed "+Math.round(uConv(v.top))+" "+uLabel()+" · pick a paint color, then hit DRIVE!";
   S.mode="garage";
-  $("garCustom").style.display=v.type==="car"?"flex":"none";
+  $("garCustom").style.display="flex";   // every vehicle can be customized now
   cuUI();
   $("garSell").style.display=DEFAULT_OWNED.includes(v.name)?"none":"";
   $("menu").style.display="none";
@@ -767,6 +767,7 @@ $("dumpDisplay").onclick=()=>{
 const MONEY={v:0,rainbow:false};
 /* big-number format: K, M, B, T, QA, QI, SX, SP */
 function fmtMoney(v){
+  if(v<0)return "-"+fmtMoney(-v);   // fines can push you into the red
   const units=[[1e24,"SP"],[1e21,"SX"],[1e18,"QI"],[1e15,"QA"],[1e12,"T"],[1e9,"B"],[1e6,"M"],[1e3,"K"]];
   for(const[m,s]of units)if(v>=m){
     const n=v/m;
@@ -777,11 +778,19 @@ function fmtMoney(v){
   return String(v);
 }
 function updateMoneyUI(){
-  const t="$"+fmtMoney(MONEY.v);
+  const t="$"+fmtMoney(MONEY.v),red=MONEY.v<0;
   $("moneyTxt").textContent=t;
-  $("moneyTxt").classList.toggle("rainbow",MONEY.rainbow);
+  $("moneyTxt").classList.toggle("rainbow",MONEY.rainbow&&!red);
+  $("moneyTxt").style.color=red?"var(--bad)":"";
   $("mmVal").textContent=t;
-  $("mmVal").classList.toggle("rainbow",MONEY.rainbow);
+  $("mmVal").classList.toggle("rainbow",MONEY.rainbow&&!red);
+  $("mmVal").style.color=red?"var(--bad)":"";
+}
+/* fines ALWAYS get paid — not enough money means you go into the MINUS */
+function payFine(amount,label){
+  MONEY.v-=amount;
+  updateMoneyUI();saveGame();profileSave();
+  if(MONEY.v<0)toast("\u{1F4B8} "+label+" — you didn't have enough, so you're at $"+fmtMoney(MONEY.v)+" now. Earn it back!");
 }
 function addMoney(n){
   MONEY.v+=n;
@@ -2527,7 +2536,7 @@ async function profileLoad(){
     if(d&&d.t===myToken()){
       if(typeof d.v==="number"&&d.v>MONEY.v)MONEY.v=d.v;
       if(MONEY.v>=1000)MONEY.rainbow=true;
-      (typeof d.own==="string"?d.own.split("|"):[]).forEach(n=>{if(n)OWN.add(n);});
+      (typeof d.own==="string"?d.own.split("|"):[]).forEach(n=>{if(n)OWN.add(fixVehName(n));});
       updateMoneyUI();renderMenu();saveGame();
     }
     profileSave(true);
@@ -2617,10 +2626,21 @@ function renderRooms(){
     list.appendChild(d);return;
   }
   RENT.list.forEach(rm=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;gap:6px;align-items:stretch";
     const b=document.createElement("button");
+    b.style.flex="1";
     b.innerHTML=rm.label+" <span style='color:var(--dim)'>— teleport</span>";
     b.onclick=()=>{$("roomsModal").classList.remove("open");gotoRoom(rm);};
-    list.appendChild(b);
+    row.appendChild(b);
+    /* give the place back — your placed items get deleted */
+    const u=document.createElement("button");
+    u.textContent="\u{1F6AA} Unrent";
+    u.title="Give it back — all your placed items get deleted";
+    u.style.cssText="flex:0 0 auto;border-color:var(--bad);color:var(--bad)";
+    u.onclick=()=>{$("roomsModal").classList.remove("open");askUnrent(rm);};
+    row.appendChild(u);
+    list.appendChild(row);
   });
 }
 $("bRooms").onclick=()=>{renderRooms();$("roomsModal").classList.toggle("open");};
@@ -2764,7 +2784,17 @@ function tryFurniture(){
   if(SIT.on){SIT.on=false;toast("You stood up.");return true;}
   const dk=nearFurn(hotelDesks,3.2);
   if(dk){
-    if(rentedAt(dk.id))gotoRoom(dk.room);
+    const mine=rentedAt(dk.id);
+    if(mine){
+      showDest(mine.label,[
+        {label:"\u{1F6CE}️ Go to "+(dk.mansion?"your mansion":"your room"),value:"go"},
+        {label:"\u{1F6AA} UNRENT — give it back (your placed items get deleted)",value:"unrent"},
+        {label:"❌ Close",value:"x"}
+      ],a=>{
+        if(a==="go")gotoRoom(dk.room);
+        else if(a==="unrent")askUnrent(mine);
+      });
+    }
     else openPropertyDesk(dk);
     return true;
   }
@@ -3358,6 +3388,29 @@ function openPropertyDesk(dk){
     saveGame();
     gotoRoom(dk.room);
   });
+}
+/* give a place back: it's released for other players and everything YOU placed
+   is deleted — only the default furniture stays */
+function unrentProperty(rm){
+  const i=RENT.list.indexOf(rm);
+  if(i>=0)RENT.list.splice(i,1);
+  releaseClaim(rm.id);
+  MFURN.delete(rm.id);                    // your placed items are gone...
+  delete MYSHOP[rm.id];saveShops();       // ...and so is your dumpling shop
+  DISPLAYS.delete(rm.id);
+  const man=mansions.find(m=>m.id===rm.id);
+  if(man){
+    if(man.tableG){man.g.remove(man.tableG);disposeGroup(man.tableG);man.tableG=null;}
+    buildMansionFurniture(man);           // back to the default bed, chairs & table
+  }
+  saveGame();profileSave(true);
+  toast("\u{1F511} You gave up "+rm.label+" — your items were removed, only the default furniture stays.");
+}
+function askUnrent(rm){
+  showDest("\u{1F6AA} Give up "+rm.label+"?",[
+    {label:"⚠️ YES — unrent it (all MY placed items get deleted!)",value:"yes"},
+    {label:"❌ No, keep it!",value:"no"}
+  ],a=>{if(a==="yes")unrentProperty(rm);});
 }
 /* rent is charged every new game day — run out of money and you lose the place */
 let _rentDay=null;
@@ -4808,8 +4861,8 @@ function mpTick(dt){
        &&(!RIDE.on||RIDE.key!==k)){
       const v=player.drive;
       const dx=v.x-o.x,dz=v.z-o.z,dd=Math.hypot(dx,dz);
-      if(dd<3.4&&Math.abs((v.y||0)-(o.y||0))<2.6){
-        const push=(3.4-dd)/(dd||0.001);
+      if(dd<2.4&&Math.abs((v.y||0)-(o.y||0))<2.6){
+        const push=(2.4-dd)/(dd||0.001);
         v.x+=dx*push;v.z+=dz*push;                 // pushed out of their car
         if(Math.abs(v.speed)>6){playCrash(Math.abs(v.speed));vehDamage(Math.abs(v.speed)*0.5);}
         v.speed*=0.4;
@@ -5112,7 +5165,7 @@ function loadGame(){
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
     if(d.world&&d.world.name){WORLD.name=d.world.name;WORLD.ox=d.world.ox||0;WORLD.oz=d.world.oz||0;}
     S.km=d.km||0;
-    (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(n);});
+    (Array.isArray(d.own)?d.own:[]).forEach(n=>{if(typeof n==="string")OWN.add(fixVehName(n));});
     if(d.paint&&typeof d.paint==="object")for(const k in d.paint)if(typeof d.paint[k]==="number")PAINT[k]=d.paint[k];
     if(typeof d.fuel==="number")FUEL.km=Math.max(0,Math.min(FUEL.cap,d.fuel));
     PRENT.on=d.prent===1;
@@ -5531,11 +5584,9 @@ function openCivic(c){
       {label:"❌ Leave",value:"cancel"}
     ],v=>{
       if(v==="fine"){
-        if(MONEY.v<300){toast("\u{1F4B0} The fine is $300 — you don't have it! Keep running!");return;}
-        MONEY.v-=300;updateMoneyUI();
+        payFine(300,"$300 police fine");   // not enough money? you go into the minus
         for(const t of traffic)if(t.chase)endChase(t);
         toast("\u{1F46E}✅ Fine paid — the police call off the chase. Drive safe out there!");
-        saveGame();
       }else if(v==="job")pickJob("police");
     });
   }else{
@@ -6003,8 +6054,8 @@ function walkPlayer(dt){
   let blocked=false;
   if(S.world==="earth"&&!CAVE.in)for(const b of buildings){
     if(!b.alive||b.walkThru)continue;
-    if(Math.abs(nx-b.x)<b.w/2+0.4&&Math.abs(nz-b.z)<b.d/2+0.4){
-      if(!(Math.abs(player.x-b.x)<b.w/2+0.4&&Math.abs(player.z-b.z)<b.d/2+0.4))blocked=true;
+    if(Math.abs(nx-b.x)<b.w/2+0.15&&Math.abs(nz-b.z)<b.d/2+0.15){
+      if(!(Math.abs(player.x-b.x)<b.w/2+0.15&&Math.abs(player.z-b.z)<b.d/2+0.15))blocked=true;
     }
   }
   /* REAL WALLS: walk-in buildings can only be entered/left through the doorway */
@@ -6508,7 +6559,8 @@ function arrestPlayer(){
   if(player.drive)player.drive.speed=0;
   ACC.on=false;$("accBtn").textContent="OFF";$("accBtn").classList.remove("on");
   teleportTo(WORLD.ox+6,WORLD.oz+6);
-  toast("\u{1F694} BUSTED! You were arrested and released at spawn.");
+  payFine(150,"$150 arrest fine");   // charged even if it puts you in the minus
+  toast("\u{1F694} BUSTED! You were arrested, fined $150 and released at spawn.");
   pushNews("\u{1F694} "+mpName()+" was caught by the police after a wild chase!");
   arrestCd=6;
 }
@@ -6615,16 +6667,16 @@ function updateTraffic(dt){
     if(!player.onFoot&&player.drive&&player.drive!==c){
       const v=player.drive;
       const dx=v.x-p.x,dz=v.z-p.z,dd=Math.hypot(dx,dz);
-      if(dd<3.4&&Math.abs((v.y||0)-y)<2.6){
-        const push=(3.4-dd)/(dd||0.001);
+      if(dd<2.4&&Math.abs((v.y||0)-y)<2.6){   // tighter car hitbox — no invisible bumpers
+        const push=(2.4-dd)/(dd||0.001);
         v.x+=dx*push;v.z+=dz*push;                 // pushed out — no ghosting through
         if(Math.abs(v.speed)>6){playCrash(Math.abs(v.speed));vehDamage(Math.abs(v.speed)*0.7);}
         v.speed*=0.4;
       }
     }else if(player.onFoot&&!RIDE.on){
       const dx=player.x-p.x,dz=player.z-p.z,dd=Math.hypot(dx,dz);
-      if(dd<2.6&&Math.abs(player.y-y)<2.6){
-        const push=(2.6-dd)/(dd||0.001);
+      if(dd<1.6&&Math.abs(player.y-y)<2.6){
+        const push=(1.6-dd)/(dd||0.001);
         player.x+=dx*push;player.z+=dz*push;
       }
     }
@@ -6636,7 +6688,7 @@ function solidParked(){
   const v=(!player.onFoot&&player.drive)?player.drive:null;
   if(!v&&(RIDE.on||!player.onFoot))return;
   const px=v?v.x:player.x,pz=v?v.z:player.z,py=v?(v.y||0):player.y;
-  const rad=v?3.4:2.4;
+  const rad=v?2.4:1.6;   // tighter parked-car hitbox
   for(let i=parkedCars.length-1;i>=0;i--){
     const rec=parkedCars[i];
     if(offScene(rec.g)){parkedCars.splice(i,1);continue;}
@@ -8463,42 +8515,82 @@ function custOf(n){return CUSTOM[n]||(CUSTOM[n]={sp:0,neon:0,rim:0,stripe:0,plat
 const NEONS=[["OFF",0],["Cyan",0x00ffff],["Pink",0xff00ff],["Green",0x39ff14],["Red",0xff3333]];
 const RIMS=[["Standard",0],["Gold",0xffd700],["Red",0xff3333],["Aqua",0x00ffcc],["Black",0x0a0a0a]];
 const STRIPES=[["None",0],["White",0xffffff],["Black",0x111111],["Red",0xff3333],["Blue",0x00cfff]];
+/* which customizations each vehicle type supports (campers & bicycles never get a spoiler) */
+const CUST_OPTS={car:{sp:1,neon:1,rim:1,stripe:1,plate:1},moto:{sp:1,neon:1,rim:1,stripe:1,plate:1},
+  camper:{sp:0,neon:1,rim:1,stripe:1,plate:1},bike:{sp:0,neon:1,rim:1,stripe:1,plate:0}};
 function applyCustom(mesh,v,cfg){
-  if(!v||v.type!=="car"||!cfg)return;
-  /* the exact body-surface anchors saved by buildVehicleMesh */
+  if(!v||!cfg)return;
+  const opts=CUST_OPTS[v.type]||CUST_OPTS.car;
+  /* the exact body-surface anchors saved by buildVehicleMesh (cars only) */
   const B=mesh.userData.body||{zH:2.3,wid:2.08,cabZ:-0.25,cabL:2.25,hoodY:0.98,hoodA:-0.16,roofY:1.39,deckY:1.05,deckA:0.12,tailY:1.0};
-  if(cfg.sp&&!((v.top||0)>=340)){
-    [[-0.7],[0.7]].forEach(p=>{
-      const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.1),darkTrim);
-      st.position.set(p[0],B.tailY+0.19,-(B.zH-0.25));mesh.add(st);
-    });
-    const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
-    wing.position.set(0,B.tailY+0.38,-(B.zH-0.2));mesh.add(wing);
+  /* footprint per type, for the neon pool & plate spots */
+  const FP=v.type==="camper"?{w:2.3,l:6.4,plateY:0.55,plateZ:3.24}
+        :v.type==="moto"?{w:0.9,l:2.6,plateY:1.1,plateZ:-0.98}
+        :v.type==="bike"?{w:0.6,l:2.2}
+        :{w:B.wid,l:B.zH*2,plateY:0.4,plateZ:B.zH+0.08};
+  if(cfg.sp&&opts.sp){
+    if(v.type==="moto"){
+      /* a sporty little tail wing above the rear light */
+      const st=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.22,0.08),darkTrim);
+      st.position.set(0,1.3,-0.88);mesh.add(st);
+      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.05,0.26),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
+      wing.position.set(0,1.42,-0.9);mesh.add(wing);
+    }else{
+      [[-0.7],[0.7]].forEach(p=>{
+        const st=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.38,0.1),darkTrim);
+        st.position.set(p[0],B.tailY+0.19,-(B.zH-0.25));mesh.add(st);
+      });
+      const wing=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.07,0.5),new THREE.MeshPhongMaterial({color:0x181a20,shininess:70})));
+      wing.position.set(0,B.tailY+0.38,-(B.zH-0.2));mesh.add(wing);
+    }
   }
-  if(cfg.neon){
+  if(cfg.neon&&opts.neon){
     const nc=NEONS[cfg.neon][1];
-    const gl=new THREE.Mesh(new THREE.PlaneGeometry(B.wid+0.5,B.zH*2+0.3),
+    const gl=new THREE.Mesh(new THREE.PlaneGeometry(FP.w+0.5,FP.l+0.3),
       new THREE.MeshBasicMaterial({color:nc,transparent:true,opacity:0.55,depthWrite:false}));
     gl.rotation.x=-Math.PI/2;gl.position.y=0.14;mesh.add(gl);
   }
-  if(cfg.rim){
+  if(cfg.rim&&opts.rim){
     const rc=RIMS[cfg.rim][1];
     for(const w of mesh.userData.wheels){
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.66,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
-      ring.rotation.y=Math.PI/2;
-      ring.position.x=(w.pivot.position.x>0?1:(w.pivot.position.x<0?-1:0))*0.17;
-      w.spin.add(ring);
+      const side=w.pivot.position.x>0?[1]:(w.pivot.position.x<0?[-1]:[1,-1]);   // motos & bikes: both sides
+      for(const s of side){
+        const ring=new THREE.Mesh(new THREE.TorusGeometry(w.r*0.66,w.r*0.09,6,16),new THREE.MeshBasicMaterial({color:rc}));
+        ring.rotation.y=Math.PI/2;
+        ring.position.x=s*(w.pivot.position.x?0.17:0.12);
+        w.spin.add(ring);
+      }
     }
   }
-  if(cfg.stripe){
-    /* sunk into the body like the factory stripes — a ridge, never floating */
+  if(cfg.stripe&&opts.stripe){
     const sc=new THREE.MeshLambertMaterial({color:STRIPES[cfg.stripe][1]});
-    [[B.hoodY,B.hoodA,B.zH*0.62,1.05],[B.roofY,0,B.cabZ,B.cabL-0.5],[B.deckY,B.deckA,-B.zH*0.72,0.65]].forEach(s=>{
-      const b=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.24,s[3]),sc);
-      b.position.set(0,s[0]-0.08,s[2]);b.rotation.x=s[1];mesh.add(b);
-    });
+    if(v.type==="camper"){
+      /* a bold accent band along both sides + across the nose */
+      [[-1.18],[1.18]].forEach(p=>{
+        const b=new THREE.Mesh(new THREE.BoxGeometry(0.04,0.26,5.9),sc);
+        b.position.set(p[0],1.55,-0.3);mesh.add(b);
+      });
+      const n=new THREE.Mesh(new THREE.BoxGeometry(2.24,0.26,0.04),sc);
+      n.position.set(0,1.55,3.11);mesh.add(n);
+    }else if(v.type==="moto"){
+      /* racing stripe over the tank and the tail */
+      const t=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.06,0.72),sc);
+      t.position.set(0,1.36,0.35);mesh.add(t);
+      const b=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.06,1.0),sc);
+      b.position.set(0,1.18,-0.45);mesh.add(b);
+    }else if(v.type==="bike"){
+      /* colored accents on the frame tubes */
+      const f=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,0.7),sc);
+      f.position.set(0,0.85,0);f.rotation.x=0.12;mesh.add(f);
+    }else{
+      /* sunk into the body like the factory stripes — a ridge, never floating */
+      [[B.hoodY,B.hoodA,B.zH*0.62,1.05],[B.roofY,0,B.cabZ,B.cabL-0.5],[B.deckY,B.deckA,-B.zH*0.72,0.65]].forEach(s=>{
+        const b=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.24,s[3]),sc);
+        b.position.set(0,s[0]-0.08,s[2]);b.rotation.x=s[1];mesh.add(b);
+      });
+    }
   }
-  if(cfg.plate){
+  if(cfg.plate&&opts.plate){
     const cv=document.createElement("canvas");cv.width=128;cv.height=32;
     const c=cv.getContext("2d");
     c.fillStyle="#f4f7fb";c.fillRect(0,0,128,32);
@@ -8506,16 +8598,23 @@ function applyCustom(mesh,v,cfg){
     c.fillStyle="#14161a";c.font="bold 22px Segoe UI";c.textAlign="center";
     c.fillText(cfg.plate.toUpperCase().slice(0,7),70,24);
     const pm=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv)});
-    /* mounted ON the bumper faces, clearly visible front & back */
-    [[B.zH+0.08,0],[-(B.zH+0.08),Math.PI]].forEach(p=>{
-      const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.56,0.17),pm);
-      pl.position.set(0,0.4,p[0]);pl.rotation.y=p[1];mesh.add(pl);
-    });
+    if(v.type==="moto"){
+      const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.11),pm);
+      pl.position.set(0,FP.plateY,FP.plateZ);pl.rotation.y=Math.PI;mesh.add(pl);
+    }else{
+      /* mounted ON the bumper faces, clearly visible front & back */
+      [[FP.plateZ,0],[-FP.plateZ,Math.PI]].forEach(p=>{
+        const pl=new THREE.Mesh(new THREE.PlaneGeometry(0.56,0.17),pm);
+        pl.position.set(0,FP.plateY,p[0]);pl.rotation.y=p[1];mesh.add(pl);
+      });
+    }
   }
 }
 function cuUI(){
   if(!GAR.v)return;
-  const c=custOf(GAR.v.name);
+  const c=custOf(GAR.v.name),opts=CUST_OPTS[GAR.v.type]||CUST_OPTS.car;
+  $("cuSpoiler").style.display=opts.sp?"":"none";
+  $("cuPlate").style.display=opts.plate?"":"none";
   $("cuSpoiler").innerHTML="\u{1F3CE} Spoiler: "+(c.sp?"ON":"OFF");
   $("cuNeon").innerHTML="\u{1F4A1} Neon: "+NEONS[c.neon][0];
   $("cuRim").innerHTML="⭕ Rims: "+RIMS[c.rim][0];
@@ -9718,7 +9817,24 @@ const UPDATE_PAGES=[
 <li>Owners can <b>\u{1F462} KICK</b> players, <b>⏳ BAN them for a day</b> or <b>\u{1F528} BAN FOREVER</b> — open the \u{1F5FA} map and click their name. Unban from the Rules panel.</li></ul>
 <h4>\u{1F6E0} ADMIN REMOVED</h4><ul>
 <li>The old admin panel (speed boosts, driving the train/plane/bus, traffic count) is gone.</li>
-<li>Only two switches remain in the ⚙ Rules panel: \u{1F46E} <b>Police chases ON/OFF</b> and \u{1F354} <b>Hunger ON/OFF</b>.</li></ul>`}
+<li>Only two switches remain in the ⚙ Rules panel: \u{1F46E} <b>Police chases ON/OFF</b> and \u{1F354} <b>Hunger ON/OFF</b>.</li></ul>`},
+{t:"Round 30 — 200+ new vehicles, tune EVERYTHING, light theme & unrenting",h:`
+<h4>\u{1F697} 200+ NEW VEHICLES</h4><ul>
+<li><b>50+ new cars</b> — from the Bugatti Tourbillon and Koenigsegg Regera to the Toyota AE86.</li>
+<li><b>50+ new motorcycles</b> (BMW M1000RR, Ducati Superleggera V4, Vespa GTS...) and <b>50+ new bicycles</b>.</li>
+<li>Campers are <b>real models from real brands</b> now: Volkswagen California, Hymer, Airstream, Winnebago, Morelo... 60+ of them! (Your old campers automatically became their real-brand versions.)</li></ul>
+<h4>\u{1F527} TUNE EVERY VEHICLE</h4><ul>
+<li>The garage customization isn't just for cars anymore: <b>motorcycles, bicycles and campers</b> get neon, colored rims, stripes and (where it makes sense) a license plate.</li>
+<li>The <b>spoiler works on EVERY car</b> now — and motorcycles can get one too. Campers and bicycles stay spoiler-free (sorry).</li></ul>
+<h4>☀️ LIGHT &amp; DARK THEME</h4><ul>
+<li>New <b>Theme switch in ⚙ Settings</b>: the whole UI in \u{1F319} dark (as always) or a fresh ☀️ light look. Your choice is remembered.</li></ul>
+<h4>\u{1F6AA} UNRENT YOUR PLACE</h4><ul>
+<li>You can <b>give back a rented or bought mansion / apartment</b>: press T at the reception, or use the \u{1F6AA} Unrent button in \u{1F6CF} Rooms.</li>
+<li>Everything YOU placed gets deleted — only the default furniture stays.</li></ul>
+<h4>\u{1F4B8} FINES GO INTO THE MINUS</h4><ul>
+<li>Can't afford a fine? It gets paid anyway — your money can go <b>negative</b> now (it shows red). Earn it back!</li></ul>
+<h4>\u{1F3AF} TIGHTER HITBOXES</h4><ul>
+<li>Cars, houses, apartments and mansions have <b>much tighter hitboxes</b> — no more crashing into invisible walls a meter from the building.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

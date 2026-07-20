@@ -1089,7 +1089,7 @@ function house(x,z,rand,parent,baseY){
   const step=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.18,0.9),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
   step.position.set(x,baseY+0.09,z+d/2+0.45);parent.add(step);
   makeDoor(x,z+d/2+0.05,0,parent,baseY);
-  return regBuilding(x,z,Math.max(w,d),Math.max(w,d),[m,roof],baseY);
+  return regBuilding(x,z,w,d,[m,roof],baseY);   // exact footprint — the hitbox used to be a big square
 }
 const SHOP_NAMES=["MART 24","FRESH & GO","MEGA SHOP","SNACK BOX","SUPER SAVE","CORNER STORE"];
 const shops=[];   // every shop you can walk into and buy food (press T inside)
@@ -2099,7 +2099,7 @@ function hitBuilding(x,z,speed){
   if(speed<8)return false;
   for(const b of buildings){
     if(!b.alive)continue;
-    if(Math.abs(x-b.x)<b.w/2+1.3&&Math.abs(z-b.z)<b.d/2+1.3){
+    if(Math.abs(x-b.x)<b.w/2+0.8&&Math.abs(z-b.z)<b.d/2+0.8){   // tight hitbox: your car must really touch the wall
       b.alive=false;collapses.push({b,t:0});rebuilds.push({b,t:20});
       if(typeof playCrash==="function")playCrash(speed);
       toast("\u{1F4A5} You crashed into a building — it's coming down!");
