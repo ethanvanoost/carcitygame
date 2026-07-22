@@ -3603,14 +3603,39 @@ function addMktGood(sg,it,x,y,z,r){
   const dm=new THREE.Mesh(new THREE.SphereGeometry(r*s,10,8),mat);
   dm.scale.y=0.75;dm.position.set(x,y+r*s*0.4,z);sg.add(dm);
 }
+/* the plot's big front sign, repainted with the market's NAME + a subtitle */
+function mktOwnedSignMat(name,sub){
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");
+  c.fillStyle="#7a3ce8";c.fillRect(0,0,512,96);
+  c.fillStyle="#fff";c.textAlign="center";
+  const nm="\u{1F3EA} "+name;
+  let fs=44;c.font="bold "+fs+"px Segoe UI";
+  while(fs>18&&c.measureText(nm).width>492){fs-=2;c.font="bold "+fs+"px Segoe UI";}
+  c.fillText(nm,256,sub?44:60);
+  if(sub){
+    let ss=24;c.font="bold "+ss+"px Segoe UI";
+    while(ss>12&&c.measureText(sub).width>492){ss-=2;c.font="bold "+ss+"px Segoe UI";}
+    c.fillStyle="#e3ccff";c.fillText(sub,256,80);
+  }
+  return new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide});
+}
 function renderMarket(p){
   if(p.stallG){p.g.remove(p.stallG);disposeGroup(p.stallG);p.stallG=null;}
   const mine=rentedAt(p.id),data=marketData(p);
+  const owner=mine?mpName():(MKTR.get(p.id)||{}).n||"a player";
+  const title=(data&&data.name&&String(data.name).trim())?String(data.name).trim():owner+"'s Marketing Plot";
+  /* claimed? the front sign shows the market's name + subtitle. Free? back to BUY/RENT. */
+  if(p.signMesh){
+    if(p.signMat){if(p.signMat.map)p.signMat.map.dispose();p.signMat.dispose();p.signMat=null;}
+    if(data){
+      p.signMat=mktOwnedSignMat(title,(data.sub&&String(data.sub).trim())||"by "+owner);
+      p.signMesh.material=p.signMat;
+    }else p.signMesh.material=mktSignMat();
+  }
   if(!data)return;
   const sg=new THREE.Group();p.g.add(sg);p.stallG=sg;
-  const owner=mine?mpName():(MKTR.get(p.id)||{}).n||"a player";
-  /* the market's name floats over the entrance — YOUR name for your deals! */
-  const title=(data.name&&String(data.name).trim())?String(data.name).trim():owner+"'s Marketing Plot";
+  /* the market's name floats over the entrance too */
   const lbl=mpMakeLabel("\u{1F3EA} "+title.slice(0,22));
   lbl.scale.set(22,5.5,1);lbl.position.set(p.x,p.y+9,p.z+46);sg.add(lbl);
   /* optional building: walls + a doorway all around the plot */
@@ -3751,16 +3776,23 @@ function openMarketOwner(p){
   showDest("\u{1F3EA} "+(d.name||"Your Marketing Plot")+" — market menu",[
     {label:"\u{1F6E0} EDIT MODE — place & remove long tables and display cases",value:"edit"},
     {label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"},
+    {label:"✏️ Sign subtitle"+(d.sub?" (now: \""+d.sub+"\")":" — the line UNDER the name"),value:"sub"},
     {label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"},
     {label:"❌ Close",value:"x"}
   ],v=>{
     if(v==="edit")openMarketEdit(p);
     else if(v==="name"){
-      const s=prompt("Name your market! (max 20 letters — this is what everyone sees, like SUPER DEAL)",d.name||"");
+      const s=prompt("Name your market! (max 20 letters — this goes BIG on the sign, like SUPER DEAL)",d.name||"");
       if(s===null)return;
       d.name=s.trim().slice(0,20);
       saveMkt();syncMarket(p.id);renderMarket(p);
-      toast(d.name?"\u{1F3F7} Your market is now called \""+d.name+"\"!":"\u{1F3F7} Name cleared — it shows your player name again.");
+      toast(d.name?"\u{1F3F7} The sign now says \""+d.name+"\"!":"\u{1F3F7} Name cleared — the sign shows your player name again.");
+    }else if(v==="sub"){
+      const s=prompt("Subtitle under the name! (max 30 letters — like: Best deals in town!)",d.sub||"");
+      if(s===null)return;
+      d.sub=s.trim().slice(0,30);
+      saveMkt();syncMarket(p.id);renderMarket(p);
+      toast(d.sub?"✏️ The sign now says \""+d.sub+"\" under the name!":"✏️ Subtitle cleared — it shows \"by "+mpName()+"\".");
     }else if(v==="bld"){
       d.b=d.b?0:1;saveMkt();syncMarket(p.id);renderMarket(p);
       toast(d.b?"\u{1F3EC} Building added — walls and a door around your plot!":"\u{1F33E} Building removed — open-air market!");
@@ -10747,6 +10779,7 @@ const UPDATE_PAGES=[
 <li>Tables are placed <b>EMPTY</b>. Walk up to one, press <b>T</b>, and pick what goes on it — dumplings, butter or food.</li>
 <li>Stocking uses a real window now: amount, price, and the bonus as two little boxes — <b>[1] + [1] FREE</b> — no more browser popups.</li>
 <li>Table signs <b>shrink the text to fit</b> — long deals aren't cut off anymore.</li>
+<li>The plot's BIG front sign is repainted the moment someone rents or buys it: it shows the <b>market's name</b> (or "&lt;player&gt;'s Marketing Plot") with a <b>subtitle line underneath</b> — set your own with ✏️ Sign subtitle, or it says "by &lt;owner&gt;". Free plots show BUY/RENT again.</li>
 <li>Shoppers can walk up to ONE table and press T to buy just that — or press T anywhere else on the plot for the full list.</li></ul>
 <h4>\u{1F527} SERVER FIX (IMPORTANT!)</h4><ul>
 <li>If players stopped seeing each other after updating the database rules: the old rules limited the avatar to 32 letters, but avatars have 5 colors (34 letters) since the shoes update. FIREBASE-SETUP.md now says <b>av ≤ 64</b> (and own ≤ 12000) — re-publish the rules and everyone reappears instantly.</li></ul>`}

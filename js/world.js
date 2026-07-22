@@ -1651,7 +1651,7 @@ function buildMarketPlot(x,z,g){
   }
   const sg=new THREE.Mesh(new THREE.PlaneGeometry(10.5,2),mktSignMat());
   sg.position.set(x,y+5.4,z+52);g.add(sg);
-  const p={g,x,z,y,id:"K:"+Math.round(x)+","+Math.round(z),stallG:null};
+  const p={g,x,z,y,id:"K:"+Math.round(x)+","+Math.round(z),stallG:null,signMesh:sg,signMat:null};
   marketPlots.push(p);
   if(window.onMarketBuilt)onMarketBuilt(p);
 }
