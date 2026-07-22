@@ -9724,6 +9724,8 @@ function grassReseed(){
       const h=terrainH(x,z);
       if(h<0.25||h>42)continue;                        // no water, no cliff tops
       if(biomeAt(x,z)==="desert")continue;             // sand has its own effect
+      const mk2=marketPlotSpot(Math.round((x-2070)/MKSP),Math.round((z-630)/MKSP));
+      if(mk2&&Math.abs(x-mk2.x)<54&&Math.abs(z-mk2.z)<54)continue;   // market floors stay clean
       s.x=x;s.z=z;s.y=h;break;
     }
   }
@@ -10592,6 +10594,7 @@ const UPDATE_PAGES=[
 {t:"Round 34 — \u{1F3EA} MARKETING PLOTS: trade with real players!",h:`
 <h4>\u{1F3EA} YOUR OWN MARKET — every ~3 km</h4><ul>
 <li>Huge <b>100×100 m MARKETING PLOTS</b> all over the map (\u{1F3EA} on the map): <b>BUY $80K</b> or <b>RENT $100/day</b>.</li>
+<li>Every plot is completely <b>EMPTY — just a big wooden plank floor</b>. No trees, houses or anything else spawn on it.</li>
 <li>When you claim one you choose: <b>\u{1F3EC} a building</b> (walls + a door all around) or <b>\u{1F33E} open-air</b> — and you can switch later.</li>
 <li><b>Name your market!</b> Instead of "Notch's Marketing Plot" the big sign can say <b>SUPER DEAL</b> — or anything you like.</li></ul>
 <h4>\u{1FA91} LONG TABLES &amp; \u{1F5C4} DISPLAY CASES</h4><ul>

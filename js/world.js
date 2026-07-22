@@ -1598,22 +1598,46 @@ function marketPlotSpot(i,j){
   if(ms&&Math.abs(ms.x-x)<130&&Math.abs(ms.z-z)<110)return null;
   const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
   if(fh&&Math.abs(fh.x-x)<130&&Math.abs(fh.z-z)<110)return null;
+  /* keep McDrives and gas stations off the trading floor */
+  const mi=Math.round((x-62)/MCSP),mj=Math.round((z-90)/MCSP);
+  for(let a=mi-1;a<=mi+1;a++)for(let b=mj-1;b<=mj+1;b++){
+    const m=mcdSpot(a,b);
+    if(m&&Math.abs(m.x-x)<75&&Math.abs(m.z-z)<62)return null;
+  }
+  const gi=Math.round((x-286)/GSP),gj=Math.round((z-150)/GSP);
+  for(let a=gi-1;a<=gi+1;a++)for(let b=gj-1;b<=gj+1;b++){
+    const m=gasSpot(a,b);
+    if(m&&Math.abs(m.x-x)<75&&Math.abs(m.z-z)<62)return null;
+  }
   return{x,z};
+}
+let _plankMat=null;
+function plankMat(){
+  if(_plankMat)return _plankMat;
+  const cv=document.createElement("canvas");cv.width=cv.height=256;
+  const c=cv.getContext("2d");
+  c.fillStyle="#8a6f4d";c.fillRect(0,0,256,256);
+  for(let i=0;i<8;i++){                      // planks with seams + wood grain
+    c.fillStyle=i%2?"#82684a":"#907453";c.fillRect(0,i*32,256,32);
+    c.fillStyle="#5f4a33";c.fillRect(0,i*32,256,2);
+    c.fillStyle="rgba(95,74,51,0.35)";
+    for(let s=0;s<5;s++)c.fillRect(Math.floor((i*53+s*61)%230),i*32+6+s*5,20+((i*31+s*17)%40),1);
+  }
+  const tex=keep(new THREE.CanvasTexture(cv));
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(12,12);
+  _plankMat=keep(new THREE.MeshLambertMaterial({map:tex}));
+  return _plankMat;
 }
 function buildMarketPlot(x,z,g){
   const y=terrainH(x,z);
-  /* the 100 x 100 m concrete trading pad */
-  const pad=new THREE.Mesh(new THREE.BoxGeometry(100,0.24,100),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
+  /* the 100 x 100 m plot: EMPTY, just a big wooden plank floor */
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(100,0.24,100),plankMat());
   pad.position.set(x,y+0.12,z);pad.receiveShadow=true;g.add(pad);
   /* low purple curb all around + corner pillars */
   const curbM=new THREE.MeshLambertMaterial({color:0x7a3ce8});
   for(const[cw,cd,px,pz]of[[100,0.5,0,-49.8],[100,0.5,0,49.8],[0.5,100,-49.8,0],[0.5,100,49.8,0]]){
     const cb=new THREE.Mesh(new THREE.BoxGeometry(cw,0.4,cd),curbM);
     cb.position.set(x+px,y+0.42,z+pz);g.add(cb);
-  }
-  for(const sx of[-49,49])for(const sz of[-49,49]){
-    const pl=new THREE.Mesh(new THREE.BoxGeometry(0.9,3.4,0.9),curbM);
-    pl.position.set(x+sx,y+1.9,z+sz);g.add(pl);
   }
   /* the big sign at the front */
   for(const px of[-4.4,4.4]){
@@ -2554,6 +2578,11 @@ function keepClear(x,z){
   if(hs&&Math.abs(x-hs.x)<60&&Math.abs(z-hs.z)<48)return true;
   const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
   if(ms&&Math.abs(x-ms.x)<60&&Math.abs(z-ms.z)<48)return true;
+  /* family-house gardens and MARKETING PLOTS stay completely empty too */
+  const fh2=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh2&&Math.abs(x-fh2.x)<60&&Math.abs(z-fh2.z)<48)return true;
+  const mk2=marketPlotSpot(Math.round((x-2070)/MKSP),Math.round((z-630)/MKSP));
+  if(mk2&&Math.abs(x-mk2.x)<56&&Math.abs(z-mk2.z)<56)return true;
   const mu=museumSpot(Math.round((x-520)/DMUS),Math.round((z-260)/DMUS));
   if(mu&&Math.abs(x-mu.x)<16&&Math.abs(z-mu.z)<14)return true;
   const chh=concertSpot(Math.round((x-1530)/CHSP),Math.round((z-1050)/CHSP));
