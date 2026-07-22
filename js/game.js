@@ -510,8 +510,12 @@ function openShop(s){
   if(s.huge){
     const b=document.createElement("button");
     b.innerHTML="\u{1F95F} Squishy Dumpling <span style='color:#ff5d8f'>surprise!</span>";
-    b.onclick=()=>{DUMP.unopened++;toast("\u{1F95F} Squishy Dumpling bought! Open it in the \u{1F95F} Dumplings menu.");};
+    b.onclick=()=>{DUMP.unopened++;toast("\u{1F95F} Squishy Dumpling bought! Open it in the \u{1F95F} Squishies menu.");};
     list.appendChild(b);
+    const bb=document.createElement("button");
+    bb.innerHTML="\u{1F9C8} Butter Squishy <span style='color:#f4d35e'>surprise! (rare MEDIUM &amp; MEGA!)</span>";
+    bb.onclick=()=>{BUTTER.unopened++;toast("\u{1F9C8} Butter Squishy bought! Open it in the \u{1F95F} Squishies menu (Butter tab).");};
+    list.appendChild(bb);
     /* the fishing corner */
     if(!ROD.owned){
       const rod=document.createElement("button");
@@ -565,6 +569,11 @@ function dumpValue(d){
   if(typeof BEACH_DUMPS!=="undefined"&&BEACH_DUMPS.some(b=>b[0]===d.color))return d.glitter?90:25;   // beach collection
   return d.glitter?100:15;
 }
+/* ---------- Butter squishies: same colors & glitter, but they also come in SIZES —
+   MEDIUM is rare (1/200) and MEGA is ultra rare (1/600) ---------- */
+const BUTTER={unopened:0,owned:[]};
+function butterValue(d){return dumpValue(d)*(d.size==="mega"?20:d.size==="med"?6:1);}
+function butterSizeLabel(d){return d.size==="mega"?"\u{1F31F} MEGA ":d.size==="med"?"\u{1F538} MEDIUM ":"";}
 /* little white stars sprinkled on every glitter dumpling */
 const _starGeo=new THREE.OctahedronGeometry(1,0);
 const _starMat=new THREE.MeshBasicMaterial({color:0xffffff});
@@ -591,12 +600,14 @@ const HOLD={d:null,mesh:null,mat:null,stars:null};
 function holdDump(d){
   if(HOLD.d===d){
     HOLD.d=null;HOLD.mesh.visible=false;
-    toast("You put the dumpling away.");
+    toast("You put the "+(d.size?"butter squishy":"dumpling")+" away.");
   }else{
     HOLD.d=d;
     if(d.color!=="Rainbow")HOLD.mat.color.set(d.hex);
     HOLD.stars.visible=!!d.glitter;
-    toast("✋\u{1F95F} You're holding your "+(d.glitter?"GLITTER ":"")+d.color+" dumpling!"+(player.onFoot?"":" (step out of your vehicle to see it)"));
+    const sc=d.size==="mega"?2.3:d.size==="med"?1.5:1;   // butter squishies come in sizes
+    HOLD.mesh.scale.set(sc,0.75*sc,sc);
+    toast("✋"+(d.size?"\u{1F9C8}":"\u{1F95F}")+" You're holding your "+(d.glitter?"GLITTER ":"")+(d.size?butterSizeLabel(d):"")+d.color+" "+(d.size?"butter squishy":"dumpling")+"!"+(player.onFoot?"":" (step out of your vehicle to see it)"));
   }
   renderDump();
 }
@@ -670,31 +681,43 @@ function chunkedList(list,items,makeEl,chunk=1000){
     }
   })();
 }
+const SQTAB={v:"dump"};   // which Squishies tab is open: dumplings or butter
 function renderDump(){
-  $("dumpInfo").textContent=DUMP.unopened
-    ?"You have "+DUMP.unopened+" unopened dumpling"+(DUMP.unopened>1?"s":"")+" — open one!"
-    :"No unopened dumplings — buy them at a \u{1F6D2} MEGA MART (one every ~3 km, see the map).";
+  const butter=SQTAB.v==="butter";
+  $("dumpTabD").classList.toggle("on",!butter);
+  $("dumpTabB").classList.toggle("on",butter);
+  const C=butter?BUTTER:DUMP,one=butter?"butter squishy":"dumpling",many=butter?"butter squishies":"dumplings";
+  $("dumpInfo").textContent=C.unopened
+    ?"You have "+C.unopened+" unopened "+(C.unopened>1?many:one)+" — open one!"
+    :"No unopened "+many+" — buy them at a \u{1F6D2} MEGA MART (one every ~3 km, see the map).";
+  $("dumpOpen").textContent=(butter?"\u{1F9C8} Open a butter squishy!":"\u{1F95F} Open a dumpling!");
+  $("dumpOpenAll").textContent="\u{1F389} Open ALL "+many+"!";
   const list=$("dumpList");list.innerHTML="";
-  if(!DUMP.owned.length){
+  if(!C.owned.length){
     const d=document.createElement("div");
     d.style.cssText="color:var(--dim);font-size:13px";
-    d.textContent="Your collection is empty.";
+    d.textContent=butter
+      ?"Your butter collection is empty — MEDIUM ones are 1/200 and MEGA ones 1/600!"
+      :"Your collection is empty.";
     list.appendChild(d);
   }
-  chunkedList(list,DUMP.owned,d=>{
+  chunkedList(list,C.owned,d=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(d.glitter?" glitter":"")+(HOLD.d===d?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+d.hex+"'></span>"
-      +(d.glitter?"✨ GLITTER ":"")+d.color+" dumpling"
-      +" <span style='color:var(--dim)'>$"+dumpValue(d)+"</span>"
+      +(d.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(d):"")+d.color+" "+one
+      +" <span style='color:var(--dim)'>$"+fmtMoney(butter?butterValue(d):dumpValue(d))+"</span>"
       +(HOLD.d===d?" ✋ holding":"");
     el.onclick=()=>holdDump(d);
     return el;
   });
   const m=nearMansion();
+  $("dumpDisplay").style.display=butter?"none":"";
   $("dumpDisplay").textContent=m&&DISPLAYS.has(m.id)?"\u{1F3F0} Remove the dumpling display":"\u{1F3F0} Display your dumplings at your mansion";
-  $("dumpOpen").style.display=DUMP.unopened?"":"none";
+  $("dumpOpen").style.display=C.unopened?"":"none";
 }
+$("dumpTabD").onclick=()=>{SQTAB.v="dump";renderDump();};
+$("dumpTabB").onclick=()=>{SQTAB.v="butter";renderDump();};
 $("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 function rollDump(){
@@ -715,7 +738,36 @@ function rollDump(){
     pushNews("\u{1F308} "+mpName()+" opened a rare RAINBOW dumpling!");
   return d;
 }
+/* butter squishies roll the same colors + glitter, PLUS a size:
+   MEDIUM = rare (1/200), MEGA = ultra rare (1/600) */
+function rollButter(){
+  BUTTER.unopened--;
+  const roll=Math.random();
+  let color,hex;
+  if(roll<0.02){color="Rainbow";hex=RAINBOW_CSS;}
+  else if(roll<0.08){color="Gold";hex="#ffd700";}
+  else{const c=DUMP_COLORS[Math.floor(Math.random()*DUMP_COLORS.length)];color=c[0];hex=c[1];}
+  const glitter=Math.random()<0.08;
+  const sr=Math.random();
+  const size=sr<1/600?"mega":sr<1/600+1/200?"med":"norm";
+  const d={color,hex,glitter,size};
+  BUTTER.owned.push(d);
+  if(size==="mega"&&color==="Rainbow"&&glitter)
+    pushNews("\u{1F9C8}\u{1F308}✨ BREAKING: "+mpName()+" opened a GLITTER RAINBOW MEGA butter squishy — the rarest butter in the universe!!");
+  else if(size==="mega")
+    pushNews("\u{1F9C8}\u{1F31F} "+mpName()+" opened an ULTRA RARE MEGA butter squishy (1/600)!");
+  return d;
+}
 $("dumpOpen").onclick=()=>{
+  if(SQTAB.v==="butter"){
+    if(!BUTTER.unopened)return;
+    const d=rollButter();
+    if(d.size==="mega")toast("\u{1F31F}\u{1F9C8} NO WAY — an ULTRA RARE MEGA "+(d.glitter?"GLITTER ":"")+d.color+" butter squishy (1/600)!! ($"+fmtMoney(butterValue(d))+")");
+    else if(d.size==="med")toast("\u{1F538}\u{1F9C8} RARE — a MEDIUM "+(d.glitter?"GLITTER ":"")+d.color+" butter squishy (1/200)! ($"+fmtMoney(butterValue(d))+")");
+    else if(d.color==="Rainbow"&&d.glitter)toast("\u{1F308}✨ WOW — a GLITTER RAINBOW butter squishy!");
+    else toast(d.glitter?"✨\u{1F9C8} A RARE GLITTER "+d.color+" butter squishy!":"\u{1F9C8} You got a "+d.color+" butter squishy!");
+    renderDump();saveGame();return;
+  }
   if(!DUMP.unopened)return;
   const d=rollDump(),{color,glitter}=d;
   if(color==="Rainbow"&&glitter)toast("\u{1F308}✨ NO WAY!!! A GLITTER RAINBOW DUMPLING — the rarest of all! ($250)");
@@ -729,25 +781,29 @@ $("dumpOpen").onclick=()=>{
 let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
   if(OPENALL_BUSY)return;
-  if(!DUMP.unopened){toast("No unopened dumplings — buy them at a \u{1F6D2} MEGA MART!");return;}
+  const butter=SQTAB.v==="butter",C=butter?BUTTER:DUMP;
+  const roll=butter?rollButter:rollDump,val=butter?butterValue:dumpValue;
+  const many=butter?"butter squishies":"dumplings";
+  if(!C.unopened){toast("No unopened "+many+" — buy them at a \u{1F6D2} MEGA MART!");return;}
   OPENALL_BUSY=true;
-  const total=DUMP.unopened;
-  let opened=0,glit=0,best=null,bestVal=-1;
+  const total=C.unopened;
+  let opened=0,glit=0,mega=0,best=null,bestVal=-1;
   (function step(){
     let n=0;
-    while(DUMP.unopened>0&&n<1000){
-      const d=rollDump();n++;opened++;
+    while(C.unopened>0&&n<1000){
+      const d=roll();n++;opened++;
       if(d.glitter)glit++;
-      const v=dumpValue(d);
+      if(d.size==="mega")mega++;
+      const v=val(d);
       if(v>bestVal){bestVal=v;best=d;}
     }
-    if(DUMP.unopened>0){
-      toast("\u{1F95F} Opening dumplings… "+opened+" / "+total);
+    if(C.unopened>0){
+      toast((butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
       setTimeout(step,0);
     }else{
       OPENALL_BUSY=false;
-      toast("\u{1F389} You opened "+opened+" dumplings"+(glit?" ("+glit+" ✨ GLITTER!)":"")
-        +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+best.color+" ($"+fmtMoney(bestVal)+")!");
+      toast("\u{1F389} You opened "+opened+" "+many+(glit?" ("+glit+" ✨ GLITTER!)":"")+(mega?" ("+mega+" \u{1F31F} MEGA!!)":"")
+        +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color+" ($"+fmtMoney(bestVal)+")!");
       renderDump();saveGame();
     }
   })();
@@ -2554,8 +2610,10 @@ function profileSave(force){
     }).catch(()=>{});
   }catch(e){}
 }
-/* ---------- dumpling buyers: sell your dumplings for money ---------- */
-const SELL={sel:new Set()};
+/* ---------- dumpling & butter buyers: sell your squishies for money ---------- */
+const SELL={sel:new Set(),kind:"dump"};   // kind: "dump" (dumpling buyer) or "butter" (butter buyer)
+function sellColl(){return SELL.kind==="butter"?BUTTER.owned:DUMP.owned;}
+function sellVal(d){return SELL.kind==="butter"?butterValue(d):dumpValue(d);}
 function nearBuyer(){
   for(let i=buyers.length-1;i>=0;i--){
     const b=buyers[i];
@@ -2564,24 +2622,33 @@ function nearBuyer(){
   }
   return null;
 }
+function nearButterBuyer(){
+  for(let i=butterBuyers.length-1;i>=0;i--){
+    const b=butterBuyers[i];
+    if(offScene(b.g)){butterBuyers.splice(i,1);continue;}
+    if(Math.hypot(player.x-b.x,player.z-b.z)<7)return b;
+  }
+  return null;
+}
 function renderSell(){
+  const coll=sellColl(),butter=SELL.kind==="butter";
   const list=$("sellList");list.innerHTML="";
-  if(!DUMP.owned.length){
+  if(!coll.length){
     const d=document.createElement("div");
     d.style.cssText="color:var(--dim);font-size:13px";
-    d.textContent="You have no dumplings — buy them at a MEGA MART and open them first!";
+    d.textContent="You have no "+(butter?"butter squishies":"dumplings")+" — buy them at a MEGA MART and open them first!";
     list.appendChild(d);
   }
-  chunkedList(list,DUMP.owned,(d,i)=>{
+  chunkedList(list,coll,(d,i)=>{
     const b=document.createElement("button");
     b.className="dumpItem"+(d.glitter?" glitter":"")+(SELL.sel.has(i)?" sel":"");
     b.innerHTML=(SELL.sel.has(i)?"✅ ":"")+"<span class='swatch' style='background:"+d.hex+"'></span>"
-      +(d.glitter?"✨ GLITTER ":"")+d.color+" — $"+dumpValue(d);
+      +(d.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(d):"")+d.color+" — $"+fmtMoney(sellVal(d));
     b.onclick=()=>{SELL.sel.has(i)?SELL.sel.delete(i):SELL.sel.add(i);renderSell();};
     return b;
   });
-  let tot=0;SELL.sel.forEach(i=>tot+=dumpValue(DUMP.owned[i]));
-  $("sellDo").textContent="\u{1F4B5} Sell selected — $"+tot;
+  let tot=0;SELL.sel.forEach(i=>tot+=sellVal(coll[i]));
+  $("sellDo").textContent="\u{1F4B5} Sell selected — $"+fmtMoney(tot);
 }
 function buildColorChips(){
   const wrap=$("sellColors");
@@ -2591,29 +2658,35 @@ function buildColorChips(){
     const b=document.createElement("button");
     b.innerHTML="<span class='swatch' style='background:"+bg+"'></span>"+name;
     b.onclick=()=>{   // all of that color, NOT the glitter ones
-      SELL.sel=new Set(DUMP.owned.map((d,i)=>(!d.glitter&&d.color===name)?i:-1).filter(i=>i>=0));
+      SELL.sel=new Set(sellColl().map((d,i)=>(!d.glitter&&d.color===name)?i:-1).filter(i=>i>=0));
       renderSell();
     };
     wrap.appendChild(b);
   });
 }
-function openSell(){SELL.sel.clear();buildColorChips();renderSell();$("sellModal").classList.add("open");}
-$("selAll").onclick=()=>{SELL.sel=new Set(DUMP.owned.map((_,i)=>i));renderSell();};
-$("selGlit").onclick=()=>{SELL.sel=new Set(DUMP.owned.map((d,i)=>d.glitter?i:-1).filter(i=>i>=0));renderSell();};
-$("selNorm").onclick=()=>{SELL.sel=new Set(DUMP.owned.map((d,i)=>d.glitter?-1:i).filter(i=>i>=0));renderSell();};
+function openSell(kind){
+  SELL.kind=kind==="butter"?"butter":"dump";
+  $("sellTitle").textContent=SELL.kind==="butter"
+    ?"\u{1F9C8} Butter buyer — sell your butter squishies"
+    :"\u{1F95F} Dumpling buyer — sell your dumplings";
+  SELL.sel.clear();buildColorChips();renderSell();$("sellModal").classList.add("open");
+}
+$("selAll").onclick=()=>{SELL.sel=new Set(sellColl().map((_,i)=>i));renderSell();};
+$("selGlit").onclick=()=>{SELL.sel=new Set(sellColl().map((d,i)=>d.glitter?i:-1).filter(i=>i>=0));renderSell();};
+$("selNorm").onclick=()=>{SELL.sel=new Set(sellColl().map((d,i)=>d.glitter?-1:i).filter(i=>i>=0));renderSell();};
 $("selNone").onclick=()=>{SELL.sel.clear();renderSell();};
 $("sellDo").onclick=()=>{
-  if(!SELL.sel.size){toast("Select some dumplings to sell first!");return;}
-  const idx=[...SELL.sel].sort((a,b)=>b-a);
+  if(!SELL.sel.size){toast("Select some to sell first!");return;}
+  const coll=sellColl(),idx=[...SELL.sel].sort((a,b)=>b-a);
   let tot=0;
   for(const i of idx){
-    const d=DUMP.owned[i];tot+=dumpValue(d);
+    const d=coll[i];tot+=sellVal(d);
     if(HOLD.d===d){HOLD.d=null;HOLD.mesh.visible=false;}
-    DUMP.owned.splice(i,1);
+    coll.splice(i,1);
   }
   SELL.sel.clear();
   addMoney(tot);renderSell();
-  toast("\u{1F4B0} Sold! You earned $"+tot);
+  toast("\u{1F4B0} Sold! You earned $"+fmtMoney(tot));
 };
 $("sellClose").onclick=()=>$("sellModal").classList.remove("open");
 /* rented rooms overview + teleport */
@@ -2643,6 +2716,15 @@ function renderRooms(){
       });
     };
     row.appendChild(b);
+    /* renting? you can switch to buying — the rent you paid counts! */
+    if(rm.mode==="rent"){
+      const buy=document.createElement("button");
+      buy.textContent="\u{1F4B0} Buy";
+      buy.title="Switch to BUY — you only pay the rest: $"+fmtMoney(propBuyDue(rm))+" (your items stay!)";
+      buy.style.cssText="flex:0 0 auto;border-color:var(--good);color:var(--good)";
+      buy.onclick=()=>{$("roomsModal").classList.remove("open");switchToBuy(rm);};
+      row.appendChild(buy);
+    }
     /* give the place back — your placed items get deleted */
     const u=document.createElement("button");
     u.textContent="\u{1F6AA} Unrent";
@@ -2796,12 +2878,13 @@ function tryFurniture(){
   if(dk){
     const mine=rentedAt(dk.id);
     if(mine){
-      showDest(mine.label,[
-        {label:"\u{1F6CE}️ Go to "+(dk.mansion?"your mansion":"your room"),value:"go"},
-        {label:"\u{1F6AA} UNRENT — give it back (your placed items get deleted)",value:"unrent"},
-        {label:"❌ Close",value:"x"}
-      ],a=>{
+      const opts=[{label:"\u{1F6CE}️ Go to "+(dk.mansion?"your mansion":"your room"),value:"go"}];
+      if(mine.mode==="rent")opts.push({label:"\u{1F4B0} SWITCH TO BUY — pay the rest: $"+fmtMoney(propBuyDue(mine))+" (your rent counted!)",value:"buy"});
+      opts.push({label:"\u{1F6AA} UNRENT — give it back (your placed items get deleted)",value:"unrent"},
+        {label:"❌ Close",value:"x"});
+      showDest(mine.label,opts,a=>{
         if(a==="go")gotoRoom(dk.room);
+        else if(a==="buy")switchToBuy(mine);
         else if(a==="unrent")askUnrent(mine);
       });
     }
@@ -3391,7 +3474,9 @@ function openPropertyDesk(dk){
     }
     if(!await writeClaim(dk.id)){toast("\u{1F512} Another player claimed it just before you!");return;}
     MONEY.v-=price;updateMoneyUI();profileSave(true);
-    RENT.list.push(mkRentEntry(dk,mode,mode==="rent"?rate:0));
+    const ent=mkRentEntry(dk,mode,mode==="rent"?rate:0);
+    if(mode==="rent")ent.paid=rate;   // rent you've paid counts toward buying it later
+    RENT.list.push(ent);
     toast(mode==="own"
       ?(dk.mansion?"\u{1F389}\u{1F3F0} SOLD! The MEGA MANSION is yours — press T inside to edit & furnish it!":"\u{1F389} You BOUGHT this room for $"+fmtMoney(buy)+" — it's yours forever!")
       :"\u{1F511} Rented for $"+fmtMoney(rate)+"/day (first day paid). Keep money on you or you'll lose it!");
@@ -3422,6 +3507,25 @@ function askUnrent(rm){
     {label:"❌ No, keep it!",value:"no"}
   ],a=>{if(a==="yes")unrentProperty(rm);});
 }
+/* switch a RENTED place to OWNED: every dollar of rent you already paid counts,
+   so you only pay the rest of the full price — and all your items stay! */
+function propBuyPrice(rm){return String(rm.id).startsWith("M:")?MANSION_PRICE:APT_PRICE;}
+function propBuyDue(rm){return Math.max(0,propBuyPrice(rm)-(rm.paid||0));}
+function switchToBuy(rm){
+  if(rm.mode!=="rent")return;
+  const due=propBuyDue(rm);
+  showDest("\u{1F4B0} Switch to BUY "+rm.label+"?",[
+    {label:"✅ YES — pay the rest: $"+fmtMoney(due)+" (you already paid $"+fmtMoney(Math.min(rm.paid||0,propBuyPrice(rm)))+" in rent — all your items stay!)",value:"yes"},
+    {label:"❌ No, keep renting",value:"no"}
+  ],a=>{
+    if(a!=="yes")return;
+    if(MONEY.v<due){toast("\u{1F4B0} You need $"+fmtMoney(due)+" — you only have $"+fmtMoney(MONEY.v)+". Sell squishies, win races, give concerts!");return;}
+    MONEY.v-=due;updateMoneyUI();
+    rm.mode="own";rm.rate=0;rm.label=rm.label.replace(/ · \$[^)]+\/day$/,"");
+    toast("\u{1F389}\u{1F511} SOLD! "+rm.label+" is yours FOREVER — no more rent, and all your items stayed!");
+    saveGame();profileSave(true);
+  });
+}
 /* rent is charged every new game day — run out of money and you lose the place */
 let _rentDay=null;
 function updateRent(){
@@ -3435,7 +3539,7 @@ function updateRent(){
     const rm=RENT.list[i];
     if(rm.mode!=="rent"||!rm.rate)continue;
     const cost=rm.rate*delta;
-    if(MONEY.v>=cost){MONEY.v-=cost;paid+=cost;}
+    if(MONEY.v>=cost){MONEY.v-=cost;paid+=cost;rm.paid=(rm.paid||0)+cost;}
     else{
       RENT.list.splice(i,1);
       releaseClaim(rm.id);
@@ -5156,6 +5260,7 @@ function saveGame(){
     localStorage.setItem("vc4save",JSON.stringify({
       money:MONEY.v,rainbow:MONEY.rainbow,
       unopened:DUMP.unopened,owned:DUMP.owned,
+      bu:BUTTER.unopened,bo:BUTTER.owned,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
@@ -5171,6 +5276,7 @@ function loadGame(){
     if(!d)return;
     MONEY.v=d.money||0;MONEY.rainbow=!!d.rainbow;
     DUMP.unopened=d.unopened||0;DUMP.owned=Array.isArray(d.owned)?d.owned:[];
+    BUTTER.unopened=d.bu||0;BUTTER.owned=Array.isArray(d.bo)?d.bo:[];
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
@@ -5276,6 +5382,8 @@ function tryCall(){
     if(sh){openShop(sh);return;}
     const by=nearBuyer();
     if(by){openSell();return;}
+    const bby=nearButterBuyer();
+    if(bby){openSell("butter");return;}
     /* the dumpling museum */
     if(nearMuseum()){openMuseum();return;}
     /* island fun: the beach shop & the buried-treasure X */
@@ -6925,6 +7033,8 @@ function drawMap(){
       for(let i=bi0;i<=bi1;i++)for(let j=bj0;j<=bj1;j++){
         const s=buyerSpot(i,j);
         if(s)dot(s.x,s.z,"#ff5d8f",4);
+        const bs=butterSpot(i,j);
+        if(bs)dot(bs.x,bs.z,"#f4d35e",4);
       }
     }
     /* gas stations (zoom in a bit) */
@@ -7342,6 +7452,10 @@ function mapEntries(q){
     ["\u{1F95F} Nearest dumpling buyer",()=>{
       switchWorld("earth");
       goNearest("\u{1F95F} Nearest dumpling buyer",nearestSpot(buyerSpot,DBSP,270,330,7),0,4);
+    }],
+    ["\u{1F9C8} Nearest butter buyer",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F9C8} Nearest butter buyer",nearestSpot(butterSpot,DBSP,20,80,7),0,4);
     }],
     ["⛽ Nearest gas station",()=>{
       switchWorld("earth");
@@ -7828,6 +7942,7 @@ function updateHint(){
         else{
           const by=nearBuyer();
           if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
+          else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
           else{
             const mn=nearMansion();
             if(mn&&rentedAt(mn.id)){txt="\u{1F6E0} Your mansion — press T to EDIT it (furniture + garden shop!)";showT=true;}
@@ -9884,7 +9999,18 @@ const UPDATE_PAGES=[
 <li><b>\u{1F3A8} Spoiler color</b>: carbon, body color, white, red, blue or gold — in real clear-coated metal paint, with racing end plates.</li></ul>
 <h4>\u{1F9CD} A REAL AVATAR</h4><ul>
 <li>Your character has a real face now: white eyes with pupils, eyebrows, ears, a mouth, fuller hair down the back of the head — plus a chest, a belt and <b>real sneakers with rubber soles</b>.</li>
-<li>New <b>\u{1F45F} Shoes color</b> row in the ⚙ Settings avatar editor — other players see your kicks too!</li></ul>`}
+<li>New <b>\u{1F45F} Shoes color</b> row in the ⚙ Settings avatar editor — other players see your kicks too!</li></ul>`},
+{t:"Round 32 — \u{1F9C8} BUTTER SQUISHIES & rent-to-buy your home",h:`
+<h4>\u{1F9C8} BUTTER SQUISHIES</h4><ul>
+<li>The \u{1F95F} Dumplings button is now <b>\u{1F95F} Squishies</b> — with TWO tabs: your dumplings and your NEW <b>butter squishies</b>!</li>
+<li>Buy Butter Squishy surprises at any \u{1F6D2} MEGA MART. Same 8 colors, GOLD, RAINBOW and ✨ glitter as dumplings...</li>
+<li>...but butter also comes in <b>SIZES</b>: \u{1F538} MEDIUM is rare (<b>1 in 200</b>, worth 6x) and \u{1F31F} MEGA is ultra rare (<b>1 in 600</b>, worth 20x)! A glitter rainbow MEGA is the rarest butter in the universe.</li>
+<li>Open one or open ALL in the Butter tab — and hold them in your hands (MEGA ones are HUGE).</li>
+<li>Sell them at the new <b>\u{1F9C8} BUTTER BUYERS</b> — one every ~500 m (yellow dots on the map, and in \u{1F5FA} map routes).</li></ul>
+<h4>\u{1F511}→\u{1F4B0} SWITCH FROM RENT TO BUY</h4><ul>
+<li>Renting an apartment or MEGA MANSION? You can now <b>switch to BUYING it</b> — at the reception (press T) or with the new \u{1F4B0} Buy button in the \u{1F6CF} Rooms menu.</li>
+<li><b>Every dollar of rent you already paid counts!</b> Rented a $2M mansion for 100 days ($100K paid)? You only pay the remaining $1.9M.</li>
+<li>Your furniture, dumpling shop and displays <b>all stay exactly where they are</b> — nothing resets.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

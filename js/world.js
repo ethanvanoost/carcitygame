@@ -1430,6 +1430,48 @@ function buildBuyer(x,z,g){
   const sg=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1),buySignMat());sg.position.set(x+1.9,y+3,z);g.add(sg);
   buyers.push({g,x,z});
 }
+/* ---- butter buyers: they pay cash for butter squishies, every ~500 m too ---- */
+const butterBuyers=[];
+let _butterSign=null;
+function butterSignMat(){
+  if(_butterSign)return _butterSign;
+  const cv=document.createElement("canvas");cv.width=256;cv.height=64;
+  const c=cv.getContext("2d");c.fillStyle="#f4d35e";c.fillRect(0,0,256,64);
+  c.fillStyle="#4a3200";c.font="bold 22px Segoe UI";c.textAlign="center";
+  c.fillText("BUTTER BUYER",128,28);c.font="bold 18px Segoe UI";c.fillText("\u{1F9C8} SELL HERE \u{1F4B5}",128,52);
+  _butterSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _butterSign;
+}
+function butterSpot(i,j){
+  const lx=Math.round((i*DBSP+20-30)/120)*120+30;   // on the sidewalk beside a road
+  const x=lx+12,z=j*DBSP+80;
+  if(nearGridLine(z)<16)return null;
+  if(Math.abs(x)<200&&Math.abs(z)<200)return null;
+  if(inAirport(x,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  if(nearestRail(x,z).d<14)return null;
+  if(Math.abs(x-curveXC(x,z))<14||Math.abs(z-curveZC(x,z))<14)return null;
+  if(rocketPadDist(x,z)<60)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(x-hs.x)<62&&Math.abs(z-hs.z)<50)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(x-ms.x)<62&&Math.abs(z-ms.z)<50)return null;
+  return{x,z};
+}
+function buildButterBuyer(x,z,g){
+  const y=terrainH(x,z);
+  const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.6,1.05,1),new THREE.MeshLambertMaterial({color:0xf4d35e})));
+  ct.position.set(x,y+0.52,z);g.add(ct);
+  for(let i=0;i<3;i++){
+    const bt=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.24,0.3),new THREE.MeshLambertMaterial({color:0xffe08a}));
+    bt.position.set(x-0.7+i*0.7,y+1.17,z);g.add(bt);
+  }
+  const man=makePerson(0.95,0xf4d35e);man.position.set(x,y,z-1.3);g.add(man);
+  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,2.6),poleMat);sp.position.set(x+1.9,y+1.3,z);g.add(sp);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1),butterSignMat());sg.position.set(x+1.9,y+3,z);g.add(sg);
+  butterBuyers.push({g,x,z});
+}
 /* ---- McDrive: a drive-through restaurant every ~500 m, right beside a road ---- */
 const mcds=[];
 let _mcdSign=null,_mcdBoard=null;
@@ -3041,6 +3083,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildBuyer(sp.x,sp.z,g);
+  }
+  /* a butter buyer every ~500 m too */
+  for(let i=Math.floor((x0-160)/DBSP);i<=Math.ceil((x1+160)/DBSP);i++)
+  for(let j=Math.floor((z0-160)/DBSP);j<=Math.ceil((z1+160)/DBSP);j++){
+    const sp=butterSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildButterBuyer(sp.x,sp.z,g);
   }
   /* vegetation + wildlife by biome */
   const dense=biome==="forest"?22:(biome==="desert"?5:10);
