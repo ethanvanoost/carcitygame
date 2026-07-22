@@ -2630,16 +2630,55 @@ function nearButterBuyer(){
   }
   return null;
 }
+/* filters COMBINE: a color AND glitter AND (at the butter buyer) a size —
+   the list only shows what matches, and matching items get auto-selected */
+const FILT={color:null,glit:"all",size:"all"};
+function passFilt(d){
+  if(FILT.color&&d.color!==FILT.color)return false;
+  if(FILT.glit==="glitter"&&!d.glitter)return false;
+  if(FILT.glit==="normal"&&d.glitter)return false;
+  if(SELL.kind==="butter"&&FILT.size!=="all"&&(d.size||"norm")!==FILT.size)return false;
+  return true;
+}
+function shownItems(){
+  const out=[];
+  sellColl().forEach((d,i)=>{if(passFilt(d))out.push({d,i});});
+  return out;
+}
+function selectShown(){SELL.sel=new Set(shownItems().map(o=>o.i));renderSell();}
+function renderSellChips(){
+  const wrap=$("sellColors");wrap.innerHTML="";
+  const opts=[["All colors",null,"#5b6b8c"],...DUMP_COLORS.map(c=>[c[0],c[0],c[1]]),["Rainbow","Rainbow",RAINBOW_CSS],["Gold","Gold","#ffd700"]];
+  opts.forEach(([label,val,bg])=>{
+    const b=document.createElement("button");
+    b.innerHTML="<span class='swatch' style='background:"+bg+"'></span>"+label;
+    if(FILT.color===val)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
+    b.onclick=()=>{FILT.color=val;selectShown();};
+    wrap.appendChild(b);
+  });
+}
+function segOn(ids,onId){ids.forEach(id=>$(id).classList.toggle("on",id===onId));}
 function renderSell(){
   const coll=sellColl(),butter=SELL.kind==="butter";
+  $("sellSizeRow").style.display=butter?"":"none";
+  segOn(["fGlitAll","fGlit","fNorm"],FILT.glit==="glitter"?"fGlit":FILT.glit==="normal"?"fNorm":"fGlitAll");
+  segOn(["fSzAll","fSzNorm","fSzMed","fSzMega"],FILT.size==="norm"?"fSzNorm":FILT.size==="med"?"fSzMed":FILT.size==="mega"?"fSzMega":"fSzAll");
+  renderSellChips();
+  const shown=shownItems();
   const list=$("sellList");list.innerHTML="";
   if(!coll.length){
     const d=document.createElement("div");
     d.style.cssText="color:var(--dim);font-size:13px";
     d.textContent="You have no "+(butter?"butter squishies":"dumplings")+" — buy them at a MEGA MART and open them first!";
     list.appendChild(d);
+  }else if(!shown.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent="Nothing matches these filters — you have "+coll.length+" in total. Try \u{1F504} other filters!";
+    list.appendChild(d);
   }
-  chunkedList(list,coll,(d,i)=>{
+  chunkedList(list,shown,o=>{
+    const d=o.d,i=o.i;
     const b=document.createElement("button");
     b.className="dumpItem"+(d.glitter?" glitter":"")+(SELL.sel.has(i)?" sel":"");
     b.innerHTML=(SELL.sel.has(i)?"✅ ":"")+"<span class='swatch' style='background:"+d.hex+"'></span>"
@@ -2647,34 +2686,27 @@ function renderSell(){
     b.onclick=()=>{SELL.sel.has(i)?SELL.sel.delete(i):SELL.sel.add(i);renderSell();};
     return b;
   });
-  let tot=0;SELL.sel.forEach(i=>tot+=sellVal(coll[i]));
-  $("sellDo").textContent="\u{1F4B5} Sell selected — $"+fmtMoney(tot);
-}
-function buildColorChips(){
-  const wrap=$("sellColors");
-  if(wrap.dataset.done)return;wrap.dataset.done=1;
-  const opts=[...DUMP_COLORS.map(c=>[c[0],c[1]]),["Rainbow",RAINBOW_CSS],["Gold","#ffd700"]];
-  opts.forEach(([name,bg])=>{
-    const b=document.createElement("button");
-    b.innerHTML="<span class='swatch' style='background:"+bg+"'></span>"+name;
-    b.onclick=()=>{   // all of that color, NOT the glitter ones
-      SELL.sel=new Set(sellColl().map((d,i)=>(!d.glitter&&d.color===name)?i:-1).filter(i=>i>=0));
-      renderSell();
-    };
-    wrap.appendChild(b);
-  });
+  let tot=0,cnt=0;
+  SELL.sel.forEach(i=>{const d=coll[i];if(d){tot+=sellVal(d);cnt++;}});
+  $("sellDo").textContent="\u{1F4B5} Sell "+cnt+" selected — $"+fmtMoney(tot);
 }
 function openSell(kind){
   SELL.kind=kind==="butter"?"butter":"dump";
   $("sellTitle").textContent=SELL.kind==="butter"
     ?"\u{1F9C8} Butter buyer — sell your butter squishies"
     :"\u{1F95F} Dumpling buyer — sell your dumplings";
-  SELL.sel.clear();buildColorChips();renderSell();$("sellModal").classList.add("open");
+  FILT.color=null;FILT.glit="all";FILT.size="all";
+  SELL.sel.clear();renderSell();$("sellModal").classList.add("open");
 }
-$("selAll").onclick=()=>{SELL.sel=new Set(sellColl().map((_,i)=>i));renderSell();};
-$("selGlit").onclick=()=>{SELL.sel=new Set(sellColl().map((d,i)=>d.glitter?i:-1).filter(i=>i>=0));renderSell();};
-$("selNorm").onclick=()=>{SELL.sel=new Set(sellColl().map((d,i)=>d.glitter?-1:i).filter(i=>i>=0));renderSell();};
+$("selAll").onclick=()=>selectShown();
 $("selNone").onclick=()=>{SELL.sel.clear();renderSell();};
+$("fGlitAll").onclick=()=>{FILT.glit="all";selectShown();};
+$("fGlit").onclick=()=>{FILT.glit="glitter";selectShown();};
+$("fNorm").onclick=()=>{FILT.glit="normal";selectShown();};
+$("fSzAll").onclick=()=>{FILT.size="all";selectShown();};
+$("fSzNorm").onclick=()=>{FILT.size="norm";selectShown();};
+$("fSzMed").onclick=()=>{FILT.size="med";selectShown();};
+$("fSzMega").onclick=()=>{FILT.size="mega";selectShown();};
 $("sellDo").onclick=()=>{
   if(!SELL.sel.size){toast("Select some to sell first!");return;}
   const coll=sellColl(),idx=[...SELL.sel].sort((a,b)=>b-a);
@@ -2878,7 +2910,7 @@ function tryFurniture(){
   if(dk){
     const mine=rentedAt(dk.id);
     if(mine){
-      const opts=[{label:"\u{1F6CE}️ Go to "+(dk.mansion?"your mansion":"your room"),value:"go"}];
+      const opts=[{label:"\u{1F6CE}️ Go to "+(dk.mansion?"your mansion":dk.house?"your house":"your room"),value:"go"}];
       if(mine.mode==="rent")opts.push({label:"\u{1F4B0} SWITCH TO BUY — pay the rest: $"+fmtMoney(propBuyDue(mine))+" (your rent counted!)",value:"buy"});
       opts.push({label:"\u{1F6AA} UNRENT — give it back (your placed items get deleted)",value:"unrent"},
         {label:"❌ Close",value:"x"});
@@ -3381,6 +3413,7 @@ const MANSION_PRICE=2000000,MANSION_RENT=1000;   // $2M to buy, or $1K per game 
 const PRENT={on:false};                           // ✈️ rented plane: $250 per game day
 const HRENT={on:false};                           // 🚁 rented helicopter: $500 per game day
 const APT_PRICE=100000,APT_RENT=100;             // $100K to buy, or $100 per game day
+const HOUSE_PRICE=500000,HOUSE_RENT=250;         // 🏡 family house: $500K to buy, or $250 per game day
 /* ---- online claims: once a player owns a property, nobody else can buy it ---- */
 function fbKey(s){return String(s).replace(/[^a-zA-Z0-9_-]/g,"_");}
 async function fbGet(path){
@@ -3445,12 +3478,12 @@ function releaseClaim(id){
 }
 function mkRentEntry(dk,mode,rate){
   return{id:dk.id,x:dk.room.x,z:dk.room.z,ry:dk.room.ry,mode,rate,
-    label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"
+    label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":dk.house?"\u{1F3E1} FAMILY HOUSE at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"
       +(mode==="rent"?" · $"+fmtMoney(rate)+"/day":"")};
 }
 function openPropertyDesk(dk){
-  const buy=dk.mansion?MANSION_PRICE:APT_PRICE,rate=dk.mansion?MANSION_RENT:APT_RENT;
-  showDest(dk.mansion?"\u{1F3F0} MEGA MANSION — buy or rent?":"\u{1F6CE}️ Apartment room — buy or rent?",[
+  const buy=dk.mansion?MANSION_PRICE:dk.house?HOUSE_PRICE:APT_PRICE,rate=dk.mansion?MANSION_RENT:dk.house?HOUSE_RENT:APT_RENT;
+  showDest(dk.mansion?"\u{1F3F0} MEGA MANSION — buy or rent?":dk.house?"\u{1F3E1} FAMILY HOUSE — buy or rent?":"\u{1F6CE}️ Apartment room — buy or rent?",[
     {label:"\u{1F4B0} BUY — $"+fmtMoney(buy)+" (yours forever)",value:"own"},
     {label:"\u{1F511} RENT — $"+fmtMoney(rate)+" per day",value:"rent"},
     {label:"❌ Cancel",value:"cancel"}
@@ -3478,7 +3511,9 @@ function openPropertyDesk(dk){
     if(mode==="rent")ent.paid=rate;   // rent you've paid counts toward buying it later
     RENT.list.push(ent);
     toast(mode==="own"
-      ?(dk.mansion?"\u{1F389}\u{1F3F0} SOLD! The MEGA MANSION is yours — press T inside to edit & furnish it!":"\u{1F389} You BOUGHT this room for $"+fmtMoney(buy)+" — it's yours forever!")
+      ?(dk.mansion?"\u{1F389}\u{1F3F0} SOLD! The MEGA MANSION is yours — press T inside to edit & furnish it!"
+        :dk.house?"\u{1F389}\u{1F3E1} SOLD! The FAMILY HOUSE is yours — press T inside to furnish the rooms AND the garden!"
+        :"\u{1F389} You BOUGHT this room for $"+fmtMoney(buy)+" — it's yours forever!")
       :"\u{1F511} Rented for $"+fmtMoney(rate)+"/day (first day paid). Keep money on you or you'll lose it!");
     saveGame();
     gotoRoom(dk.room);
@@ -3509,7 +3544,7 @@ function askUnrent(rm){
 }
 /* switch a RENTED place to OWNED: every dollar of rent you already paid counts,
    so you only pay the rest of the full price — and all your items stay! */
-function propBuyPrice(rm){return String(rm.id).startsWith("M:")?MANSION_PRICE:APT_PRICE;}
+function propBuyPrice(rm){const id=String(rm.id);return id.startsWith("M:")?MANSION_PRICE:id.startsWith("H:")?HOUSE_PRICE:APT_PRICE;}
 function propBuyDue(rm){return Math.max(0,propBuyPrice(rm)-(rm.paid||0));}
 function switchToBuy(rm){
   if(rm.mode!=="rent")return;
@@ -3568,7 +3603,7 @@ function updateRent(){
   }
   /* owned apartments earn tenant money every day */
   let income=0;
-  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:")&&!String(rm.id).startsWith("P:"))income+=25*delta;
+  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:")&&!String(rm.id).startsWith("P:")&&!String(rm.id).startsWith("H:"))income+=25*delta;
   if(income>0){
     MONEY.v+=income;
     toast("\u{1F3E8} Your apartments earned $"+fmtMoney(income)+" from tenants!");
@@ -3739,11 +3774,16 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
 }
 /* default furniture: a bed, three chairs and a table in the great hall */
 function mansionItems(id){
-  if(!MFURN.has(id))MFURN.set(id,String(id).startsWith("P:")?[]:[
-    {t:"bed",dx:-30,dz:-20,r:0},
-    {t:"chair",dx:-33,dz:10,r:Math.PI},{t:"chair",dx:-30,dz:10,r:Math.PI},{t:"chair",dx:-27,dz:10,r:Math.PI},
-    {t:"table",dx:-30,dz:6.6,r:0}
-  ]);
+  if(!MFURN.has(id))MFURN.set(id,String(id).startsWith("P:")?[]
+    :String(id).startsWith("H:")?[   // family house: defaults scaled to the smaller rooms
+      {t:"bed",dx:-9,dz:-6,r:0},
+      {t:"chair",dx:9,dz:-5,r:Math.PI},{t:"chair",dx:6.5,dz:-5,r:Math.PI},
+      {t:"table",dx:7.7,dz:-7.8,r:0}
+    ]:[
+      {t:"bed",dx:-30,dz:-20,r:0},
+      {t:"chair",dx:-33,dz:10,r:Math.PI},{t:"chair",dx:-30,dz:10,r:Math.PI},{t:"chair",dx:-27,dz:10,r:Math.PI},
+      {t:"table",dx:-30,dz:6.6,r:0}
+    ]);
   return MFURN.get(id);
 }
 function buildMansionFurniture(man){
@@ -3752,7 +3792,7 @@ function buildMansionFurniture(man){
   const fg=new THREE.Group();man.g.add(fg);man.furnG=fg;
   for(const it of items){
     const wx=man.x+it.dx,wz=man.z+it.dz;
-    const inside=!man.plot&&Math.abs(it.dx)<49&&Math.abs(it.dz)<37;
+    const inside=man.plot?false:(man.house?Math.abs(it.dx)<14&&Math.abs(it.dz)<10:Math.abs(it.dx)<49&&Math.abs(it.dz)<37);
     const fy=man.plot?terrainH(wx,wz)+0.14:(inside?man.baseY+0.3:terrainH(wx,wz)+0.12);
     buildFurnPiece(it.t,wx,wz,fy,it.r||0,fg,man);
   }
@@ -3964,9 +4004,9 @@ function updateGhost(e){
   else{
     ok=Math.abs(dx)<=49&&Math.abs(dz)<=49.5;
     if(ok&&def.out!==2){
-      const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
+      const inside=man.house?Math.abs(dx)<14&&Math.abs(dz)<10:Math.abs(dx)<49&&Math.abs(dz)<37;
       if(!def.out&&!inside)ok=false;
-      if(def.out===1&&Math.abs(dz)<39)ok=false;
+      if(def.out===1&&(man.house?inside:Math.abs(dz)<39))ok=false;
     }
   }
   if(MONEY.v<def.p)ok=false;
@@ -4003,9 +4043,9 @@ addEventListener("mousedown",e=>{
   const def=furnDef(MEDIT.sel);
   if(!def){toast("Pick an item from the shop bar first!");return;}
   if(!man.plot&&def.out!==2){
-    const inside=Math.abs(dx)<49&&Math.abs(dz)<37;
-    if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside the mansion!");return;}
-    if(def.out===1&&Math.abs(dz)<39){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn in FRONT of (or behind) the mansion!");return;}
+    const inside=man.house?Math.abs(dx)<14&&Math.abs(dz)<10:Math.abs(dx)<49&&Math.abs(dz)<37;
+    if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside "+(man.house?"the house":"the mansion")+"!");return;}
+    if(def.out===1&&(man.house?inside:Math.abs(dz)<39)){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn "+(man.house?"around the house":"in FRONT of (or behind) the mansion")+"!");return;}
   }
   if(MONEY.v<def.p){toast("\u{1F4B0} The "+def.n+" costs $"+fmtMoney(def.p)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
   MONEY.v-=def.p;updateMoneyUI();profileSave();
@@ -7014,6 +7054,21 @@ function drawMap(){
         c.fillText("\u{1F3F0}",px,py-10);
       }
     }
+    /* family houses for sale every ~1.4 km */
+    {
+      const fi0=Math.floor((mapView.cx-halfW-700)/FHSP),fi1=Math.ceil((mapView.cx+halfW+100)/FHSP);
+      const fj0=Math.floor((mapView.cz-halfH-1900)/FHSP),fj1=Math.ceil((mapView.cz+halfH+100)/FHSP);
+      for(let i=fi0;i<=fi1;i++)for(let j=fj0;j<=fj1;j++){
+        const s=familyHouseSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#4ade80",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#b7f7cd";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3E1}",px,py-9);
+        }
+      }
+    }
     /* stunt parks every ~3.6 km */
     const si0=Math.floor((mapView.cx-halfW-1900)/3600),si1=Math.ceil((mapView.cx+halfW+100)/3600);
     const sj0=Math.floor((mapView.cz-halfH-700)/3600),sj1=Math.ceil((mapView.cz+halfH+100)/3600);
@@ -7456,6 +7511,10 @@ function mapEntries(q){
     ["\u{1F9C8} Nearest butter buyer",()=>{
       switchWorld("earth");
       goNearest("\u{1F9C8} Nearest butter buyer",nearestSpot(butterSpot,DBSP,20,80,7),0,4);
+    }],
+    ["\u{1F3E1} Nearest FAMILY HOUSE for sale",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3E1} Nearest family house",nearestSpot(familyHouseSpot,FHSP,510,1710,5),9,18);
     }],
     ["⛽ Nearest gas station",()=>{
       switchWorld("earth");
@@ -7916,7 +7975,9 @@ function updateHint(){
     else if(MEDIT.on){txt="\u{1F6E0} EDITING your mansion — click the floor/lawn to place items · R = rotate · T = done";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
-      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day"):(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
+      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day")
+        :dk.house?(rentedAt(dk.id)?"\u{1F3E1} Your FAMILY HOUSE — welcome home! (T inside = edit)":"\u{1F3E1} FAMILY HOUSE with garden — press T: BUY $"+fmtMoney(HOUSE_PRICE)+" or RENT $"+fmtMoney(HOUSE_RENT)+"/day")
+        :(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
       else if(ORDER.active&&ORDER.stage==="waiting"&&Math.hypot(player.x-ORDER.x,player.z-ORDER.z)<6){txt="\u{1F6F5} Your "+ORDER.label+" — press T to pay $"+fmtMoney(ORDER.cost)+" & take it!";showT=true;}
       else if(nearTv()){txt="\u{1F4FA} The TV — press T to pick a channel (Minecraft, news, fireplace...)";showT=true;}
@@ -9191,7 +9252,7 @@ function updateUfos(dt){
   }
 }
 /* ================= EFFECT SETTINGS (police, sounds, weather, quality) ================= */
-const SETTINGS={police:true,crash:true,honk:true,engine:true,siren:true,weather:true,quality:"med"};
+const SETTINGS={police:true,crash:true,honk:true,engine:true,siren:true,weather:true,quality:"med",ultra:false};
 try{Object.assign(SETTINGS,JSON.parse(localStorage.getItem("vc4fx")||"{}"));}catch(e){}
 function saveFx(){try{localStorage.setItem("vc4fx",JSON.stringify(SETTINGS))}catch(e){}}
 function wireFx(id,key,label){
@@ -9219,6 +9280,95 @@ function applyQualityUI(){
   };
 });
 setQuality(SETTINGS.quality);applyQualityUI();
+/* ---- ULTRA graphics: waving grass, flying sand & extra world detail ---- */
+function applyUltraUI(){$("uxOn").classList.toggle("on",!!SETTINGS.ultra);$("uxOff").classList.toggle("on",!SETTINGS.ultra);}
+function setUltra(on){
+  SETTINGS.ultra=on;saveFx();window.ULTRA=on;applyUltraUI();
+  rebuildWorld();   // loaded chunks rebuild with (or without) the extra detail
+  toast(on?"\u{1F525} ULTRA graphics ON — waving grass, flying desert sand, fuller trees, balconies & more! (The world around you reloads with the new detail.)"
+    :"Ultra graphics OFF — back to normal detail.");
+}
+$("uxOn").onclick=()=>setUltra(true);
+$("uxOff").onclick=()=>setUltra(false);
+window.ULTRA=!!SETTINGS.ultra;applyUltraUI();
+/* a field of real grass blades around you that WAVE in the wind */
+const GRASSF={mesh:null,slots:[],cx:1e9,cz:1e9};
+const GRASS_N=650;
+function grassInit(){
+  if(GRASSF.mesh)return;
+  const geo=new THREE.PlaneGeometry(0.5,1.0);geo.translate(0,0.5,0);
+  const mat=new THREE.MeshLambertMaterial({color:0x67a844,side:THREE.DoubleSide});
+  const im=new THREE.InstancedMesh(geo,mat,GRASS_N);
+  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  im.frustumCulled=false;
+  scene.add(im);GRASSF.mesh=im;
+  for(let i=0;i<GRASS_N;i++)GRASSF.slots.push({x:0,z:0,y:-999,ph:Math.random()*6.28,sc:0.6+Math.random()*0.9,rot:Math.random()*3.14});
+}
+function grassReseed(){
+  const R=52;
+  for(const s of GRASSF.slots){
+    s.y=-999;
+    for(let tries=0;tries<4;tries++){
+      const x=player.x+(Math.random()-0.5)*2*R,z=player.z+(Math.random()-0.5)*2*R;
+      if(Math.abs(x-Math.round(x/120)*120)<13||Math.abs(z-Math.round(z/120)*120)<13)continue;   // roads
+      const h=terrainH(x,z);
+      if(h<0.25||h>42)continue;                        // no water, no cliff tops
+      if(biomeAt(x,z)==="desert")continue;             // sand has its own effect
+      s.x=x;s.z=z;s.y=h;break;
+    }
+  }
+  GRASSF.cx=player.x;GRASSF.cz=player.z;
+}
+const _gm4=new THREE.Matrix4(),_gEu=new THREE.Euler(),_gQt=new THREE.Quaternion(),_gSc=new THREE.Vector3(),_gPs=new THREE.Vector3();
+function updateGrass(now){
+  if(!SETTINGS.ultra||S.world!=="earth"||CAVE.in){if(GRASSF.mesh)GRASSF.mesh.visible=false;return;}
+  grassInit();
+  GRASSF.mesh.visible=true;
+  if(Math.hypot(player.x-GRASSF.cx,player.z-GRASSF.cz)>14)grassReseed();
+  const wk=(WEATHER.state==="rain"||WEATHER.state==="snow")?1.6:0.8;   // storms bend the grass harder
+  const gust=1+Math.sin(now/2400)*0.55;
+  for(let i=0;i<GRASS_N;i++){
+    const s=GRASSF.slots[i];
+    if(s.y<-100){_gm4.makeScale(0,0,0);GRASSF.mesh.setMatrixAt(i,_gm4);continue;}
+    const sway=Math.sin(now/380+s.ph)*0.17*wk*gust+Math.sin(now/97+s.ph*2)*0.03;
+    _gEu.set(sway,s.rot,sway*0.6);
+    _gQt.setFromEuler(_gEu);
+    _gSc.set(s.sc,s.sc,s.sc);_gPs.set(s.x,s.y,s.z);
+    _gm4.compose(_gPs,_gQt,_gSc);
+    GRASSF.mesh.setMatrixAt(i,_gm4);
+  }
+  GRASSF.mesh.instanceMatrix.needsUpdate=true;
+}
+/* desert sand grains that FLY with the wind */
+const SANDF={pts:null};
+function sandInit(){
+  if(SANDF.pts)return;
+  const n=420,pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){pos[i*3]=(Math.random()-0.5)*90;pos[i*3+1]=Math.random()*3.5;pos[i*3+2]=(Math.random()-0.5)*90;}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  SANDF.pts=new THREE.Points(g,new THREE.PointsMaterial({color:0xe8c98a,size:0.22,transparent:true,opacity:0.75,depthWrite:false}));
+  SANDF.pts.visible=false;scene.add(SANDF.pts);
+}
+function updateSand(dt,now){
+  const want=SETTINGS.ultra&&S.world==="earth"&&!CAVE.in&&biomeAt(player.x,player.z)==="desert";
+  if(!want){if(SANDF.pts)SANDF.pts.visible=false;return;}
+  sandInit();
+  const p=SANDF.pts;p.visible=true;
+  p.position.set(player.x,Math.max(0,terrainH(player.x,player.z)),player.z);
+  const arr=p.geometry.attributes.position.array;
+  const wdir=now/9000;   // the wind slowly turns
+  const wx=Math.sin(wdir)*(9+Math.sin(now/1700)*4),wz=Math.cos(wdir)*(9+Math.cos(now/1300)*4);
+  for(let i=0;i<arr.length;i+=3){
+    arr[i]+=wx*dt+Math.sin(now/300+i)*0.02;
+    arr[i+1]+=Math.sin(now/500+i)*0.012;
+    arr[i+2]+=wz*dt;
+    if(arr[i]>45)arr[i]-=90;else if(arr[i]<-45)arr[i]+=90;
+    if(arr[i+2]>45)arr[i+2]-=90;else if(arr[i+2]<-45)arr[i+2]+=90;
+    if(arr[i+1]<0.05||arr[i+1]>4)arr[i+1]=Math.random()*3.5;
+  }
+  p.geometry.attributes.position.needsUpdate=true;
+}
 /* ================= WEATHER: rain, snow (December) & fog — shared on servers ================= */
 const WEATHER={state:"clear",rain:null};
 function weatherState(){
@@ -10010,7 +10160,25 @@ const UPDATE_PAGES=[
 <h4>\u{1F511}→\u{1F4B0} SWITCH FROM RENT TO BUY</h4><ul>
 <li>Renting an apartment or MEGA MANSION? You can now <b>switch to BUYING it</b> — at the reception (press T) or with the new \u{1F4B0} Buy button in the \u{1F6CF} Rooms menu.</li>
 <li><b>Every dollar of rent you already paid counts!</b> Rented a $2M mansion for 100 days ($100K paid)? You only pay the remaining $1.9M.</li>
-<li>Your furniture, dumpling shop and displays <b>all stay exactly where they are</b> — nothing resets.</li></ul>`}
+<li>Your furniture, dumpling shop and displays <b>all stay exactly where they are</b> — nothing resets.</li></ul>`},
+{t:"Round 33 — \u{1F3E1} Family houses, \u{1F525} ULTRA graphics, nicer cars & smart buyer filters",h:`
+<h4>\u{1F3E1} FAMILY HOUSES — BUY $500K or RENT $250/day</h4><ul>
+<li>A big new home every ~1.4 km (\u{1F3E1} on the map): a real walk-in house with a gabled roof, chimney and framed windows — MUCH bigger than the little street houses.</li>
+<li>Every family house sits in its own <b>fenced GARDEN</b> with a lawn, flowers, trees and a stone path.</li>
+<li>Press T inside to <b>place items in the rooms AND all over the garden</b> — same editor as the mansion, and rent counts toward buying here too!</li>
+<li>The little suburb houses also grew a size bigger.</li></ul>
+<h4>\u{1F525} ULTRA GRAPHICS (⚙ Settings)</h4><ul>
+<li>New switch under Graphics quality: <b>\u{1F525} ULTRA</b>.</li>
+<li><b>\u{1F33F} Living grass</b>: hundreds of real grass blades around you that WAVE in the wind — and bend harder in storms.</li>
+<li><b>\u{1F3DC} Flying sand</b>: in the desert, sand grains blow past with the wind (and the wind slowly changes direction).</li>
+<li><b>Richer world</b>: fuller tree crowns with low branches, ~60% more vegetation, window shutters &amp; flower boxes on houses, real balconies on apartment towers and glowing garden lanterns at mansions.</li></ul>
+<h4>\u{1F697} NICER CARS</h4><ul>
+<li>Every silhouette is now drawn through a <b>smooth spline</b> — bodies curve like real sheet metal instead of angular facets, with rounder edges.</li>
+<li><b>Rounded wheel-arch flares</b> that follow each wheel's circle, replacing the old flat blocks.</li>
+<li>Brighter, deeper <b>clear-coat paint</b> that reflects the sky more.</li></ul>
+<h4>\u{1F95F}\u{1F9C8} SMART BUYER FILTERS</h4><ul>
+<li>At the dumpling &amp; butter buyers, filters now <b>hide everything that doesn't match</b> — and they COMBINE: pick a color AND glitter, and at the butter buyer also a size (small / \u{1F538} medium / \u{1F31F} mega) at once.</li>
+<li>Whatever matches gets selected for you — one click on \u{1F4B5} Sell and it's money.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -10094,7 +10262,7 @@ function frame(now){
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);
-  updateWeather(dt);updateTreasure(dt);updateAch(dt);updateTv(dt);updateMidi();
+  updateWeather(dt);updateGrass(now);updateSand(dt,now);updateTreasure(dt);updateAch(dt);updateTv(dt);updateMidi();
   updateChunks(player.x,player.z);
   updateLandmarks(player.x,player.z);
   updateCamera(dt);

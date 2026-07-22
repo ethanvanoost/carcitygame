@@ -29,8 +29,8 @@ const PAINTC=new Map();
 function paintMat(color){
   let m=PAINTC.get(color);
   if(!m){
-    m=keep(new THREE.MeshPhysicalMaterial({color,metalness:0.75,roughness:0.32,
-      clearcoat:0.9,clearcoatRoughness:0.08,envMapIntensity:1.25}));
+    m=keep(new THREE.MeshPhysicalMaterial({color,metalness:0.6,roughness:0.34,
+      clearcoat:1.0,clearcoatRoughness:0.06,envMapIntensity:1.35}));
     PAINTC.set(color,m);
   }
   return m;
@@ -124,10 +124,23 @@ const CAR_PROFILES={
   roadster:[[1,0.55],[0.75,0.72],[0.3,0.82],[0.1,0.95],[-0.2,0.92],[-0.6,0.96],[-1,0.82]],
   ev:[[1,0.55],[0.8,0.72],[0.4,0.85],[0.1,1.2],[-0.35,1.28],[-0.8,1.12],[-1,0.92]]
 };
+/* SILKY silhouettes: a smooth spline is drawn through each profile's anchor
+   points, so bodies curve like real sheet metal instead of angular facets */
+const SMOOTHP=new Map();
+function smoothProf(prof){
+  let pts=SMOOTHP.get(prof);
+  if(!pts){
+    const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
+    const curve=new THREE.SplineCurve(P.map(p=>new THREE.Vector2(p[0],p[1])));
+    pts=curve.getPoints(30).map(v=>[v.x,v.y]);
+    SMOOTHP.set(prof,pts);
+  }
+  return pts;
+}
 /* EXACT surface math: the shell's real height & slope at any point, so every
    part (stripes, wings, scoops) sits precisely ON the body — no guessing */
 function profY(prof,t){
-  const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
+  const P=smoothProf(prof);
   if(t>=P[0][0])return P[0][1];
   for(let i=1;i<P.length;i++){
     if(t>=P[i][0]){
@@ -138,7 +151,7 @@ function profY(prof,t){
   return P[P.length-1][1];
 }
 function profSlope(prof,t,zH){
-  const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
+  const P=smoothProf(prof);
   for(let i=1;i<P.length;i++){
     if(t>=P[i][0]){
       const a=P[i-1],b=P[i];
@@ -159,13 +172,13 @@ function carShellGeo(prof,len,wid){
   const key=prof+"|"+len+"|"+wid;
   let geo=SHELLC.get(key);
   if(!geo){
-    const P=CAR_PROFILES[prof]||CAR_PROFILES.default,zH=len/2,d=wid-0.24;
+    const P=smoothProf(prof),zH=len/2,d=wid-0.24;
     const sh=new THREE.Shape();
     sh.moveTo(zH-0.04,0.3);
     for(const[t,y]of P)sh.lineTo(t*zH,y);
     sh.lineTo(-zH+0.04,0.3);
     sh.closePath();
-    geo=keep(new THREE.ExtrudeGeometry(sh,{depth:d,bevelEnabled:true,bevelThickness:0.1,bevelSize:0.11,bevelSegments:2,steps:1}));
+    geo=keep(new THREE.ExtrudeGeometry(sh,{depth:d,bevelEnabled:true,bevelThickness:0.1,bevelSize:0.11,bevelSegments:3,steps:1}));
     geo.translate(0,0,-d/2);
     SHELLC.set(key,geo);
   }
@@ -287,9 +300,11 @@ function buildVehicleMesh(type,color,top,name,lite){
         seam.position.set(p[0]*(K.wid/2+0.045),K.baseY+0.1,zz);g.add(seam);
       });});
     }
-    /* wheel arches + side skirts */
+    /* ROUNDED wheel-arch flares that follow the wheel's circle + side skirts */
     [[-1,1],[1,1],[-1,-1],[1,-1]].forEach(p=>{
-      const a=new THREE.Mesh(gBox(0.14,0.24,1.18),darkTrim);a.position.set(p[0]*(K.wid/2+0.02),K.baseY+0.1,p[1]*wheelZ);g.add(a);});
+      const a=new THREE.Mesh(gTor(K.wheelR+0.13,0.055,8,14,Math.PI),darkTrim);
+      a.rotation.y=Math.PI/2;
+      a.position.set(p[0]*(K.wid/2+0.02),K.wheelR+0.02,p[1]*wheelZ);g.add(a);});
     [[-1],[1]].forEach(p=>{const sk=new THREE.Mesh(gBox(0.08,0.14,2.6),darkTrim);sk.position.set(p[0]*(K.wid/2+0.035),K.baseY-0.26,-0.1);g.add(sk);});
     /* front splitter + twin exhausts */
     const spl=new THREE.Mesh(gBox(K.wid-0.18,0.08,0.3),darkTrim);spl.position.set(0,K.baseY-0.3,zH-0.02);g.add(spl);

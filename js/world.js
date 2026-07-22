@@ -674,11 +674,18 @@ function makeTree(x,z,s,parent,y){
   }else{
     /* leafy tree: a lumpy crown of 4 blobs in a per-tree shade of green */
     const lm=leafMats[Math.floor(h*13)%leafMats.length];
-    [[0,4.4,0,1.55],[1.0,3.8,0.45,1.0],[-0.95,3.9,-0.4,0.95],[0.15,3.5,-0.95,0.85]].forEach(p=>{
+    const blobs=[[0,4.4,0,1.55],[1.0,3.8,0.45,1.0],[-0.95,3.9,-0.4,0.95],[0.15,3.5,-0.95,0.85]];
+    /* ULTRA graphics: fuller crowns (2 extra blobs) + a visible low branch */
+    if(window.ULTRA)blobs.push([0.55,4.95,0.6,0.8],[-0.5,4.85,-0.65,0.75]);
+    blobs.forEach(p=>{
       const b=new THREE.Mesh(leafGeo,lm);
       b.position.set(p[0]*s,p[1]*s,p[2]*s);
       b.scale.set(p[3]*s*1.25,p[3]*s*1.05,p[3]*s*1.25);
       b.castShadow=true;t.add(b);});
+    if(window.ULTRA){
+      const br=new THREE.Mesh(treeGeoT,treeMatT2);
+      br.scale.set(s*0.35,s*0.55,s*0.35);br.position.set(0.5*s,2.6*s,0.3*s);br.rotation.z=-0.9;t.add(br);
+    }
   }
   t.rotation.y=h*6.28;
   t.position.set(x,y!==undefined?y:terrainH(x,z),z);(parent||scene).add(t);
@@ -1009,6 +1016,18 @@ function apartment(x,z,rand,parent,baseY){
   const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.3,0.1,d-0.3),new THREE.MeshLambertMaterial({color:0xcabfa6}));
   floor.position.set(x,baseY+0.05,z);parent.add(floor);
   makeDoor(x-1,z+d/2+0.05,0,parent,baseY,0x30395c);
+  /* ULTRA graphics: real balconies with railings up the front of the tower */
+  if(window.ULTRA){
+    const balM=new THREE.MeshLambertMaterial({color:0xb9bfc9}),railM=new THREE.MeshLambertMaterial({color:0x3d444d});
+    const nf=Math.min(6,Math.floor(h/LH)-1);
+    for(let f=1;f<=nf;f++)for(const sx of[-w/4,w/4]){
+      const by=baseY+LH+f*(h/(nf+1));
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.12,1),balM);
+      slab.position.set(x+sx,by,z+d/2+0.5);parent.add(slab);parts.push(slab);
+      const rail=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.55,0.06),railM);
+      rail.position.set(x+sx,by+0.32,z+d/2+0.97);parent.add(rail);
+    }
+  }
   const id=Math.round(x)+","+Math.round(z);
   /* lobby: ONLY the reception (desk + receptionist + sign) */
   const dx=x+w/4-0.5,dz=z-d/2+2.4;
@@ -1093,7 +1112,7 @@ function sidingTex(){
 function house(x,z,rand,parent,baseY){
   baseY=baseY||0;
   const cols=[0xf2e8cf,0xe8b4b8,0xcde3d0,0xf3d9a4,0xdbe7f5];
-  const w=7+rand()*3,d=7+rand()*3,h=4+rand()*1.5;
+  const w=8.5+rand()*3.5,d=8.5+rand()*3.5,h=4.2+rand()*1.8;   // bigger, prouder homes
   const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:cols[Math.floor(rand()*cols.length)],map:sidingTex()})));
   m.position.set(x,baseY+h/2-0.3,z);parent.add(m);
   const roof=shadowBox(new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.75,3,4),roofMats[Math.floor(rand()*roofMats.length)]));
@@ -1112,6 +1131,24 @@ function house(x,z,rand,parent,baseY){
   const step=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.18,0.9),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
   step.position.set(x,baseY+0.09,z+d/2+0.45);parent.add(step);
   makeDoor(x,z+d/2+0.05,0,parent,baseY);
+  /* ULTRA graphics: window shutters, flower boxes & a little front hedge */
+  if(window.ULTRA){
+    const shutM=new THREE.MeshLambertMaterial({color:0x2f5d3a}),boxM=new THREE.MeshLambertMaterial({color:0x6f4e37});
+    [[-w/4],[w/4]].forEach(p=>{
+      [-0.85,0.85].forEach(o=>{
+        const sh=new THREE.Mesh(new THREE.BoxGeometry(0.32,1.2,0.05),shutM);
+        sh.position.set(x+p[0]+o,baseY+h/2+0.2,z+d/2+0.05);parent.add(sh);
+      });
+      const fb=new THREE.Mesh(new THREE.BoxGeometry(1.34,0.18,0.2),boxM);
+      fb.position.set(x+p[0],baseY+h/2-0.5,z+d/2+0.12);parent.add(fb);
+      [[-0.4,0xff5d8f],[0,0xf4d35e],[0.4,0xef476f]].forEach(f=>{
+        const bl=new THREE.Mesh(new THREE.SphereGeometry(0.09,6,5),new THREE.MeshLambertMaterial({color:f[1]}));
+        bl.position.set(x+p[0]+f[0],baseY+h/2-0.36,z+d/2+0.14);parent.add(bl);
+      });
+    });
+    const hedge=new THREE.Mesh(new THREE.BoxGeometry(w*0.4,0.7,0.7),new THREE.MeshLambertMaterial({color:0x2f7a3c}));
+    hedge.position.set(x-w/4,baseY+0.35,z+d/2+1.3);parent.add(hedge);
+  }
   return regBuilding(x,z,w,d,[m,roof],baseY);   // exact footprint — the hitbox used to be a big square
 }
 const SHOP_NAMES=["MART 24","FRESH & GO","MEGA SHOP","SNACK BOX","SUPER SAVE","CORNER STORE"];
@@ -1379,12 +1416,136 @@ function mansion(x,z,rand,parent,baseY){
       const bl=new THREE.Mesh(new THREE.SphereGeometry(0.14,7,6),new THREE.MeshLambertMaterial({color:flowerCols[i%flowerCols.length]}));
       bl.position.set(fx,fy+0.66,fz);parent.add(bl);
     }
+    /* ULTRA graphics: glowing garden lanterns line the path */
+    if(window.ULTRA)for(const lx of[-6,6])for(const lz of[3,8]){
+      const px2=x-2+lx,pz2=z+d/2+lz,py=terrainH(px2,pz2);
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,1.5),new THREE.MeshLambertMaterial({color:0x2a2f3a}));
+      post.position.set(px2,py+0.75,pz2);parent.add(post);
+      const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,7),new THREE.MeshBasicMaterial({color:0xffe9a8}));
+      lamp.position.set(px2,py+1.55,pz2);parent.add(lamp);
+    }
   }
   regShell(parent,x,z,w/2,d/2,baseY,[{x:x,z:z+d/2,r:4.6}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   const man={g:parent,x,z,id,baseY,tableG:null,furnG:null};
   mansions.push(man);
   if(window.onMansionBuilt)onMansionBuilt(man);   // rebuilds the dumpling display table
+  return rec;
+}
+/* ---- FAMILY HOUSES: a big buyable home with a fenced GARDEN, every ~1.4 km ----
+   BUY $500K or RENT $250/day — you place items inside AND all over the garden */
+const FHSP=1400;
+function familyHouseSpot(i,j){
+  const x=Math.round((i*FHSP+510-90)/120)*120+90;
+  const z=Math.round((j*FHSP+1710-90)/120)*120+90;
+  if(Math.abs(x)<320&&Math.abs(z)<320)return null;
+  if(Math.abs(x-170)<70||Math.abs(z+170)<70)return null;
+  if(inAirport(x,z)||inAirport(x-50,z)||inAirport(x+50,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox2,oz2]of[[-45,-33],[45,-33],[-45,33],[45,33]]){
+    const ch=baseH(x+ox2,z+oz2);
+    if(ch<-1||Math.abs(ch-h)>3.5)return null;
+  }
+  if(nearestRail(x,z).d<70)return null;
+  if(Math.abs(x-curveXC(x,z))<70||Math.abs(z-curveZC(x,z))<70)return null;
+  if(rocketPadDist(x,z)<110)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<130&&Math.abs(hs.z-z)<110)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<130&&Math.abs(ms.z-z)<110)return null;
+  return{x,z};
+}
+function familyHouse(x,z,rand,parent,baseY){
+  const w=30,d=22,H=5.6,wall=0.4;
+  const mat=new THREE.MeshLambertMaterial({color:[0xf2e8cf,0xe8b4b8,0xcde3d0,0xdbe7f5][Math.floor(rand()*4)],map:sidingTex()});
+  const parts=[];
+  function wallBox(bw,bh,bd,px,py,pz){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),mat));
+    m.position.set(x+px,baseY+py,z+pz);parent.add(m);parts.push(m);return m;}
+  /* a REAL walk-in home: back & side walls, front with a 4 m doorway */
+  wallBox(w,H,wall,0,H/2,-d/2);
+  wallBox(wall,H,d,-w/2,H/2,0);wallBox(wall,H,d,w/2,H/2,0);
+  wallBox(w/2-2,H,wall,-(w/4+1),H/2,d/2);
+  wallBox(w/2-2,H,wall,(w/4+1),H/2,d/2);
+  wallBox(w,1.1,wall*2,0,H-0.55,d/2);
+  const found=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+1,4,d+1),new THREE.MeshLambertMaterial({color:0x8d8577})));
+  found.position.set(x,baseY-1.9,z);parent.add(found);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.5,0.3,d-0.5),new THREE.MeshLambertMaterial({color:0xcabfa6}));
+  floor.position.set(x,baseY+0.15,z);parent.add(floor);
+  decks.push({g:parent,x,z,hw:w/2-0.4,hd:d/2-0.4,tops:[baseY+0.3],ramp:null});
+  /* gabled roof + brick chimney */
+  const roofM=roofMats[Math.floor(rand()*roofMats.length)];
+  for(const s of[-1,1]){
+    const p=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+2,0.3,d*0.62),roofM));
+    p.position.set(x,baseY+H+1.35,z+s*d*0.245);p.rotation.x=-s*0.42;parent.add(p);parts.push(p);
+  }
+  const ridge=new THREE.Mesh(new THREE.BoxGeometry(w+2,0.3,0.9),roofM);
+  ridge.position.set(x,baseY+H+2.65,z);parent.add(ridge);parts.push(ridge);
+  const chim=new THREE.Mesh(new THREE.BoxGeometry(1,2.6,1),new THREE.MeshLambertMaterial({color:0x9c5a4a}));
+  chim.position.set(x+w/4,baseY+H+2.4,z-d/4);parent.add(chim);parts.push(chim);
+  /* framed windows along the front + the door */
+  const wm=houseWinMat();
+  [-w/4-3,-w/4+3,w/4-3,w/4+3].forEach(px2=>{
+    const win=new THREE.Mesh(new THREE.PlaneGeometry(1.6,1.4),wm);
+    win.position.set(x+px2,baseY+H/2+0.3,z+d/2+0.03);parent.add(win);
+  });
+  makeDoor(x,z+d/2+0.05,0,parent,baseY,0x6b3b16);
+  /* the GARDEN: a lawn over the whole fenced block, a stone path, flowers & a tree */
+  {
+    const lg=new THREE.PlaneGeometry(100,76,10,6);lg.rotateX(-Math.PI/2);
+    const lp=lg.attributes.position;
+    for(let i=0;i<lp.count;i++){
+      const wx=x+lp.getX(i),wz=z+lp.getZ(i);
+      lp.setXYZ(i,wx,terrainH(wx,wz)+0.12,wz);
+    }
+    lg.computeVertexNormals();
+    const lawn=new THREE.Mesh(lg,new THREE.MeshLambertMaterial({color:0x5da24a}));
+    lawn.receiveShadow=true;parent.add(lawn);
+    parent.add(ribbon("z",x,z+d/2+1,z+38,3,0.2,sideMat));
+    /* white picket fence around the garden, with a gap at the path */
+    const fenceM=new THREE.MeshLambertMaterial({color:0xf2f5f7});
+    for(const[fx0,fz0,fx1,fz1]of[[-50,-38,50,-38],[-50,38,-2.5,38],[2.5,38,50,38],[-50,-38,-50,38],[50,-38,50,38]]){
+      const len=Math.hypot(fx1-fx0,fz1-fz0),cx2=x+(fx0+fx1)/2,cz2=z+(fz0+fz1)/2,horiz=fz0===fz1;
+      const rail=new THREE.Mesh(new THREE.BoxGeometry(horiz?len:0.12,0.1,horiz?0.12:len),fenceM);
+      rail.position.set(cx2,terrainH(cx2,cz2)+0.95,cz2);
+      parent.add(rail);
+      const n=Math.floor(len/8);
+      for(let k=0;k<=n;k++){
+        const t=n?k/n:0.5,px3=x+fx0+(fx1-fx0)*t,pz3=z+fz0+(fz1-fz0)*t;
+        const post=new THREE.Mesh(new THREE.BoxGeometry(0.16,1.1,0.16),fenceM);
+        post.position.set(px3,terrainH(px3,pz3)+0.55,pz3);parent.add(post);
+      }
+    }
+    const flowerCols=[0xff5d8f,0xf4d35e,0xef476f,0x9b5de5];
+    for(let i=0;i<6;i++){
+      const fx=x-20+i*8,fz=z+d/2+4;
+      const fy=terrainH(fx,fz);
+      const bl=new THREE.Mesh(new THREE.SphereGeometry(0.14,7,6),new THREE.MeshLambertMaterial({color:flowerCols[i%4]}));
+      bl.position.set(fx,fy+0.45,fz);parent.add(bl);
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.4),new THREE.MeshLambertMaterial({color:0x2f7a3c}));
+      st.position.set(fx,fy+0.2,fz);parent.add(st);
+    }
+    makeTree(x-32,z+22,1.7,parent,terrainH(x-32,z+22));
+    makeTree(x+34,z-24,1.3,parent,terrainH(x+34,z-24));
+  }
+  /* sign over the door */
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(9,1.8),shopSignMat("FAMILY HOUSE"));
+  sign.position.set(x,baseY+H+0.6,z+d/2+0.15);parent.add(sign);
+  const id="H:"+Math.round(x)+","+Math.round(z);
+  /* reception desk in the front garden: buy ($500K) or rent ($250/day) here */
+  const dx=x+9,dz=z+d/2+7;
+  const dy=terrainH(dx,dz);
+  const desk=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3.4,1.1,1),new THREE.MeshLambertMaterial({color:0x8a6f4d})));
+  desk.position.set(dx,dy+0.55,dz);parent.add(desk);
+  const rsign=new THREE.Mesh(new THREE.PlaneGeometry(5.4,1),shopSignMat("RECEPTION · $500K"));
+  rsign.position.set(dx,dy+2.8,dz-0.6);parent.add(rsign);
+  const rp=makePerson(0.92);rp.position.set(dx,dy,dz-1.4);parent.add(rp);
+  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},house:true});
+  regShell(parent,x,z,w/2,d/2,baseY,[{x:x,z:z+d/2,r:2.6}]);
+  const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
+  const man={g:parent,x,z,id,baseY,house:true,tableG:null,furnG:null};
+  mansions.push(man);
+  if(window.onMansionBuilt)onMansionBuilt(man);
   return rec;
 }
 /* ---- dumpling buyers: a friendly buyer at the roadside every ~500 m ---- */
@@ -1415,6 +1576,8 @@ function buyerSpot(i,j){
   if(hs&&Math.abs(x-hs.x)<62&&Math.abs(z-hs.z)<50)return null;
   const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
   if(ms&&Math.abs(x-ms.x)<62&&Math.abs(z-ms.z)<50)return null;
+  const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh&&Math.abs(x-fh.x)<62&&Math.abs(z-fh.z)<50)return null;
   return{x,z};
 }
 function buildBuyer(x,z,g){
@@ -1457,6 +1620,8 @@ function butterSpot(i,j){
   if(hs&&Math.abs(x-hs.x)<62&&Math.abs(z-hs.z)<50)return null;
   const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
   if(ms&&Math.abs(x-ms.x)<62&&Math.abs(z-ms.z)<50)return null;
+  const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh&&Math.abs(x-fh.x)<62&&Math.abs(z-fh.z)<50)return null;
   return{x,z};
 }
 function buildButterBuyer(x,z,g){
@@ -3020,6 +3185,14 @@ function buildChunk(cx,cz){
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(mansion(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
   }
+  /* a FAMILY HOUSE for sale every ~1.4 km */
+  for(let i=Math.floor((x0-700)/FHSP);i<=Math.ceil((x1+100)/FHSP);i++)
+  for(let j=Math.floor((z0-1900)/FHSP);j<=Math.ceil((z1+100)/FHSP);j++){
+    const sp=familyHouseSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    g.userData.recs.push(familyHouse(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
   /* VOLCANOES: built by the chunk with the crater */
   for(let i=Math.floor((x0-4350)/VOLC);i<=Math.ceil((x1-4050)/VOLC);i++)
   for(let j=Math.floor((z0-7950)/VOLC);j<=Math.ceil((z1-7650)/VOLC);j++){
@@ -3092,8 +3265,8 @@ function buildChunk(cx,cz){
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildButterBuyer(sp.x,sp.z,g);
   }
-  /* vegetation + wildlife by biome */
-  const dense=biome==="forest"?22:(biome==="desert"?5:10);
+  /* vegetation + wildlife by biome (ULTRA graphics: noticeably lusher) */
+  const dense=(biome==="forest"?22:(biome==="desert"?5:10))*(window.ULTRA?1.6:1);
   for(let i=0;i<dense;i++){
     const x=ox+(r()-0.5)*CS,z=oz+(r()-0.5)*CS;
     if(keepClear(x,z))continue;
@@ -3133,8 +3306,17 @@ function flushSpawnQueue(){
 }
 function disposeChunk(g){
   scene.remove(g);
-  for(const rec of g.userData.recs){const i=buildings.indexOf(rec);if(i>=0)buildings.splice(i,1);}
+  for(const rec of g.userData.recs||[]){const i=buildings.indexOf(rec);if(i>=0)buildings.splice(i,1);}
   disposeGroup(g);
+}
+/* throw away every loaded chunk so the world streams back in fresh —
+   used when ULTRA graphics is toggled (new chunks build with extra detail) */
+function rebuildWorld(){
+  for(const[k,g]of chunks){
+    if(g!=="pending")disposeChunk(g);
+    chunks.delete(k);
+  }
+  buildQueue.length=0;
 }
 const buildQueue=[];
 let _lastChunkBuild=0;

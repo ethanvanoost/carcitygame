@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=74">
+<link rel="stylesheet" href="style.css?v=75">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -305,13 +305,23 @@
 <div class="modal" id="sellModal">
   <div class="box" style="max-width:640px">
     <h2 id="sellTitle">&#129375; Dumpling buyer &mdash; sell your dumplings</h2>
-    <div class="seg mini" style="flex-wrap:wrap">
-      <button id="selAll">All</button>
-      <button id="selGlit">&#10024; Glitter only</button>
-      <button id="selNorm">Normal only</button>
-      <button id="selNone">None</button>
+    <div style="font-size:12px;color:var(--dim)">Pick filters &mdash; the list only shows what matches (and it gets selected for you):</div>
+    <div class="seg mini" id="sellGlitRow">
+      <button id="fGlitAll" class="on">All</button>
+      <button id="fGlit">&#10024; Glitter</button>
+      <button id="fNorm">No glitter</button>
+    </div>
+    <div class="seg mini" id="sellSizeRow" style="display:none">
+      <button id="fSzAll" class="on">All sizes</button>
+      <button id="fSzNorm">Small</button>
+      <button id="fSzMed">&#128312; Medium</button>
+      <button id="fSzMega">&#127775; Mega</button>
     </div>
     <div id="sellColors"></div>
+    <div class="seg mini">
+      <button id="selAll">&#9989; Select all shown</button>
+      <button id="selNone">Select none</button>
+    </div>
     <div id="sellList"></div>
     <button class="btn warn" id="sellDo" style="margin-top:10px;width:100%">&#128181; Sell selected &mdash; $0</button>
     <button class="btn close" id="sellClose">Close</button>
@@ -440,6 +450,11 @@
       <button id="qMed" class="on">Normal</button>
       <button id="qHigh">&#10024; Beautiful</button>
     </div>
+    <div style="font-size:14px;color:var(--dim);margin-top:14px">Ultra graphics &mdash; grass that waves in the wind, desert sand that flies, fuller trees, balconies, shutters &amp; more</div>
+    <div class="seg">
+      <button id="uxOff" class="on">OFF</button>
+      <button id="uxOn">&#128293; ULTRA</button>
+    </div>
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Player name (other players see this)</div>
     <input id="pName" maxlength="16" placeholder="your name" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:6px">
     <div style="font-size:14px;color:var(--dim);margin-top:14px">Your avatar (other players see it too)</div>
@@ -475,9 +490,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=74"></script>
-<script src="js/world.js?v=74"></script>
-<script src="js/vehicles.js?v=74"></script>
-<script src="js/game.js?v=74"></script>
+<script src="js/core.js?v=75"></script>
+<script src="js/world.js?v=75"></script>
+<script src="js/vehicles.js?v=75"></script>
+<script src="js/game.js?v=75"></script>
 </body>
 </html>
