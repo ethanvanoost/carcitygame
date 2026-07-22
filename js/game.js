@@ -3623,30 +3623,41 @@ function renderMarket(p){
     const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,1.2,0.7),wm);
     hdr.position.set(p.x,p.y+4.4,p.z+48.7);sg.add(hdr);
   }
-  const woodM=new THREE.MeshLambertMaterial({color:0x8a6f4d}),legM=new THREE.MeshLambertMaterial({color:0x6f4e37});
   (data.items||[]).forEach((it,i)=>{
-    const sl=mktSlot(i),tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y;   // tables stand right on the plank floor
+    const sl=(typeof it.dx==="number")?it:mktSlot(i);   // old items fall back to the grid
+    const tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y,r=it.r||0;
+    buildFurnPiece(it.k==="c"?"mcase":"mtable",tx,tz,ty,r,sg,null);
     if(it.k==="c"){
-      /* display case: a pedestal with a glass box — look, don't touch! */
-      const ped=new THREE.Mesh(new THREE.BoxGeometry(1.6,1,1.6),woodM);ped.position.set(tx,ty+0.5,tz);sg.add(ped);
-      const glass=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.1,1.2),new THREE.MeshLambertMaterial({color:0x9fd8ff,transparent:true,opacity:0.3}));
-      glass.position.set(tx,ty+1.6,tz);sg.add(glass);
-      addMktGood(sg,it,tx,ty+1.15,tz,0.3);
-      const l2=mpMakeLabel(mktItemName(it)+" — just LOOK!");
-      l2.scale.set(10,2.5,1);l2.position.set(tx,ty+3.4,tz);sg.add(l2);
+      if(it.ty)addMktGood(sg,it,tx,ty+1.15,tz,0.3);
+      const l2=mktMakeLabel(it.ty?mktItemName(it)+" — just LOOK!":(mine?"Empty case — press T here!":"Empty display case"),7);
+      l2.position.set(tx,ty+3.1,tz);sg.add(l2);
     }else{
-      /* LONG TABLE with the goods on top + a floating price sign */
-      const top=new THREE.Mesh(new THREE.BoxGeometry(7,0.24,2.4),woodM);top.position.set(tx,ty+1,tz);top.castShadow=true;sg.add(top);
-      [[-3.1,-0.9],[3.1,-0.9],[-3.1,0.9],[3.1,0.9]].forEach(o=>{
-        const lg=new THREE.Mesh(new THREE.BoxGeometry(0.18,1,0.18),legM);
-        lg.position.set(tx+o[0],ty+0.5,tz+o[1]);sg.add(lg);
-      });
-      for(let n=0;n<Math.min(it.q,6);n++)addMktGood(sg,it,tx-2.5+n*1,ty+1.12,tz,0.26);
+      /* goods lie along the (rotated) table top */
+      if(it.ty)for(let n=0;n<Math.min(it.q,6);n++){
+        const o=-2.5+n*1;
+        addMktGood(sg,it,tx+Math.cos(r)*o,ty+1.12,tz-Math.sin(r)*o,0.26);
+      }
       const bon=(it.bb&&it.bf)?" · "+it.bb+"+"+it.bf+" FREE!":"";
-      const l2=mpMakeLabel(it.q>0?mktItemName(it)+" ×"+it.q+" — $"+fmtMoney(it.p)+bon:mktItemName(it)+" — NO STOCK");
-      l2.scale.set(13,3.2,1);l2.position.set(tx,ty+3.6,tz);sg.add(l2);
+      const l2=mktMakeLabel(!it.ty?(mine?"Empty table — press T here to stock it!":"Empty table")
+        :it.q>0?mktItemName(it)+" ×"+it.q+" — $"+fmtMoney(it.p)+bon
+        :mktItemName(it)+" — NO STOCK",9);
+      l2.position.set(tx,ty+3.3,tz);sg.add(l2);
     }
   });
+}
+/* small fitted sign: the text SHRINKS to fit instead of getting cut off */
+function mktMakeLabel(text,w){
+  const cv=document.createElement("canvas");cv.width=512;cv.height=64;
+  const c=cv.getContext("2d");
+  let fs=30;
+  c.font="bold "+fs+"px 'Segoe UI',sans-serif";
+  while(fs>13&&c.measureText(text).width>488){fs-=2;c.font="bold "+fs+"px 'Segoe UI',sans-serif";}
+  const tw=Math.min(506,c.measureText(text).width+22);
+  c.fillStyle="rgba(13,17,26,.8)";c.fillRect(256-tw/2,8,tw,48);
+  c.fillStyle="#ffd75e";c.textAlign="center";c.textBaseline="middle";c.fillText(text,256,33);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));
+  s.scale.set(w,w/8,1);
+  return s;
 }
 window.onMarketBuilt=p=>{if(rentedAt(p.id)&&MKT[p.id])renderMarket(p);};
 function mktRegPath(id){return "/markets/"+mpWorldKey()+"/"+fbKey(id);}
@@ -3678,9 +3689,25 @@ function openMarket(p){
   (async()=>{
     const rm=await fetchMarketFresh(p.id);
     renderMarket(p);
-    if(rm)openMarketShop(p,rm);
-    else openMarketDesk(p);
+    if(!rm){openMarketDesk(p);return;}
+    /* standing right next to one table? buy from THAT table */
+    const ni=mktNearItem(p,3.4);
+    const it=ni>=0?rm.d.items[ni]:null;
+    if(it&&it.k==="t"&&it.ty)mktBuyFrom(p,rm,ni);
+    else openMarketShop(p,rm);
   })();
+}
+/* which of the plot's tables/cases is the player standing next to? */
+function mktNearItem(p,r){
+  const d=marketData(p);
+  if(!d||!d.items)return -1;
+  let bi=-1,bd=r;
+  d.items.forEach((it,i)=>{
+    const sl=(typeof it.dx==="number")?it:mktSlot(i);
+    const ds=Math.hypot(p.x+sl.dx-player.x,p.z+sl.dz-player.z);
+    if(ds<bd){bd=ds;bi=i;}
+  });
+  return bi;
 }
 function openMarketDesk(p){
   showDest("\u{1F3EA} MARKETING PLOT (100×100 m) — open your own market!",[
@@ -3718,18 +3745,16 @@ function openMarketDesk(p){
 }
 function openMarketOwner(p){
   const d=MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
-  const opts=[];
-  if(d.items.length<12){
-    opts.push({label:"\u{1FA91} Place a LONG TABLE — sell dumplings, butter or food",value:"table"});
-    opts.push({label:"\u{1F5C4} Place a DISPLAY CASE — show something off (look, don't touch)",value:"case"});
-  }else opts.push({label:"(Your plot is full — 12 spots max. Remove something first!)",value:"x"});
-  opts.push({label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"});
-  opts.push({label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"});
-  if(d.items.length)opts.push({label:"\u{1F5D1} Remove an item (leftover stock comes back)",value:"rm"});
-  opts.push({label:"❌ Close",value:"x"});
-  showDest("\u{1F3EA} "+(d.name||"Your Marketing Plot")+" — market editor",opts,v=>{
-    if(v==="table")mktPickType(p,"t");
-    else if(v==="case")mktPickType(p,"c");
+  /* standing next to one of your tables? manage THAT table */
+  const ni=mktNearItem(p,3.4);
+  if(ni>=0){openMyTable(p,ni);return;}
+  showDest("\u{1F3EA} "+(d.name||"Your Marketing Plot")+" — market menu",[
+    {label:"\u{1F6E0} EDIT MODE — place & remove long tables and display cases",value:"edit"},
+    {label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"},
+    {label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"},
+    {label:"❌ Close",value:"x"}
+  ],v=>{
+    if(v==="edit")openMarketEdit(p);
     else if(v==="name"){
       const s=prompt("Name your market! (max 20 letters — this is what everyone sees, like SUPER DEAL)",d.name||"");
       if(s===null)return;
@@ -3739,16 +3764,77 @@ function openMarketOwner(p){
     }else if(v==="bld"){
       d.b=d.b?0:1;saveMkt();syncMarket(p.id);renderMarket(p);
       toast(d.b?"\u{1F3EC} Building added — walls and a door around your plot!":"\u{1F33E} Building removed — open-air market!");
-    }else if(v==="rm")mktRemoveItem(p);
+    }
   });
 }
-function mktPickType(p,kind){
+/* clicking the floor in the market editor: place an EMPTY table/case, or remove one */
+function mktEditClick(e){
+  const p=MEDIT.mkt,d=MKT[p.id];
+  if(!d)return;
+  const pt=meditGroundPoint(e,p.y);
+  if(!pt)return;
+  const dx=pt.x-p.x,dz=pt.z-p.z;
+  if(Math.abs(dx)>48||Math.abs(dz)>48){toast("That's outside your plot — stay on the wooden floor!");return;}
+  d.items=d.items||[];
+  if(MEDIT.tool==="remove"){
+    let bi=-1,bd=4;
+    d.items.forEach((it,i)=>{
+      const sl=(typeof it.dx==="number")?it:mktSlot(i);
+      const ds=Math.hypot(sl.dx-dx,sl.dz-dz);
+      if(ds<bd){bd=ds;bi=i;}
+    });
+    if(bi<0){toast("Click closer to a table to remove it.");return;}
+    const it=d.items.splice(bi,1)[0];
+    if(it&&it.ty&&it.q>0)mktGiveGoods(it,it.q);
+    saveMkt();renderMarket(p);
+    toast("\u{1F5D1} Removed"+(it&&it.ty&&it.q>0?" — your stock came back!":"!"));
+    return;
+  }
+  const def=furnDef(MEDIT.sel);
+  if(!def){toast("Pick a table or display case from the bar first!");return;}
+  if(d.items.length>=16){toast("Your plot is full — 16 pieces max!");return;}
+  d.items.push({k:def.t==="mcase"?"c":"t",dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot,ty:null,q:0,p:0,bb:0,bf:0});
+  saveMkt();renderMarket(p);
+  toast("✅ "+def.n+" placed — stand next to it and press T to "+(def.t==="mcase"?"put something inside!":"stock it!"));
+  if(GHOST.lastE)updateGhost(GHOST.lastE);
+}
+/* T next to one of YOUR tables: stock it, empty it, or swap the display */
+function openMyTable(p,i){
+  const d=MKT[p.id],it=d.items[i];
+  if(!it)return;
+  if(it.k==="c"){
+    if(!it.ty){mktPickType(p,"c",i);return;}
+    showDest("\u{1F5C4} Display case — "+mktItemName(it),[
+      {label:"\u{1F4E4} Take it out (back to your collection)",value:"out"},
+      {label:"❌ Close",value:"x"}
+    ],v=>{
+      if(v!=="out")return;
+      mktGiveGoods(it,1);
+      it.ty=null;it.q=0;
+      saveMkt();syncMarket(p.id);renderMarket(p);
+      toast("\u{1F4E4} Back in your collection — the case is empty again.");
+    });
+    return;
+  }
+  if(!it.ty){mktPickType(p,"t",i);return;}
+  showDest("\u{1FA91} "+mktItemName(it)+" — ×"+it.q+" at $"+fmtMoney(it.p)+(it.bb?" ("+it.bb+"+"+it.bf+" FREE)":""),[
+    {label:"\u{1F5D1} Empty the table"+(it.q>0?" (×"+it.q+" comes back to you)":" (it's sold out)"),value:"clr"},
+    {label:"❌ Close",value:"x"}
+  ],v=>{
+    if(v!=="clr")return;
+    if(it.q>0)mktGiveGoods(it,it.q);
+    it.ty=null;it.q=0;it.p=0;it.bb=0;it.bf=0;
+    saveMkt();syncMarket(p.id);renderMarket(p);
+    toast("\u{1F5D1} Table cleared — press T next to it to stock something new!");
+  });
+}
+function mktPickType(p,kind,idx){
   showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
     {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"❌ Cancel",value:"x"}
-  ],ty=>{if(ty!=="x")mktPickItem(p,kind,ty);});
+  ],ty=>{if(ty!=="x")mktPickItem(p,kind,ty,idx);});
 }
 function mktGroups(ty){
   const map=new Map();
@@ -3791,88 +3877,94 @@ function mktGiveGoods(it,n){
   }
   renderDump();renderPack();saveGame();
 }
-function mktPickItem(p,kind,ty){
+function mktPickItem(p,kind,ty,idx){
   const groups=mktGroups(ty).slice(0,10);
   if(!groups.length){toast("You don't have any of those yet — get some first!");return;}
   const opts=groups.map((g2,i)=>({label:(ty==="food"?g2.lab:mktItemName(g2))+" — you have "+g2.n,value:i}));
   opts.push({label:"❌ Cancel",value:"x"});
-  showDest("Pick what goes on the "+(kind==="t"?"table":"display"),opts,v=>{
+  showDest("Pick what goes "+(kind==="t"?"on the table":"in the display case"),opts,v=>{
     if(typeof v!=="number")return;
-    const grp=groups[v],d=MKT[p.id];
+    const grp=groups[v],d=MKT[p.id],it=d&&d.items[idx];
+    if(!it)return;
     if(kind==="c"){
       mktTakeStock(ty,grp,1);
-      d.items.push({k:"c",ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
+      Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
       saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-      toast("\u{1F5C4} Your "+(ty==="food"?grp.lab:mktItemName(grp))+" is on display — everyone can admire it (but nobody can touch)!");
+      toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
       return;
     }
-    const qs=prompt("How many go on the table? (1 - "+grp.n+")","1");
-    if(qs===null)return;
-    const q=Math.floor(parseInt(qs,10));
-    if(!(q>=1)||q>grp.n){toast("Type a number from 1 to "+grp.n+"!");return;}
-    const ps=prompt("Price per item? ($1 - $1,000,000)","25");
-    if(ps===null)return;
-    const pr=Math.floor(parseInt(ps,10));
-    if(!(pr>=1)||pr>1000000){toast("Type a price from 1 to 1000000!");return;}
-    let bb=0,bf=0;
-    const bs=prompt("BONUS deal? Type it like 1+1 (= buy 1, get 1 FREE) or 3+1 — or leave empty for no bonus","");
-    if(bs&&bs.trim()){
-      const m2=bs.trim().match(/^(\d+)\s*\+\s*(\d+)/);
-      if(m2){bb=Math.min(99,parseInt(m2[1],10)||0);bf=Math.min(99,parseInt(m2[2],10)||0);}
-      if(!bb||!bf){bb=0;bf=0;toast("Bonus skipped — next time type it like 1+1.");}
-    }
-    mktTakeStock(ty,grp,q);
-    d.items.push({k:"t",ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q,p:pr,bb,bf});
-    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-    toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
+    openStockModal(p,idx,ty,grp);
   });
 }
-function mktRemoveItem(p){
-  const d=MKT[p.id];
-  const opts=d.items.map((it,i)=>({label:(it.k==="c"?"\u{1F5C4} ":"\u{1FA91} ")+mktItemName(it)+(it.k==="t"?" (×"+it.q+" left)":""),value:i}));
-  opts.push({label:"❌ Cancel",value:"x"});
-  showDest("\u{1F5D1} Remove which item? (leftover stock comes back to you)",opts,v=>{
-    if(typeof v!=="number")return;
-    const it=d.items.splice(v,1)[0];
-    if(it&&it.q>0)mktGiveGoods(it,it.q);
-    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-    toast("\u{1F5D1} Removed"+(it&&it.q>0?" — "+it.q+" came back to your collection!":"!"));
-  });
+/* the STOCK THE TABLE window: amount, price and the <field> + <field> FREE bonus */
+const MKTM={p:null,idx:0,ty:null,grp:null};
+function openStockModal(p,idx,ty,grp){
+  MKTM.p=p;MKTM.idx=idx;MKTM.ty=ty;MKTM.grp=grp;
+  $("mktTitle").textContent="\u{1FA91} "+(ty==="food"?grp.lab:mktItemName(grp));
+  $("mktMax").textContent=grp.n;
+  $("mktQty").value=1;$("mktQty").max=grp.n;
+  $("mktPrice").value=25;
+  $("mktBb").value="";$("mktBf").value="";
+  $("mktModal").classList.add("open");
 }
+$("mktCancel").onclick=()=>$("mktModal").classList.remove("open");
+$("mktOk").onclick=()=>{
+  const p=MKTM.p,grp=MKTM.grp,ty=MKTM.ty;
+  if(!p||!grp)return;
+  const d=MKT[p.id],it=d&&d.items[MKTM.idx];
+  if(!it){$("mktModal").classList.remove("open");return;}
+  const q=Math.floor(parseInt($("mktQty").value,10));
+  if(!(q>=1)||q>grp.n){toast("Amount: type a number from 1 to "+grp.n+"!");return;}
+  const pr=Math.floor(parseInt($("mktPrice").value,10));
+  if(!(pr>=1)||pr>1000000){toast("Price: type $1 to $1,000,000!");return;}
+  let bb=Math.floor(parseInt($("mktBb").value,10))||0,bf=Math.floor(parseInt($("mktBf").value,10))||0;
+  if(bb<0)bb=0;if(bf<0)bf=0;
+  if((bb&&!bf)||(!bb&&bf)){toast("\u{1F381} Bonus: fill BOTH boxes (like 1 + 1) — or leave both empty.");return;}
+  bb=Math.min(99,bb);bf=Math.min(99,bf);
+  mktTakeStock(ty,grp,q);
+  Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q,p:pr,bb,bf});
+  $("mktModal").classList.remove("open");
+  saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+  toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
+};
 function openMarketShop(p,rm){
   const d=rm.d,owner=rm.n;
   const title=(d.name&&String(d.name).trim())?String(d.name).trim():owner+"'s Marketing Plot";
   const opts=[];
   (d.items||[]).forEach((it,i)=>{
-    if(it.k!=="t")return;
+    if(it.k!=="t"||!it.ty)return;
     opts.push(it.q>0
       ?{label:"\u{1F6D2} "+mktItemName(it)+" — $"+fmtMoney(it.p)+" each (×"+it.q+" left"+(it.bb?" · "+it.bb+"+"+it.bf+" FREE":"")+")",value:i}
       :{label:"❌ "+mktItemName(it)+" — NO STOCK",value:"x"});
   });
-  if(!opts.length)opts.push({label:"(No tables here yet — come back later!)",value:"x"});
+  if(!opts.length)opts.push({label:"(No stocked tables here yet — come back later!)",value:"x"});
   opts.push({label:"❌ Leave",value:"x"});
   showDest("\u{1F3EA} "+title+" — by "+owner,opts,v=>{
     if(typeof v!=="number")return;
-    const it=d.items[v];
-    if(!it||it.q<=0)return;
-    const deal=it.bb?"\nBONUS: every "+it.bb+" you buy = "+it.bf+" extra for FREE!":"";
-    const qs=prompt("How many do you want to BUY at $"+fmtMoney(it.p)+" each?"+deal+"\n(stock: "+it.q+")","1");
-    if(qs===null)return;
-    let n=Math.floor(parseInt(qs,10));
-    if(!(n>=1)){toast("Type a normal number, like 2!");return;}
-    if(n>it.q)n=it.q;
-    let free=(it.bb&&it.bf)?Math.floor(n/it.bb)*it.bf:0;
-    if(n+free>it.q)free=it.q-n;
-    const total=n*it.p;
-    (async()=>{
-      const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+v+"|"+(n+free)).slice(0,80)},true);
-      if(!ok)return;
-      it.q-=n+free;
-      mktGiveGoods(it,n+free);
-      renderMarket(p);
-      toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(it)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
-    })();
+    mktBuyFrom(p,rm,v);
   });
+}
+/* buying from ONE table (walk up to it and press T, or pick it from the list) */
+function mktBuyFrom(p,rm,idx){
+  const owner=rm.n,it=rm.d.items[idx];
+  if(!it||!it.ty||it.q<=0)return;
+  const deal=it.bb?"\nBONUS: every "+it.bb+" you buy = "+it.bf+" extra for FREE!":"";
+  const qs=prompt("How many "+mktItemName(it)+" do you want to BUY at $"+fmtMoney(it.p)+" each?"+deal+"\n(stock: "+it.q+")","1");
+  if(qs===null)return;
+  let n=Math.floor(parseInt(qs,10));
+  if(!(n>=1)){toast("Type a normal number, like 2!");return;}
+  if(n>it.q)n=it.q;
+  let free=(it.bb&&it.bf)?Math.floor(n/it.bb)*it.bf:0;
+  if(n+free>it.q)free=it.q-n;
+  const total=n*it.p;
+  (async()=>{
+    const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+idx+"|"+(n+free)).slice(0,80)},true);
+    if(!ok)return;
+    it.q-=n+free;
+    mktGiveGoods(it,n+free);
+    renderMarket(p);
+    toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(it)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
+  })();
 }
 /* walking near someone's market loads their stalls & signs */
 let _mvT=0;
@@ -4005,10 +4097,32 @@ const FURN=[
   {t:"flower",n:"Flowers",e:"\u{1F338}",p:40,out:1},
   {t:"swing",n:"Swing",e:"\u{1F6DD}",p:400,out:1}
 ];
-const furnDef=t=>FURN.find(f=>f.t===t);
+/* the MARKETING PLOT editor sells exactly two things — both free to place */
+const FURN_MKT=[
+  {t:"mtable",n:"Long table",e:"\u{1FA91}",p:0,out:2},
+  {t:"mcase",n:"Display case",e:"\u{1F5C4}",p:0,out:2}
+];
+const furnDef=t=>FURN.find(f=>f.t===t)||FURN_MKT.find(f=>f.t===t);
 /* build one piece of furniture at world (x,z), on floor y, rotated r */
 function buildFurnPiece(t,x,z,y,r,parent,man){
   const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=r||0;parent.add(g);
+  if(t==="mtable"){   // the market's LONG TABLE
+    const top=new THREE.Mesh(new THREE.BoxGeometry(7,0.24,2.4),new THREE.MeshLambertMaterial({color:0x8a6f4d}));
+    top.position.y=1;top.castShadow=true;g.add(top);
+    const legM=new THREE.MeshLambertMaterial({color:0x6f4e37});
+    [[-3.1,-0.9],[3.1,-0.9],[-3.1,0.9],[3.1,0.9]].forEach(o=>{
+      const lg=new THREE.Mesh(new THREE.BoxGeometry(0.18,1,0.18),legM);
+      lg.position.set(o[0],0.5,o[1]);g.add(lg);
+    });
+    return;
+  }
+  if(t==="mcase"){   // the market's DISPLAY CASE
+    const ped=new THREE.Mesh(new THREE.BoxGeometry(1.6,1,1.6),new THREE.MeshLambertMaterial({color:0x8a6f4d}));
+    ped.position.y=0.5;g.add(ped);
+    const glass=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.1,1.2),new THREE.MeshLambertMaterial({color:0x9fd8ff,transparent:true,opacity:0.3}));
+    glass.position.y=1.6;g.add(glass);
+    return;
+  }
   const wood=new THREE.MeshLambertMaterial({color:0x6f4e37});
   const wood2=new THREE.MeshLambertMaterial({color:0x8a6f4d});
   function box(w,h,d,px,py,pz,mat){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat||wood));m.position.set(px,py,pz);g.add(m);return m;}
@@ -4266,30 +4380,44 @@ function openVisitorMenu(m){
   });
 }
 /* ---------- the T editor: buy & place furniture in your mansion + garden ---------- */
-const MEDIT={on:false,man:null,sel:null,tool:"place",rot:0};
+const MEDIT={on:false,man:null,mkt:null,sel:null,tool:"place",rot:0};
 function renderMeditBar(){
   const w=$("meditItems");w.innerHTML="";
-  FURN.forEach(f=>{
+  (MEDIT.mkt?FURN_MKT:FURN).forEach(f=>{
     const b=document.createElement("button");
     b.className="fitem"+(MEDIT.sel===f.t&&MEDIT.tool==="place"?" on":"");
-    b.innerHTML="<span class='fe'>"+f.e+"</span><span class='fn'>"+f.n+"</span><span class='fp'>"+(f.out?"\u{1F33F} ":"")+"$"+fmtMoney(f.p)+"</span>";
+    b.innerHTML="<span class='fe'>"+f.e+"</span><span class='fn'>"+f.n+"</span><span class='fp'>"+(f.out&&!MEDIT.mkt?"\u{1F33F} ":"")+(f.p?"$"+fmtMoney(f.p):"FREE")+"</span>";
     b.onclick=()=>{MEDIT.sel=f.t;MEDIT.tool="place";renderMeditBar();
-      toast((f.out?"\u{1F33F} Garden item — click the LAWN":"\u{1F3E0} Indoor item — click the FLOOR")+" to place your "+f.n+" ($"+fmtMoney(f.p)+")");};
+      toast(MEDIT.mkt?"\u{1F3EA} Click anywhere on your wooden floor to place the "+f.n+"!"
+        :(f.out?"\u{1F33F} Garden item — click the LAWN":"\u{1F3E0} Indoor item — click the FLOOR")+" to place your "+f.n+" ($"+fmtMoney(f.p)+")");};
     w.appendChild(b);
   });
+  ["meditShop","meditOrder","meditBook"].forEach(id=>$(id).style.display=MEDIT.mkt?"none":"");
   $("meditRemove").classList.toggle("on",MEDIT.tool==="remove");
 }
 function openMansionEdit(man){
-  MEDIT.on=true;MEDIT.man=man;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
+  MEDIT.on=true;MEDIT.man=man;MEDIT.mkt=null;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
   renderMeditBar();
   $("meditBar").classList.add("show");
   toast("\u{1F6E0} MANSION EDITOR — pick an item below, then click where to put it. R rotates, T (or ✅ Done) exits.");
 }
+/* the MARKET editor is the SAME editor — just with long tables & display cases */
+function openMarketEdit(p){
+  MEDIT.on=true;MEDIT.man=null;MEDIT.mkt=p;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
+  renderMeditBar();
+  $("meditBar").classList.add("show");
+  toast("\u{1F3EA} MARKET EDITOR — pick below, click the floor to place. R rotates, \u{1F5D1} Remove deletes, T (or ✅ Done) exits.");
+}
 function closeMansionEdit(){
-  const man=MEDIT.man;
-  MEDIT.on=false;MEDIT.man=null;
+  const man=MEDIT.man,mk=MEDIT.mkt;
+  MEDIT.on=false;MEDIT.man=null;MEDIT.mkt=null;
   killGhost();
   $("meditBar").classList.remove("show");
+  if(mk){
+    saveMkt();saveGame();syncMarket(mk.id);renderMarket(mk);
+    toast("\u{1F3EA} Market saved — walk to a table and press T to stock it!");
+    return;
+  }
   toast("\u{1F3F0} Mansion saved — enjoy your home!");
   saveGame();
   if(man)syncClaim(man.id);   // visitors see your new layout
@@ -4355,26 +4483,31 @@ function ghostBuild(man){
   GHOST.g=wrap;GHOST.t=MEDIT.sel;GHOST.rot=MEDIT.rot;
 }
 function updateGhost(e){
-  if(!MEDIT.on||MEDIT.tool!=="place"||!MEDIT.sel||!MEDIT.man||!e||e.target!==renderer.domElement){killGhost();return;}
-  const man=MEDIT.man,def=furnDef(MEDIT.sel);
+  if(!MEDIT.on||MEDIT.tool!=="place"||!MEDIT.sel||(!MEDIT.man&&!MEDIT.mkt)||!e||e.target!==renderer.domElement){killGhost();return;}
+  const man=MEDIT.man,mk=MEDIT.mkt,def=furnDef(MEDIT.sel);
   if(!def){killGhost();return;}
-  const pt=meditGroundPoint(e,man.baseY+0.3);
+  const pt=meditGroundPoint(e,mk?mk.y:man.baseY+0.3);
   if(!pt){killGhost();return;}
   if(!GHOST.g||GHOST.t!==MEDIT.sel||GHOST.rot!==MEDIT.rot)ghostBuild(man);
   GHOST.g.position.set(pt.x,pt.y,pt.z);
   /* same rules as really placing it — so the color never lies */
-  const dx=pt.x-man.x,dz=pt.z-man.z;
   let ok=true;
-  if(man.plot)ok=Math.abs(dx)<=15&&Math.abs(dz)<=15;
-  else{
-    ok=Math.abs(dx)<=49&&Math.abs(dz)<=49.5;
-    if(ok&&def.out!==2){
-      const inside=man.house?Math.abs(dx)<14&&Math.abs(dz)<10:Math.abs(dx)<49&&Math.abs(dz)<37;
-      if(!def.out&&!inside)ok=false;
-      if(def.out===1&&(man.house?inside:Math.abs(dz)<39))ok=false;
+  if(mk){
+    const dx=pt.x-mk.x,dz=pt.z-mk.z;
+    ok=Math.abs(dx)<=48&&Math.abs(dz)<=48&&(MKT[mk.id]&&(MKT[mk.id].items||[]).length<16);
+  }else{
+    const dx=pt.x-man.x,dz=pt.z-man.z;
+    if(man.plot)ok=Math.abs(dx)<=15&&Math.abs(dz)<=15;
+    else{
+      ok=Math.abs(dx)<=49&&Math.abs(dz)<=49.5;
+      if(ok&&def.out!==2){
+        const inside=man.house?Math.abs(dx)<14&&Math.abs(dz)<10:Math.abs(dx)<49&&Math.abs(dz)<37;
+        if(!def.out&&!inside)ok=false;
+        if(def.out===1&&(man.house?inside:Math.abs(dz)<39))ok=false;
+      }
     }
+    if(MONEY.v<def.p)ok=false;
   }
-  if(MONEY.v<def.p)ok=false;
   const m=ok?GHOST_OK:GHOST_BAD;
   GHOST.g.traverse(o=>{if(o.isMesh)o.material=m;});
 }
@@ -4385,6 +4518,7 @@ addEventListener("mousemove",e=>{
 });
 addEventListener("mousedown",e=>{
   if(!MEDIT.on||e.button!==0||e.target!==renderer.domElement)return;
+  if(MEDIT.mkt){mktEditClick(e);return;}
   const man=MEDIT.man;
   const pt=meditGroundPoint(e,man.baseY+0.3);
   if(!pt)return;
@@ -5554,7 +5688,7 @@ async function checkPayments(){
         /* someone bought from my MARKETING PLOT — take the stock off that table */
         const[,mid,idxS,nS]=p.d.split("|");
         const md=MKT[mid],idx=parseInt(idxS,10),n2=Math.max(1,parseInt(nS,10)||1);
-        if(md&&md.items[idx]){
+        if(md&&md.items[idx]&&md.items[idx].ty){
           md.items[idx].q=Math.max(0,(md.items[idx].q||0)-n2);
           saveMkt();syncMarket(mid);
           const mp2=marketPlots.find(q=>q.id===mid);
@@ -10606,7 +10740,16 @@ const UPDATE_PAGES=[
 <h4>\u{1F6D2} SHOPPING AT OTHER PLAYERS</h4><ul>
 <li>Walk onto someone's plot and their whole market loads — press T to buy! Stock drops with every sale and the money lands straight in the owner's inbox (works even while they're offline).</li>
 <li>On the \u{1F5FA} map: <b>\u{1F3EA} Nearest MARKETING PLOT</b> and <b>\u{1F50E} SEARCH players' markets</b> — type a name like SUPER DEAL and teleport or route straight to it.</li></ul>
-<li>⚠️ Server owners: the Firebase rules need a small update for markets — see FIREBASE-SETUP.md (new "mkt" field + "markets" section).</li>`}
+<li>⚠️ Server owners: the Firebase rules need a small update for markets — see FIREBASE-SETUP.md (new "mkt" field + "markets" section).</li>`},
+{t:"Round 35 — Market editor 2.0 & the server fix",h:`
+<h4>\u{1F6E0} THE REAL MARKET EDITOR</h4><ul>
+<li>Your marketing plot now uses <b>the SAME editor as mansions</b>: press T → \u{1F6E0} EDIT MODE, pick a long table or display case, see the green ghost, click the floor to place it, R rotates, \u{1F5D1} Remove deletes. Place up to 16, anywhere you like.</li>
+<li>Tables are placed <b>EMPTY</b>. Walk up to one, press <b>T</b>, and pick what goes on it — dumplings, butter or food.</li>
+<li>Stocking uses a real window now: amount, price, and the bonus as two little boxes — <b>[1] + [1] FREE</b> — no more browser popups.</li>
+<li>Table signs <b>shrink the text to fit</b> — long deals aren't cut off anymore.</li>
+<li>Shoppers can walk up to ONE table and press T to buy just that — or press T anywhere else on the plot for the full list.</li></ul>
+<h4>\u{1F527} SERVER FIX (IMPORTANT!)</h4><ul>
+<li>If players stopped seeing each other after updating the database rules: the old rules limited the avatar to 32 letters, but avatars have 5 colors (34 letters) since the shoes update. FIREBASE-SETUP.md now says <b>av ≤ 64</b> (and own ≤ 12000) — re-publish the rules and everyone reappears instantly.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

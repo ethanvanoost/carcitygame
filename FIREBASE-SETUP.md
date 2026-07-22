@@ -69,7 +69,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "f": { ".validate": "newData.isNumber()" },
              "v": { ".validate": "newData.isString() && newData.val().length <= 8" },
              "c": { ".validate": "newData.isNumber()" },
-             "av": { ".validate": "newData.isString() && newData.val().length <= 32" },
+             "av": { ".validate": "newData.isString() && newData.val().length <= 64" },
              "t": { ".validate": "newData.isNumber()" },
              "$other": { ".validate": false }
            }
@@ -95,7 +95,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
            "name": { ".validate": "newData.isString() && newData.val().length <= 16" },
            "v": { ".validate": "newData.isNumber()" },
-           "own": { ".validate": "newData.isString() && newData.val().length <= 4000" },
+           "own": { ".validate": "newData.isString() && newData.val().length <= 12000" },
            "$other": { ".validate": false }
          }
        },

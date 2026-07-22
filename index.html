@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=78">
+<link rel="stylesheet" href="style.css?v=79">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -379,6 +379,25 @@
   </div>
 </div>
 
+<div class="modal" id="mktModal">
+  <div class="box">
+    <h2 id="mktTitle">&#129681; Stock the table</h2>
+    <div style="font-size:14px;color:var(--dim);margin-top:8px">How many go on the table? (max <span id="mktMax">1</span>)</div>
+    <input id="mktQty" type="number" min="1" value="1" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px;margin-top:6px">
+    <div style="font-size:14px;color:var(--dim);margin-top:12px">Price per item ($)</div>
+    <input id="mktPrice" type="number" min="1" value="25" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px;margin-top:6px">
+    <div style="font-size:14px;color:var(--dim);margin-top:12px">&#127873; Bonus deal (optional): buy <b>left</b>, get <b>right</b> FREE &mdash; like 1 + 1</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+      <input id="mktBb" type="number" min="0" placeholder="" style="flex:1;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px">
+      <span style="font-size:22px;font-weight:800">+</span>
+      <input id="mktBf" type="number" min="0" placeholder="" style="flex:1;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px">
+      <span style="color:var(--dim);font-weight:700">FREE</span>
+    </div>
+    <button class="btn warn" id="mktOk" style="width:100%;margin-top:14px">&#9989; Put it on the table!</button>
+    <button class="btn close" id="mktCancel">Cancel</button>
+  </div>
+</div>
+
 <div id="meditBar">
   <div id="meditItems"></div>
   <div id="meditTools">
@@ -490,9 +509,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=78"></script>
-<script src="js/world.js?v=78"></script>
-<script src="js/vehicles.js?v=78"></script>
-<script src="js/game.js?v=78"></script>
+<script src="js/core.js?v=79"></script>
+<script src="js/world.js?v=79"></script>
+<script src="js/vehicles.js?v=79"></script>
+<script src="js/game.js?v=79"></script>
 </body>
 </html>
