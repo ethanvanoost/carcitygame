@@ -4004,12 +4004,21 @@ function updateMarketVisit(dt){
   _mvT-=dt;if(_mvT>0)return;_mvT=2;
   if(S.world!=="earth"||!SERVER_READY)return;
   const p=nearMarketPlot();
-  if(!p||p.visitDone||rentedAt(p.id))return;
+  if(!p||rentedAt(p.id))return;
+  /* LIVE market: while you're on the plot we re-check every 5 s — new tables,
+     stock and prices appear for you WITHOUT a refresh */
+  const now=performance.now();
+  if(p._mvNext&&now<p._mvNext)return;
+  p._mvNext=now+5000;
+  const first=!p.visitDone;
   p.visitDone=true;
   fetchMarketFresh(p.id).then(rm=>{
     if(offScene(p.g))return;
+    const sig=rm?JSON.stringify(rm.d)+"|"+rm.n:"free";
+    if(!first&&p._mvSig===sig)return;   // nothing changed since last look
+    p._mvSig=sig;
     renderMarket(p);
-    if(rm)toast("\u{1F3EA} Welcome to "+((rm.d.name&&String(rm.d.name).trim())||rm.n+"'s Marketing Plot")+" — press T to shop!");
+    if(first&&rm)toast("\u{1F3EA} Welcome to "+((rm.d.name&&String(rm.d.name).trim())||rm.n+"'s Marketing Plot")+" — press T to shop!");
   });
 }
 /* 🔎 find player markets by name — SUPER DEAL, Notch's market, anything */
@@ -4321,6 +4330,7 @@ function buildMansionFurniture(man){
 /* a roadside dumpling stall in the mansion garden */
 function buildStall(man,owner,price,parent){
   const g=new THREE.Group();(parent||man.g).add(g);
+  if(!parent)man.shopG=g;   // visitor view: remembered so live updates can rebuild it
   const x=man.x+32,z=man.z+44,y=terrainH(x,z);
   const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(3,1.05,1.1),new THREE.MeshLambertMaterial({color:0xff5d8f})));
   ct.position.set(x,y+0.52,z);g.add(ct);
@@ -4343,25 +4353,37 @@ function updateVisit(dt){
   _visitT=1.5;
   if(S.world!=="earth"||!SERVER_READY)return;
   const m=nearMansion();
-  if(!m||m.visitDone)return;
-  m.visitDone=true;
-  if(rentedAt(m.id))return;
-  fetchClaim(m.id).then(d=>{
-    if(!d||d.t===myToken()||offScene(m.g))return;
+  if(!m||rentedAt(m.id))return;
+  /* LIVE visiting: while you're here we re-check every 6 s, so the owner's
+     new furniture & shop appear for you WITHOUT a refresh */
+  const now=performance.now();
+  if(m._vNext&&now<m._vNext)return;
+  m._vNext=now+6000;
+  fbGet(claimPath(m.id)).then(g2=>{
+    if(!g2.ok||offScene(m.g))return;
+    const d=(g2.data&&!g2.data.free)?g2.data:null;
+    if(!d||d.t===myToken())return;
+    const sig=(d.furn||"")+"|"+(d.shop||0)+"|"+(d.n||"");
+    const first=!m.visitDone;
+    if(!first&&m._vSig===sig)return;   // nothing changed since last look
+    m._vSig=sig;m.visitDone=true;
     m.owner=d.n||"a player";
-    /* show their furniture exactly how they placed it */
+    /* show their furniture exactly how they placed it — always the LATEST */
     if(typeof d.furn==="string"){
       try{
         const items=JSON.parse(d.furn);
-        if(Array.isArray(items)){MFURN.set(m.id,items.slice(0,80));buildMansionFurniture(m);}
+        if(Array.isArray(items))MFURN.set(m.id,items.slice(0,80));
       }catch(e){}
     }
+    buildMansionFurniture(m);
+    if(m.ownerLbl){m.g.remove(m.ownerLbl);m.ownerLbl=null;}
     const lbl=mpMakeLabel("\u{1F3F0} "+m.owner);
     lbl.scale.set(16,4,1);
     lbl.position.set(m.x,m.baseY+30,m.z+40);
-    m.g.add(lbl);
+    m.g.add(lbl);m.ownerLbl=lbl;
+    if(m.shopG){m.g.remove(m.shopG);disposeGroup(m.shopG);m.shopG=null;m.stall=null;}
     if(typeof d.shop==="number"&&d.shop>0)buildStall(m,m.owner,d.shop);
-    toast("\u{1F3F0} You're visiting "+m.owner+"'s mansion — press T inside for the \u{1F4D6} guest book"+(d.shop?" and \u{1F95F} dumpling shop":"")+"!");
+    if(first)toast("\u{1F3F0} You're visiting "+m.owner+"'s "+(m.house?"house":"mansion")+" — press T inside for the \u{1F4D6} guest book"+(d.shop?" and \u{1F95F} dumpling shop":"")+"!");
   });
 }
 function guestbookPath(id){return "/guestbook/"+mpWorldKey()+"/"+fbKey(id);}
@@ -10782,7 +10804,10 @@ const UPDATE_PAGES=[
 <li>The plot's BIG front sign is repainted the moment someone rents or buys it: it shows the <b>market's name</b> (or "&lt;player&gt;'s Marketing Plot") with a <b>subtitle line underneath</b> — set your own with ✏️ Sign subtitle, or it says "by &lt;owner&gt;". Free plots show BUY/RENT again.</li>
 <li>Shoppers can walk up to ONE table and press T to buy just that — or press T anywhere else on the plot for the full list.</li></ul>
 <h4>\u{1F527} SERVER FIX (IMPORTANT!)</h4><ul>
-<li>If players stopped seeing each other after updating the database rules: the old rules limited the avatar to 32 letters, but avatars have 5 colors (34 letters) since the shoes update. FIREBASE-SETUP.md now says <b>av ≤ 64</b> (and own ≤ 12000) — re-publish the rules and everyone reappears instantly.</li></ul>`}
+<li>If players stopped seeing each other after updating the database rules: the old rules limited the avatar to 32 letters, but avatars have 5 colors (34 letters) since the shoes update. FIREBASE-SETUP.md now says <b>av ≤ 64</b> (and own ≤ 12000) — re-publish the rules and everyone reappears instantly.</li></ul>
+<h4>\u{1F504} LIVE UPDATES — no more refreshing!</h4><ul>
+<li>Standing on someone's <b>marketing plot</b>? It re-checks every 5 seconds — new tables, prices, stock, names and the building appear for you live.</li>
+<li>Visiting someone's <b>mansion, house or plot</b>? Same thing every 6 seconds — their new furniture and dumpling shop pop in while you watch.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
