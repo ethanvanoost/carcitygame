@@ -122,6 +122,22 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "free": { ".validate": "newData.isBoolean()" },
              "furn": { ".validate": "newData.isString() && newData.val().length <= 6000" },
              "shop": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100" },
+             "mkt": { ".validate": "newData.isString() && newData.val().length <= 6000" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
+       "markets": {
+         "$world": {
+           ".read": true,
+           "$prop": {
+             ".write": true,
+             ".validate": "newData.hasChildren(['o','x','z','ts'])",
+             "n": { ".validate": "newData.isString() && newData.val().length <= 24" },
+             "o": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16" },
+             "x": { ".validate": "newData.isNumber()" },
+             "z": { ".validate": "newData.isNumber()" },
+             "ts": { ".validate": "newData.isNumber()" },
              "$other": { ".validate": false }
            }
          }

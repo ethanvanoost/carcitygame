@@ -3525,6 +3525,14 @@ function unrentProperty(rm){
   const i=RENT.list.indexOf(rm);
   if(i>=0)RENT.list.splice(i,1);
   releaseClaim(rm.id);
+  if(String(rm.id).startsWith("K:")){   // marketing plot: leftover stock comes back, registry entry goes
+    const md=MKT[rm.id];
+    if(md)(md.items||[]).forEach(it=>{if(it.q>0)mktGiveGoods(it,it.q);});
+    delete MKT[rm.id];saveMkt();
+    if(SERVER_READY)fbPut(mktRegPath(rm.id),null);
+    const mp2=marketPlots.find(q=>q.id===rm.id);
+    if(mp2)renderMarket(mp2);
+  }
   MFURN.delete(rm.id);                    // your placed items are gone...
   delete MYSHOP[rm.id];saveShops();       // ...and so is your dumpling shop
   DISPLAYS.delete(rm.id);
@@ -3544,7 +3552,7 @@ function askUnrent(rm){
 }
 /* switch a RENTED place to OWNED: every dollar of rent you already paid counts,
    so you only pay the rest of the full price — and all your items stay! */
-function propBuyPrice(rm){const id=String(rm.id);return id.startsWith("M:")?MANSION_PRICE:id.startsWith("H:")?HOUSE_PRICE:APT_PRICE;}
+function propBuyPrice(rm){const id=String(rm.id);return id.startsWith("M:")?MANSION_PRICE:id.startsWith("H:")?HOUSE_PRICE:id.startsWith("K:")?MKT_PRICE:APT_PRICE;}
 function propBuyDue(rm){return Math.max(0,propBuyPrice(rm)-(rm.paid||0));}
 function switchToBuy(rm){
   if(rm.mode!=="rent")return;
@@ -3559,6 +3567,357 @@ function switchToBuy(rm){
     rm.mode="own";rm.rate=0;rm.label=rm.label.replace(/ · \$[^)]+\/day$/,"");
     toast("\u{1F389}\u{1F511} SOLD! "+rm.label+" is yours FOREVER — no more rent, and all your items stayed!");
     saveGame();profileSave(true);
+  });
+}
+/* ================= MARKETING PLOTS: your own player-to-player market =================
+   100x100 m plots every ~3 km. BUY $80K or RENT $100/day, choose building or open-air,
+   then stock LONG TABLES (with prices & bonus deals) and DISPLAY CASES. Other players
+   walk in and buy — the money rides the payments inbox straight to you. */
+const MKT_PRICE=80000,MKT_RENT=100;
+const MKT={};    // my plots: id -> {b,name,items:[{k,ty,lab,hex,gl,sz,fh,q,p,bb,bf}]}
+try{Object.assign(MKT,JSON.parse(localStorage.getItem("vc4mkt")||"{}"));}catch(e){}
+function saveMkt(){try{localStorage.setItem("vc4mkt",JSON.stringify(MKT))}catch(e){}}
+const MKTR=new Map();   // other players' plots: id -> {n:ownerName, d:data}
+function nearMarketPlot(){
+  for(let i=marketPlots.length-1;i>=0;i--){
+    const p=marketPlots[i];
+    if(offScene(p.g)){marketPlots.splice(i,1);continue;}
+    if(Math.abs(player.x-p.x)<52&&Math.abs(player.z-p.z)<52)return p;
+  }
+  return null;
+}
+function mktItemName(it){
+  return (it.gl?"✨ GLITTER ":"")+(it.sz==="mega"?"\u{1F31F} MEGA ":it.sz==="med"?"\u{1F538} MEDIUM ":"")+it.lab
+    +(it.ty==="dump"?" dumpling":it.ty==="butter"?" butter squishy":"");
+}
+function mktSlot(i){return{dx:-36+(i%6)*14.4,dz:-34+Math.floor(i/6)*17};}
+function marketData(p){return rentedAt(p.id)?MKT[p.id]:(MKTR.get(p.id)||{}).d;}
+function addMktGood(sg,it,x,y,z,r){
+  if(it.ty==="food"){
+    const bx=new THREE.Mesh(new THREE.BoxGeometry(r*1.6,r*1.3,r*1.6),new THREE.MeshLambertMaterial({color:0xf4d35e}));
+    bx.position.set(x,y+r*0.4,z);sg.add(bx);return;
+  }
+  const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#f2f5f7")});
+  if(it.gl&&it.lab!=="Rainbow")mat.emissive=new THREE.Color(it.hex||"#ffffff").multiplyScalar(0.35);
+  const s=it.sz==="mega"?1.9:it.sz==="med"?1.35:1;
+  const dm=new THREE.Mesh(new THREE.SphereGeometry(r*s,10,8),mat);
+  dm.scale.y=0.75;dm.position.set(x,y+r*s*0.4,z);sg.add(dm);
+}
+function renderMarket(p){
+  if(p.stallG){p.g.remove(p.stallG);disposeGroup(p.stallG);p.stallG=null;}
+  const mine=rentedAt(p.id),data=marketData(p);
+  if(!data)return;
+  const sg=new THREE.Group();p.g.add(sg);p.stallG=sg;
+  const owner=mine?mpName():(MKTR.get(p.id)||{}).n||"a player";
+  /* the market's name floats over the entrance — YOUR name for your deals! */
+  const title=(data.name&&String(data.name).trim())?String(data.name).trim():owner+"'s Marketing Plot";
+  const lbl=mpMakeLabel("\u{1F3EA} "+title.slice(0,22));
+  lbl.scale.set(22,5.5,1);lbl.position.set(p.x,p.y+9,p.z+46);sg.add(lbl);
+  /* optional building: walls + a doorway all around the plot */
+  if(data.b){
+    const wm=new THREE.MeshLambertMaterial({color:0xdfe3ea});
+    for(const[bw,bd,px,pz]of[[98,0.6,0,-48.7],[0.6,98,-48.7,0],[0.6,98,48.7,0],[42,0.6,-28,48.7],[42,0.6,28,48.7]]){
+      const wl=new THREE.Mesh(new THREE.BoxGeometry(bw,5,bd),wm);
+      wl.position.set(p.x+px,p.y+2.5,p.z+pz);wl.castShadow=true;sg.add(wl);
+    }
+    const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,1.2,0.7),wm);
+    hdr.position.set(p.x,p.y+4.4,p.z+48.7);sg.add(hdr);
+  }
+  const woodM=new THREE.MeshLambertMaterial({color:0x8a6f4d}),legM=new THREE.MeshLambertMaterial({color:0x6f4e37});
+  (data.items||[]).forEach((it,i)=>{
+    const sl=mktSlot(i),tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y+0.24;
+    if(it.k==="c"){
+      /* display case: a pedestal with a glass box — look, don't touch! */
+      const ped=new THREE.Mesh(new THREE.BoxGeometry(1.6,1,1.6),woodM);ped.position.set(tx,ty+0.5,tz);sg.add(ped);
+      const glass=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.1,1.2),new THREE.MeshLambertMaterial({color:0x9fd8ff,transparent:true,opacity:0.3}));
+      glass.position.set(tx,ty+1.6,tz);sg.add(glass);
+      addMktGood(sg,it,tx,ty+1.15,tz,0.3);
+      const l2=mpMakeLabel(mktItemName(it)+" — just LOOK!");
+      l2.scale.set(10,2.5,1);l2.position.set(tx,ty+3.4,tz);sg.add(l2);
+    }else{
+      /* LONG TABLE with the goods on top + a floating price sign */
+      const top=new THREE.Mesh(new THREE.BoxGeometry(7,0.24,2.4),woodM);top.position.set(tx,ty+1,tz);top.castShadow=true;sg.add(top);
+      [[-3.1,-0.9],[3.1,-0.9],[-3.1,0.9],[3.1,0.9]].forEach(o=>{
+        const lg=new THREE.Mesh(new THREE.BoxGeometry(0.18,1,0.18),legM);
+        lg.position.set(tx+o[0],ty+0.5,tz+o[1]);sg.add(lg);
+      });
+      for(let n=0;n<Math.min(it.q,6);n++)addMktGood(sg,it,tx-2.5+n*1,ty+1.12,tz,0.26);
+      const bon=(it.bb&&it.bf)?" · "+it.bb+"+"+it.bf+" FREE!":"";
+      const l2=mpMakeLabel(it.q>0?mktItemName(it)+" ×"+it.q+" — $"+fmtMoney(it.p)+bon:mktItemName(it)+" — NO STOCK");
+      l2.scale.set(13,3.2,1);l2.position.set(tx,ty+3.6,tz);sg.add(l2);
+    }
+  });
+}
+window.onMarketBuilt=p=>{if(rentedAt(p.id)&&MKT[p.id])renderMarket(p);};
+function mktRegPath(id){return "/markets/"+mpWorldKey()+"/"+fbKey(id);}
+async function syncMarket(id){
+  if(!SERVER_READY)return;
+  const d=MKT[id];if(!d)return;
+  const base={t:myToken(),n:mpName(),ts:Date.now()};
+  const body=Object.assign({},base);
+  const s=JSON.stringify(d);
+  if(s.length<=6000)body.mkt=s;
+  if(!await fbPut(claimPath(id),body))await fbPut(claimPath(id),base);   // old database rules: at least keep the claim
+  const co=String(id).slice(2).split(",").map(Number);
+  fbPut(mktRegPath(id),{n:(d.name||"").slice(0,24),o:mpName(),x:co[0]||0,z:co[1]||0,ts:Date.now()});
+}
+async function fetchMarketFresh(id){
+  const g2=await fbGet(claimPath(id));
+  if(g2.ok&&g2.data&&!g2.data.free&&g2.data.t!==myToken()){
+    let d={b:0,name:"",items:[]};
+    if(typeof g2.data.mkt==="string"){try{const q=JSON.parse(g2.data.mkt);if(q&&typeof q==="object")d=q;}catch(e){}}
+    d.items=Array.isArray(d.items)?d.items:[];
+    MKTR.set(id,{n:g2.data.n||"a player",d});
+    return MKTR.get(id);
+  }
+  MKTR.delete(id);
+  return null;
+}
+function openMarket(p){
+  if(rentedAt(p.id)){openMarketOwner(p);return;}
+  (async()=>{
+    const rm=await fetchMarketFresh(p.id);
+    renderMarket(p);
+    if(rm)openMarketShop(p,rm);
+    else openMarketDesk(p);
+  })();
+}
+function openMarketDesk(p){
+  showDest("\u{1F3EA} MARKETING PLOT (100×100 m) — open your own market!",[
+    {label:"\u{1F4B0} BUY — $"+fmtMoney(MKT_PRICE)+" (yours forever)",value:"own"},
+    {label:"\u{1F511} RENT — $"+fmtMoney(MKT_RENT)+" per day",value:"rent"},
+    {label:"❌ Cancel",value:"cancel"}
+  ],async mode=>{
+    if(mode==="cancel")return;
+    const price=mode==="own"?MKT_PRICE:MKT_RENT;
+    const claim=await checkClaim(p.id);
+    if(claim.res==="taken"){toast("\u{1F512} Sorry — this plot is already "+claim.name+"'s market!");return;}
+    if(claim.res!=="mine"&&MONEY.v<price){toast("\u{1F4B0} You need $"+fmtMoney(price)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
+    showDest("\u{1F9F1} Do you want a BUILDING on your plot?",[
+      {label:"\u{1F3EC} YES — walls and a door all around",value:1},
+      {label:"\u{1F33E} NO — leave it open-air",value:0},
+      {label:"❌ Cancel",value:"x"}
+    ],async b=>{
+      if(b==="x")return;
+      if(claim.res!=="mine"){
+        if(!await writeClaim(p.id)){toast("\u{1F512} Another player claimed it just before you!");return;}
+        MONEY.v-=price;updateMoneyUI();profileSave(true);
+      }
+      const ent={id:p.id,x:p.x,z:p.z,ry:p.y,mode:(claim.res==="mine"||mode==="own")?"own":"rent",rate:mode==="rent"?MKT_RENT:0,
+        label:"\u{1F3EA} MARKETING PLOT at ("+Math.round(p.x)+", "+Math.round(p.z)+")"+(mode==="rent"&&claim.res!=="mine"?" · $"+fmtMoney(MKT_RENT)+"/day":"")};
+      if(mode==="rent"&&claim.res!=="mine")ent.paid=MKT_RENT;
+      RENT.list.push(ent);
+      MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
+      MKT[p.id].b=b?1:0;
+      saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+      toast(mode==="own"
+        ?"\u{1F389}\u{1F3EA} The MARKETING PLOT is yours FOREVER — press T on it to set up your tables!"
+        :"\u{1F511}\u{1F3EA} Plot rented for $"+fmtMoney(MKT_RENT)+"/day — press T on it to set up your tables!");
+    });
+  });
+}
+function openMarketOwner(p){
+  const d=MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
+  const opts=[];
+  if(d.items.length<12){
+    opts.push({label:"\u{1FA91} Place a LONG TABLE — sell dumplings, butter or food",value:"table"});
+    opts.push({label:"\u{1F5C4} Place a DISPLAY CASE — show something off (look, don't touch)",value:"case"});
+  }else opts.push({label:"(Your plot is full — 12 spots max. Remove something first!)",value:"x"});
+  opts.push({label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"});
+  opts.push({label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"});
+  if(d.items.length)opts.push({label:"\u{1F5D1} Remove an item (leftover stock comes back)",value:"rm"});
+  opts.push({label:"❌ Close",value:"x"});
+  showDest("\u{1F3EA} "+(d.name||"Your Marketing Plot")+" — market editor",opts,v=>{
+    if(v==="table")mktPickType(p,"t");
+    else if(v==="case")mktPickType(p,"c");
+    else if(v==="name"){
+      const s=prompt("Name your market! (max 20 letters — this is what everyone sees, like SUPER DEAL)",d.name||"");
+      if(s===null)return;
+      d.name=s.trim().slice(0,20);
+      saveMkt();syncMarket(p.id);renderMarket(p);
+      toast(d.name?"\u{1F3F7} Your market is now called \""+d.name+"\"!":"\u{1F3F7} Name cleared — it shows your player name again.");
+    }else if(v==="bld"){
+      d.b=d.b?0:1;saveMkt();syncMarket(p.id);renderMarket(p);
+      toast(d.b?"\u{1F3EC} Building added — walls and a door around your plot!":"\u{1F33E} Building removed — open-air market!");
+    }else if(v==="rm")mktRemoveItem(p);
+  });
+}
+function mktPickType(p,kind){
+  showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
+    {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
+    {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
+    {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
+    {label:"❌ Cancel",value:"x"}
+  ],ty=>{if(ty!=="x")mktPickItem(p,kind,ty);});
+}
+function mktGroups(ty){
+  const map=new Map();
+  if(ty==="food"){
+    MCD.pack.forEach(f=>{const k=f[0];const e=map.get(k)||{n:0,lab:f[0],fh:f[1],ty};e.n++;map.set(k,e);});
+  }else{
+    const coll=ty==="dump"?DUMP.owned:BUTTER.owned;
+    coll.forEach(d2=>{
+      const k=d2.color+"|"+(d2.glitter?1:0)+"|"+(d2.size||"");
+      const e=map.get(k)||{n:0,lab:d2.color,hex:d2.hex,gl:d2.glitter?1:0,sz:d2.size||"",ty};
+      e.n++;map.set(k,e);
+    });
+  }
+  return[...map.values()].sort((a,b)=>b.n-a.n);
+}
+function mktTakeStock(ty,grp,n){
+  if(ty==="food"){
+    let left=n;
+    for(let i=MCD.pack.length-1;i>=0&&left>0;i--)if(MCD.pack[i][0]===grp.lab){MCD.pack.splice(i,1);left--;}
+    renderPack();
+    return n-left;
+  }
+  const coll=ty==="dump"?DUMP.owned:BUTTER.owned;
+  let left=n;
+  for(let i=coll.length-1;i>=0&&left>0;i--){
+    const d2=coll[i];
+    if(d2.color===grp.lab&&(d2.glitter?1:0)===(grp.gl||0)&&(d2.size||"")===(grp.sz||"")){
+      if(HOLD.d===d2){HOLD.d=null;HOLD.mesh.visible=false;}
+      coll.splice(i,1);left--;
+    }
+  }
+  renderDump();
+  return n-left;
+}
+function mktGiveGoods(it,n){
+  for(let i=0;i<n;i++){
+    if(it.ty==="dump")DUMP.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl});
+    else if(it.ty==="butter")BUTTER.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl,size:it.sz||"norm"});
+    else MCD.pack.push([it.lab,it.fh||10]);
+  }
+  renderDump();renderPack();saveGame();
+}
+function mktPickItem(p,kind,ty){
+  const groups=mktGroups(ty).slice(0,10);
+  if(!groups.length){toast("You don't have any of those yet — get some first!");return;}
+  const opts=groups.map((g2,i)=>({label:(ty==="food"?g2.lab:mktItemName(g2))+" — you have "+g2.n,value:i}));
+  opts.push({label:"❌ Cancel",value:"x"});
+  showDest("Pick what goes on the "+(kind==="t"?"table":"display"),opts,v=>{
+    if(typeof v!=="number")return;
+    const grp=groups[v],d=MKT[p.id];
+    if(kind==="c"){
+      mktTakeStock(ty,grp,1);
+      d.items.push({k:"c",ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
+      saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+      toast("\u{1F5C4} Your "+(ty==="food"?grp.lab:mktItemName(grp))+" is on display — everyone can admire it (but nobody can touch)!");
+      return;
+    }
+    const qs=prompt("How many go on the table? (1 - "+grp.n+")","1");
+    if(qs===null)return;
+    const q=Math.floor(parseInt(qs,10));
+    if(!(q>=1)||q>grp.n){toast("Type a number from 1 to "+grp.n+"!");return;}
+    const ps=prompt("Price per item? ($1 - $1,000,000)","25");
+    if(ps===null)return;
+    const pr=Math.floor(parseInt(ps,10));
+    if(!(pr>=1)||pr>1000000){toast("Type a price from 1 to 1000000!");return;}
+    let bb=0,bf=0;
+    const bs=prompt("BONUS deal? Type it like 1+1 (= buy 1, get 1 FREE) or 3+1 — or leave empty for no bonus","");
+    if(bs&&bs.trim()){
+      const m2=bs.trim().match(/^(\d+)\s*\+\s*(\d+)/);
+      if(m2){bb=Math.min(99,parseInt(m2[1],10)||0);bf=Math.min(99,parseInt(m2[2],10)||0);}
+      if(!bb||!bf){bb=0;bf=0;toast("Bonus skipped — next time type it like 1+1.");}
+    }
+    mktTakeStock(ty,grp,q);
+    d.items.push({k:"t",ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q,p:pr,bb,bf});
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
+  });
+}
+function mktRemoveItem(p){
+  const d=MKT[p.id];
+  const opts=d.items.map((it,i)=>({label:(it.k==="c"?"\u{1F5C4} ":"\u{1FA91} ")+mktItemName(it)+(it.k==="t"?" (×"+it.q+" left)":""),value:i}));
+  opts.push({label:"❌ Cancel",value:"x"});
+  showDest("\u{1F5D1} Remove which item? (leftover stock comes back to you)",opts,v=>{
+    if(typeof v!=="number")return;
+    const it=d.items.splice(v,1)[0];
+    if(it&&it.q>0)mktGiveGoods(it,it.q);
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("\u{1F5D1} Removed"+(it&&it.q>0?" — "+it.q+" came back to your collection!":"!"));
+  });
+}
+function openMarketShop(p,rm){
+  const d=rm.d,owner=rm.n;
+  const title=(d.name&&String(d.name).trim())?String(d.name).trim():owner+"'s Marketing Plot";
+  const opts=[];
+  (d.items||[]).forEach((it,i)=>{
+    if(it.k!=="t")return;
+    opts.push(it.q>0
+      ?{label:"\u{1F6D2} "+mktItemName(it)+" — $"+fmtMoney(it.p)+" each (×"+it.q+" left"+(it.bb?" · "+it.bb+"+"+it.bf+" FREE":"")+")",value:i}
+      :{label:"❌ "+mktItemName(it)+" — NO STOCK",value:"x"});
+  });
+  if(!opts.length)opts.push({label:"(No tables here yet — come back later!)",value:"x"});
+  opts.push({label:"❌ Leave",value:"x"});
+  showDest("\u{1F3EA} "+title+" — by "+owner,opts,v=>{
+    if(typeof v!=="number")return;
+    const it=d.items[v];
+    if(!it||it.q<=0)return;
+    const deal=it.bb?"\nBONUS: every "+it.bb+" you buy = "+it.bf+" extra for FREE!":"";
+    const qs=prompt("How many do you want to BUY at $"+fmtMoney(it.p)+" each?"+deal+"\n(stock: "+it.q+")","1");
+    if(qs===null)return;
+    let n=Math.floor(parseInt(qs,10));
+    if(!(n>=1)){toast("Type a normal number, like 2!");return;}
+    if(n>it.q)n=it.q;
+    let free=(it.bb&&it.bf)?Math.floor(n/it.bb)*it.bf:0;
+    if(n+free>it.q)free=it.q-n;
+    const total=n*it.p;
+    (async()=>{
+      const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+v+"|"+(n+free)).slice(0,80)},true);
+      if(!ok)return;
+      it.q-=n+free;
+      mktGiveGoods(it,n+free);
+      renderMarket(p);
+      toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(it)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
+    })();
+  });
+}
+/* walking near someone's market loads their stalls & signs */
+let _mvT=0;
+function updateMarketVisit(dt){
+  _mvT-=dt;if(_mvT>0)return;_mvT=2;
+  if(S.world!=="earth"||!SERVER_READY)return;
+  const p=nearMarketPlot();
+  if(!p||p.visitDone||rentedAt(p.id))return;
+  p.visitDone=true;
+  fetchMarketFresh(p.id).then(rm=>{
+    if(offScene(p.g))return;
+    renderMarket(p);
+    if(rm)toast("\u{1F3EA} Welcome to "+((rm.d.name&&String(rm.d.name).trim())||rm.n+"'s Marketing Plot")+" — press T to shop!");
+  });
+}
+/* 🔎 find player markets by name — SUPER DEAL, Notch's market, anything */
+async function openMarketSearch(filter){
+  if(!SERVER_READY){toast("\u{1F534} Searching markets needs the online database.");return;}
+  toast("\u{1F50E} Looking for player markets...");
+  const g2=await fbGet("/markets/"+mpWorldKey());
+  const all=[];
+  if(g2.ok&&g2.data)for(const k of Object.keys(g2.data)){
+    const m2=g2.data[k];
+    if(!m2||typeof m2.x!=="number"||typeof m2.z!=="number")continue;
+    all.push({n:(typeof m2.n==="string"&&m2.n.trim())?m2.n.trim():(m2.o||"a player")+"'s Marketing Plot",
+      o:m2.o||"?",x:m2.x,z:m2.z,d:Math.hypot(m2.x-player.x,m2.z-player.z)});
+  }
+  let list=all.sort((a,b)=>a.d-b.d);
+  if(filter)list=list.filter(m2=>(m2.n+" "+m2.o).toLowerCase().includes(filter.toLowerCase()));
+  const opts=list.slice(0,10).map((m2,i)=>({label:"\u{1F3EA} "+m2.n+" (by "+m2.o+") — "+fmtDist(m2.d),value:i}));
+  if(!opts.length)opts.push({label:filter?"No market called \""+filter+"\" found!":"No player markets exist yet — open the FIRST one!",value:"x"});
+  opts.push({label:"\u{1F50E} Search by name...",value:"s"});
+  opts.push({label:"❌ Close",value:"x"});
+  showDest("\u{1F3EA} Player markets"+(filter?" — \""+filter+"\"":""),opts,v=>{
+    if(v==="s"){const s=prompt("Market or player name to search for:");if(s&&s.trim())openMarketSearch(s.trim());return;}
+    if(typeof v!=="number")return;
+    const m2=list[v];
+    showDest("\u{1F3EA} "+m2.n+" — "+fmtDist(m2.d)+" away",[
+      {label:"⚡ TELEPORT there",value:"tp"},
+      {label:"\u{1F9ED} ROUTE — drive there yourself",value:"route"},
+      {label:"❌ Close",value:"x"}
+    ],a=>{
+      if(a==="tp"){switchWorld("earth");teleportTo(m2.x,m2.z+56);}
+      else if(a==="route"){setRoute(m2.x,m2.z+56);toast("\u{1F9ED} Route set to "+m2.n+" — follow the blue line!");}
+    });
   });
 }
 /* rent is charged every new game day — run out of money and you lose the place */
@@ -3578,6 +3937,12 @@ function updateRent(){
     else{
       RENT.list.splice(i,1);
       releaseClaim(rm.id);
+      if(String(rm.id).startsWith("K:")){   // lost market: your stock comes back at least
+        const md=MKT[rm.id];
+        if(md)(md.items||[]).forEach(it=>{if(it.q>0)mktGiveGoods(it,it.q);});
+        delete MKT[rm.id];saveMkt();
+        if(SERVER_READY)fbPut(mktRegPath(rm.id),null);
+      }
       toast("\u{1F631} You couldn't pay the rent — you LOST "+rm.label+"!");
     }
   }
@@ -3603,7 +3968,7 @@ function updateRent(){
   }
   /* owned apartments earn tenant money every day */
   let income=0;
-  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:")&&!String(rm.id).startsWith("P:")&&!String(rm.id).startsWith("H:"))income+=25*delta;
+  for(const rm of RENT.list)if(rm.mode==="own"&&!String(rm.id).startsWith("M:")&&!String(rm.id).startsWith("P:")&&!String(rm.id).startsWith("H:")&&!String(rm.id).startsWith("K:"))income+=25*delta;
   if(income>0){
     MONEY.v+=income;
     toast("\u{1F3E8} Your apartments earned $"+fmtMoney(income)+" from tenants!");
@@ -5185,7 +5550,18 @@ async function checkPayments(){
       if(!p||typeof p.amt!=="number"||p.amt<=0)continue;
       fetch(SERVER_API+"/payments/"+k+"/"+id+".json",{method:"DELETE"}).catch(()=>{});
       addMoney(Math.floor(p.amt));
-      if(typeof p.d==="string"&&p.d.startsWith("INV|")){
+      if(typeof p.d==="string"&&p.d.startsWith("MKT|")){
+        /* someone bought from my MARKETING PLOT — take the stock off that table */
+        const[,mid,idxS,nS]=p.d.split("|");
+        const md=MKT[mid],idx=parseInt(idxS,10),n2=Math.max(1,parseInt(nS,10)||1);
+        if(md&&md.items[idx]){
+          md.items[idx].q=Math.max(0,(md.items[idx].q||0)-n2);
+          saveMkt();syncMarket(mid);
+          const mp2=marketPlots.find(q=>q.id===mid);
+          if(mp2)renderMarket(mp2);
+          toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought "+n2+"× "+mktItemName(md.items[idx])+" at your market — $"+fmtMoney(Math.floor(p.amt))+" for you!");
+        }else toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought from your market — $"+fmtMoney(Math.floor(p.amt))+"!");
+      }else if(typeof p.d==="string"&&p.d.startsWith("INV|")){
         /* a WORLD INVITE rides the inbox: INV|kind|worldname */
         const[,kind,wname]=p.d.split("|");
         const mc=kind==="mc";
@@ -5424,6 +5800,9 @@ function tryCall(){
     if(by){openSell();return;}
     const bby=nearButterBuyer();
     if(bby){openSell("butter");return;}
+    /* marketing plots: claim it, edit your stalls, or shop at someone else's */
+    const mk=nearMarketPlot();
+    if(mk){openMarket(mk);return;}
     /* the dumpling museum */
     if(nearMuseum()){openMuseum();return;}
     /* island fun: the beach shop & the buried-treasure X */
@@ -7069,6 +7448,21 @@ function drawMap(){
         }
       }
     }
+    /* marketing plots every ~3 km */
+    {
+      const ki0=Math.floor((mapView.cx-halfW-2300)/MKSP),ki1=Math.ceil((mapView.cx+halfW+100)/MKSP);
+      const kj0=Math.floor((mapView.cz-halfH-800)/MKSP),kj1=Math.ceil((mapView.cz+halfH+100)/MKSP);
+      for(let i=ki0;i<=ki1;i++)for(let j=kj0;j<=kj1;j++){
+        const s=marketPlotSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#c084fc",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#e3ccff";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F3EA}",px,py-9);
+        }
+      }
+    }
     /* stunt parks every ~3.6 km */
     const si0=Math.floor((mapView.cx-halfW-1900)/3600),si1=Math.ceil((mapView.cx+halfW+100)/3600);
     const sj0=Math.floor((mapView.cz-halfH-700)/3600),sj1=Math.ceil((mapView.cz+halfH+100)/3600);
@@ -7515,6 +7909,14 @@ function mapEntries(q){
     ["\u{1F3E1} Nearest FAMILY HOUSE for sale",()=>{
       switchWorld("earth");
       goNearest("\u{1F3E1} Nearest family house",nearestSpot(familyHouseSpot,FHSP,510,1710,5),9,18);
+    }],
+    ["\u{1F3EA} Nearest MARKETING PLOT",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F3EA} Nearest marketing plot",nearestSpot(marketPlotSpot,MKSP,2070,630,4),0,56);
+    }],
+    ["\u{1F50E} SEARCH players' markets (by name!)",()=>{
+      switchWorld("earth");
+      openMarketSearch();
     }],
     ["⛽ Nearest gas station",()=>{
       switchWorld("earth");
@@ -8005,8 +8407,16 @@ function updateHint(){
           if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
           else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
           else{
-            const mn=nearMansion();
-            if(mn&&rentedAt(mn.id)){txt="\u{1F6E0} Your mansion — press T to EDIT it (furniture + garden shop!)";showT=true;}
+            const mk=nearMarketPlot();
+            if(mk){
+              txt=rentedAt(mk.id)?"\u{1F3EA} YOUR market — press T to stock tables, name it & more"
+                :MKTR.has(mk.id)?"\u{1F3EA} "+((MKTR.get(mk.id).d.name&&String(MKTR.get(mk.id).d.name).trim())||MKTR.get(mk.id).n+"'s market")+" — press T to shop!"
+                :"\u{1F3EA} MARKETING PLOT — press T: BUY $"+fmtMoney(MKT_PRICE)+" or RENT $"+fmtMoney(MKT_RENT)+"/day (or shop if it's taken)";
+              showT=true;
+            }else{
+              const mn=nearMansion();
+              if(mn&&rentedAt(mn.id)){txt="\u{1F6E0} Your mansion — press T to EDIT it (furniture + garden shop!)";showT=true;}
+            }
           }
         }
       }
@@ -10178,7 +10588,22 @@ const UPDATE_PAGES=[
 <li>Brighter, deeper <b>clear-coat paint</b> that reflects the sky more.</li></ul>
 <h4>\u{1F95F}\u{1F9C8} SMART BUYER FILTERS</h4><ul>
 <li>At the dumpling &amp; butter buyers, filters now <b>hide everything that doesn't match</b> — and they COMBINE: pick a color AND glitter, and at the butter buyer also a size (small / \u{1F538} medium / \u{1F31F} mega) at once.</li>
-<li>Whatever matches gets selected for you — one click on \u{1F4B5} Sell and it's money.</li></ul>`}
+<li>Whatever matches gets selected for you — one click on \u{1F4B5} Sell and it's money.</li></ul>`},
+{t:"Round 34 — \u{1F3EA} MARKETING PLOTS: trade with real players!",h:`
+<h4>\u{1F3EA} YOUR OWN MARKET — every ~3 km</h4><ul>
+<li>Huge <b>100×100 m MARKETING PLOTS</b> all over the map (\u{1F3EA} on the map): <b>BUY $80K</b> or <b>RENT $100/day</b>.</li>
+<li>When you claim one you choose: <b>\u{1F3EC} a building</b> (walls + a door all around) or <b>\u{1F33E} open-air</b> — and you can switch later.</li>
+<li><b>Name your market!</b> Instead of "Notch's Marketing Plot" the big sign can say <b>SUPER DEAL</b> — or anything you like.</li></ul>
+<h4>\u{1FA91} LONG TABLES &amp; \u{1F5C4} DISPLAY CASES</h4><ul>
+<li>Press T on your plot for the special market editor with <b>LONG TABLES</b> and <b>DISPLAY CASES</b>.</li>
+<li>A table sells <b>dumplings, butter squishies or food</b>: pick the item, type the amount (max = what you own — it leaves your collection), set a price per item...</li>
+<li>...and add a <b>BONUS deal</b> like <b>1+1</b> (buy 1, get 1 FREE) or 3+1 — the sign shows it to everyone!</li>
+<li>The table shows the goods, the stock and the price. Sold out? The sign says <b>NO STOCK</b> and you can remove it (leftover stock always comes back to you).</li>
+<li>A display case shows off ONE item — everyone can look, nobody can touch.</li></ul>
+<h4>\u{1F6D2} SHOPPING AT OTHER PLAYERS</h4><ul>
+<li>Walk onto someone's plot and their whole market loads — press T to buy! Stock drops with every sale and the money lands straight in the owner's inbox (works even while they're offline).</li>
+<li>On the \u{1F5FA} map: <b>\u{1F3EA} Nearest MARKETING PLOT</b> and <b>\u{1F50E} SEARCH players' markets</b> — type a name like SUPER DEAL and teleport or route straight to it.</li></ul>
+<li>⚠️ Server owners: the Firebase rules need a small update for markets — see FIREBASE-SETUP.md (new "mkt" field + "markets" section).</li>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -10258,7 +10683,7 @@ function frame(now){
     });
   }
   updateRocket(dt);updateUfos(dt);updateMc(dt);
-  updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);updateFishing(dt);
+  updateJob(dt);updatePet(dt);updateRaceMP();updateVisit(dt);updateMarketVisit(dt);updateFishing(dt);
   updateHunger(dt);updateMcd(dt);
   updateSiren(dt);updateTouch(dt);
   updateSky(player.x,player.z);

@@ -1473,16 +1473,30 @@ function familyHouse(x,z,rand,parent,baseY){
   const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.5,0.3,d-0.5),new THREE.MeshLambertMaterial({color:0xcabfa6}));
   floor.position.set(x,baseY+0.15,z);parent.add(floor);
   decks.push({g:parent,x,z,hw:w/2-0.4,hd:d/2-0.4,tops:[baseY+0.3],ramp:null});
-  /* gabled roof + brick chimney */
+  /* gabled roof: the two panels now really MEET at the ridge (no more floating
+     glitch), with triangle attic walls closing the ends + a brick chimney */
   const roofM=roofMats[Math.floor(rand()*roofMats.length)];
+  const rise=2.7,run=d/2+1,ang=Math.atan(rise/run),slen=Math.hypot(rise,run)+0.4;
   for(const s of[-1,1]){
-    const p=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+2,0.3,d*0.62),roofM));
-    p.position.set(x,baseY+H+1.35,z+s*d*0.245);p.rotation.x=-s*0.42;parent.add(p);parts.push(p);
+    const p=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+2,0.26,slen),roofM));
+    p.position.set(x,baseY+H+rise/2-0.05,z+s*run/2);
+    p.rotation.x=s*ang;
+    parent.add(p);parts.push(p);
   }
-  const ridge=new THREE.Mesh(new THREE.BoxGeometry(w+2,0.3,0.9),roofM);
-  ridge.position.set(x,baseY+H+2.65,z);parent.add(ridge);parts.push(ridge);
+  const ridge=new THREE.Mesh(new THREE.BoxGeometry(w+2,0.24,1),roofM);
+  ridge.position.set(x,baseY+H+rise,z);parent.add(ridge);parts.push(ridge);
+  {
+    const tri=new THREE.Shape();tri.moveTo(-d/2,0);tri.lineTo(d/2,0);tri.lineTo(0,rise);tri.closePath();
+    const tgeo=new THREE.ExtrudeGeometry(tri,{depth:0.35,bevelEnabled:false});
+    for(const s of[-1,1]){
+      const gw=new THREE.Mesh(tgeo,mat);
+      gw.rotation.y=-Math.PI/2;
+      gw.position.set(x+s*(w/2)+(s<0?0.35:0),baseY+H,z);
+      parent.add(gw);parts.push(gw);
+    }
+  }
   const chim=new THREE.Mesh(new THREE.BoxGeometry(1,2.6,1),new THREE.MeshLambertMaterial({color:0x9c5a4a}));
-  chim.position.set(x+w/4,baseY+H+2.4,z-d/4);parent.add(chim);parts.push(chim);
+  chim.position.set(x+w/4,baseY+H+2.6,z-d/4);parent.add(chim);parts.push(chim);
   /* framed windows along the front + the door */
   const wm=houseWinMat();
   [-w/4-3,-w/4+3,w/4-3,w/4+3].forEach(px2=>{
@@ -1547,6 +1561,70 @@ function familyHouse(x,z,rand,parent,baseY){
   mansions.push(man);
   if(window.onMansionBuilt)onMansionBuilt(man);
   return rec;
+}
+/* ---- MARKETING PLOTS: a 100x100 m trading plot every ~3 km ----
+   BUY $80K or RENT $100/day, then stock LONG TABLES with your dumplings,
+   butter squishies & food and sell them to other players! */
+const marketPlots=[];
+const MKSP=3000;
+let _mktSign=null;
+function mktSignMat(){
+  if(_mktSign)return _mktSign;
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");c.fillStyle="#7a3ce8";c.fillRect(0,0,512,96);
+  c.fillStyle="#fff";c.font="bold 44px Segoe UI";c.textAlign="center";c.fillText("\u{1F3EA} MARKETING PLOT",256,44);
+  c.font="bold 26px Segoe UI";c.fillText("T: BUY $80K · RENT $100/day",256,80);
+  _mktSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _mktSign;
+}
+function marketPlotSpot(i,j){
+  const x=Math.round((i*MKSP+2070-90)/120)*120+90;   // block-centered like the MEGA MART
+  const z=Math.round((j*MKSP+630-90)/120)*120+90;
+  if(Math.abs(x)<320&&Math.abs(z)<320)return null;
+  if(Math.abs(x-170)<70||Math.abs(z+170)<70)return null;
+  if(inAirport(x,z)||inAirport(x-50,z)||inAirport(x+50,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  for(const[ox2,oz2]of[[-45,-45],[45,-45],[-45,45],[45,45]]){
+    const ch=baseH(x+ox2,z+oz2);
+    if(ch<-1||Math.abs(ch-h)>3.5)return null;
+  }
+  if(nearestRail(x,z).d<70)return null;
+  if(Math.abs(x-curveXC(x,z))<70||Math.abs(z-curveZC(x,z))<70)return null;
+  if(rocketPadDist(x,z)<110)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(hs.x-x)<130&&Math.abs(hs.z-z)<110)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(ms.x-x)<130&&Math.abs(ms.z-z)<110)return null;
+  const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh&&Math.abs(fh.x-x)<130&&Math.abs(fh.z-z)<110)return null;
+  return{x,z};
+}
+function buildMarketPlot(x,z,g){
+  const y=terrainH(x,z);
+  /* the 100 x 100 m concrete trading pad */
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(100,0.24,100),new THREE.MeshLambertMaterial({color:0xb9b2a6}));
+  pad.position.set(x,y+0.12,z);pad.receiveShadow=true;g.add(pad);
+  /* low purple curb all around + corner pillars */
+  const curbM=new THREE.MeshLambertMaterial({color:0x7a3ce8});
+  for(const[cw,cd,px,pz]of[[100,0.5,0,-49.8],[100,0.5,0,49.8],[0.5,100,-49.8,0],[0.5,100,49.8,0]]){
+    const cb=new THREE.Mesh(new THREE.BoxGeometry(cw,0.4,cd),curbM);
+    cb.position.set(x+px,y+0.42,z+pz);g.add(cb);
+  }
+  for(const sx of[-49,49])for(const sz of[-49,49]){
+    const pl=new THREE.Mesh(new THREE.BoxGeometry(0.9,3.4,0.9),curbM);
+    pl.position.set(x+sx,y+1.9,z+sz);g.add(pl);
+  }
+  /* the big sign at the front */
+  for(const px of[-4.4,4.4]){
+    const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,6),poleMat);
+    sp.position.set(x+px,y+3,z+52);g.add(sp);
+  }
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(10.5,2),mktSignMat());
+  sg.position.set(x,y+5.4,z+52);g.add(sg);
+  const p={g,x,z,y,id:"K:"+Math.round(x)+","+Math.round(z),stallG:null};
+  marketPlots.push(p);
+  if(window.onMarketBuilt)onMarketBuilt(p);
 }
 /* ---- dumpling buyers: a friendly buyer at the roadside every ~500 m ---- */
 const buyers=[];
@@ -3192,6 +3270,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(familyHouse(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* a MARKETING PLOT every ~3 km */
+  for(let i=Math.floor((x0-2300)/MKSP);i<=Math.ceil((x1+100)/MKSP);i++)
+  for(let j=Math.floor((z0-800)/MKSP);j<=Math.ceil((z1+100)/MKSP);j++){
+    const sp=marketPlotSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildMarketPlot(sp.x,sp.z,g);
   }
   /* VOLCANOES: built by the chunk with the crater */
   for(let i=Math.floor((x0-4350)/VOLC);i<=Math.ceil((x1-4050)/VOLC);i++)
