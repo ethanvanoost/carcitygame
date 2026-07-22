@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=82">
+<link rel="stylesheet" href="style.css?v=83">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -126,7 +126,7 @@
     <button class="btn" id="bCompass">&#129517; Compass</button>
     <button class="btn" id="bAch">&#127942;</button>
     <button class="btn" id="bPack">&#127890; Food</button>
-    <button class="btn" id="bDump">&#129375; Squishies</button>
+    <button class="btn" id="bDump">&#127873; Unbox</button>
     <button class="btn" id="bMoney">&#128176; Money</button>
     <button class="btn" id="bRooms">&#128719; Rooms</button>
     <button class="btn" id="bFriends">&#11088; Friends</button>
@@ -275,10 +275,11 @@
 
 <div class="modal" id="dumpModal">
   <div class="box">
-    <h2>&#129375; Squishies</h2>
+    <h2>&#127873; Unbox</h2>
     <div class="seg mini">
       <button id="dumpTabD" class="on">&#129375; Dumplings</button>
-      <button id="dumpTabB">&#129480; Butter squishies</button>
+      <button id="dumpTabB">&#129480; Butter</button>
+      <button id="dumpTabP">&#128241; Phones</button>
     </div>
     <div id="dumpInfo" style="margin-top:8px"></div>
     <button class="btn warn" id="dumpOpen" style="margin-top:10px;width:100%">&#129375; Open a dumpling!</button>
@@ -376,6 +377,29 @@
     <input type="file" id="midiFile" accept=".mid,.midi" style="display:none">
     <button class="btn warn" id="pianoCrowd" style="width:100%;margin-top:10px;display:none">&#127917; Play piano &mdash; call the crowd!</button>
     <button class="btn close" id="pianoClose">Close</button>
+  </div>
+</div>
+
+<div class="modal" id="cbModal">
+  <div class="box">
+    <h2 style="color:#3fa2ff">CoolBlue <span style="color:#ff6a00">&#128241; phones</span></h2>
+    <div style="font-size:13px;color:var(--dim)">Every box is a SURPRISE phone &mdash; iPhone, Google Pixel or Samsung Galaxy, in a random color. &#127752; Rainbow is the rarest!</div>
+    <button class="btn warn" id="cbBuy" style="width:100%;margin-top:12px">&#128241; Buy a phone box &mdash; $600 to $1,500</button>
+    <div id="cbMsg" style="margin-top:8px;font-size:13px;color:var(--acc2)"></div>
+    <button class="btn close" id="cbClose">Done shopping</button>
+  </div>
+</div>
+
+<button id="bViewPhone" style="display:none;position:fixed;right:14px;bottom:150px;z-index:40;padding:10px 16px;border-radius:12px;border:2px solid #ff6a00;background:#1d7fd6;color:#fff;font-weight:800;font-size:14px;cursor:pointer">&#128241; View Phone</button>
+
+<div class="modal" id="phoneModal">
+  <div class="box" style="max-width:340px;width:min(92vw,340px);background:#0b0f16;border:3px solid #2a3448;border-radius:28px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#8ea2c0;padding:0 4px">
+      <span id="phClock">12:00</span><span id="phModelTop" style="overflow:hidden;white-space:nowrap;max-width:55%"></span><span>&#128246; &#128267;</span>
+    </div>
+    <div id="phScreen" style="min-height:330px;margin-top:8px;background:#101826;border-radius:16px;padding:10px;color:#e8edf7;font-size:14px"></div>
+    <button class="btn" id="phHome" style="width:100%;margin-top:10px">&#9675; Home</button>
+    <button class="btn close" id="phClose">Put the phone away</button>
   </div>
 </div>
 
@@ -529,9 +553,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=82"></script>
-<script src="js/world.js?v=82"></script>
-<script src="js/vehicles.js?v=82"></script>
-<script src="js/game.js?v=82"></script>
+<script src="js/core.js?v=83"></script>
+<script src="js/world.js?v=83"></script>
+<script src="js/vehicles.js?v=83"></script>
+<script src="js/game.js?v=83"></script>
 </body>
 </html>

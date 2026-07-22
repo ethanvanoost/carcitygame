@@ -1655,6 +1655,81 @@ function buildMarketPlot(x,z,g){
   marketPlots.push(p);
   if(window.onMarketBuilt)onMarketBuilt(p);
 }
+/* ---- COOLBLUE: the mid-blue & orange PHONE STORE, one every ~3 km ---- */
+const coolblues=[];
+const CBSP=3000;
+let _cbSign=null;
+function cbSignMat(){
+  if(_cbSign)return _cbSign;
+  const cv=document.createElement("canvas");cv.width=512;cv.height=96;
+  const c=cv.getContext("2d");
+  c.fillStyle="#1d7fd6";c.fillRect(0,0,512,96);          // mid blue
+  c.fillStyle="#ff6a00";c.font="bold 58px Segoe UI";c.textAlign="center";
+  c.fillText("CoolBlue",256,54);
+  c.fillStyle="#fff";c.font="bold 24px Segoe UI";c.fillText("\u{1F4F1} PHONE STORE",256,84);
+  _cbSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _cbSign;
+}
+function cbSpot(i,j){
+  const lx=Math.round((i*CBSP+1470-30)/120)*120+30;   // beside a road
+  const x=lx+18,z=j*CBSP+2190;
+  if(nearGridLine(z)<20)return null;
+  if(Math.abs(x)<250&&Math.abs(z)<250)return null;
+  if(inAirport(x,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  if(nearestRail(x,z).d<20)return null;
+  if(Math.abs(x-curveXC(x,z))<20||Math.abs(z-curveZC(x,z))<20)return null;
+  if(rocketPadDist(x,z)<70)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(x-hs.x)<75&&Math.abs(z-hs.z)<60)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(x-ms.x)<75&&Math.abs(z-ms.z)<60)return null;
+  const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh&&Math.abs(x-fh.x)<75&&Math.abs(z-fh.z)<60)return null;
+  const mk=marketPlotSpot(Math.round((x-2070)/MKSP),Math.round((z-630)/MKSP));
+  if(mk&&Math.abs(x-mk.x)<75&&Math.abs(z-mk.z)<60)return null;
+  return{x,z};
+}
+function buildCoolBlue(x,z,g){
+  const y=terrainH(x,z),w=22,d=14,h=5,wall=0.35;
+  const blue=new THREE.MeshLambertMaterial({color:0x1d7fd6});   // mid blue — not light, not dark
+  const orange=new THREE.MeshLambertMaterial({color:0xff6a00});
+  const parts=[];
+  function wallBox(bw,bh,bd,px,py,pz){const m=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd),blue));
+    m.position.set(x+px,y+py,z+pz);g.add(m);parts.push(m);return m;}
+  wallBox(w,h,wall,0,h/2,-d/2);                       // back
+  wallBox(wall,h,d,-w/2,h/2,0);wallBox(wall,h,d,w/2,h/2,0);
+  wallBox(w/2-1.4,h,wall,-(w/4+0.7),h/2,d/2);         // front, doorway in the middle
+  wallBox(w/2-1.4,h,wall,(w/4+0.7),h/2,d/2);
+  const band=new THREE.Mesh(new THREE.BoxGeometry(w+0.4,0.8,wall*2),orange);   // orange stripe over the front
+  band.position.set(x,y+h-0.4,z+d/2);g.add(band);
+  const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(w+0.8,0.5,d+0.8),orange));
+  roof.position.set(x,y+h+0.25,z);g.add(roof);parts.push(roof);
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(w-0.4,0.12,d-0.4),new THREE.MeshLambertMaterial({color:0xe8eef6}));
+  floor.position.set(x,y+0.06,z);g.add(floor);
+  /* phone display tables with little phone boxes */
+  for(let i=0;i<2;i++){
+    const tb=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.6,1,6),new THREE.MeshLambertMaterial({color:0xf2f5f7})));
+    tb.position.set(x-4+i*8,y+0.5,z-1);g.add(tb);parts.push(tb);
+    for(let j=0;j<4;j++){
+      const bx=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.14,0.62),j%2?blue:orange);
+      bx.position.set(x-4+i*8,y+1.07,z-3.2+j*1.5);g.add(bx);
+    }
+  }
+  /* glass storefront + door + the CoolBlue sign */
+  [[-(w/4+0.7)],[w/4+0.7]].forEach(p=>{
+    const win=new THREE.Mesh(new THREE.PlaneGeometry(w/2-2.6,2.6),glassMat);
+    win.position.set(x+p[0],y+2,z+d/2+0.05);g.add(win);});
+  makeDoor(x-1.3,z+d/2,0,g,y,0xff6a00);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(10,1.9),cbSignMat());
+  sign.position.set(x,y+h+1.5,z+d/2+0.06);g.add(sign);
+  const clerk=makePerson(0.95,0xff6a00);clerk.position.set(x+w/4,y,z-d/2+2.2);g.add(clerk);
+  coolblues.push({g,x,z});
+  regShell(g,x,z,w/2,d/2,y,[{x:x-1.3,z:z+d/2,r:2}]);
+  const rec=regBuilding(x,z,w,d,parts,y);rec.walkThru=true;
+  return rec;
+}
 /* ---- dumpling buyers: a friendly buyer at the roadside every ~500 m ---- */
 const buyers=[];
 let _buySign=null;
@@ -3304,6 +3379,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(familyHouse(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
+  }
+  /* a COOLBLUE phone store every ~3 km */
+  for(let i=Math.floor((x0-1700)/CBSP);i<=Math.ceil((x1+100)/CBSP);i++)
+  for(let j=Math.floor((z0-2400)/CBSP);j<=Math.ceil((z1+100)/CBSP);j++){
+    const sp=cbSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    g.userData.recs.push(buildCoolBlue(sp.x,sp.z,g));
   }
   /* a MARKETING PLOT every ~3 km */
   for(let i=Math.floor((x0-2300)/MKSP);i<=Math.ceil((x1+100)/MKSP);i++)

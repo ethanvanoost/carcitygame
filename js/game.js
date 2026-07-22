@@ -574,6 +574,217 @@ function dumpValue(d){
 const BUTTER={unopened:0,owned:[]};
 function butterValue(d){return dumpValue(d)*(d.size==="mega"?20:d.size==="med"?6:1);}
 function butterSizeLabel(d){return d.size==="mega"?"\u{1F31F} MEGA ":d.size==="med"?"\u{1F538} MEDIUM ":"";}
+/* ---------- PHONES: surprise boxes from the COOLBLUE store ----------
+   The real line-ups, with the real gaps: no iPhone 9 (Apple skipped it, iPhone X = 10),
+   Samsung jumped from S10 straight to S20, and Pixel "a" phones exist for 3a-9a. */
+const PHONE={unopened:0,owned:[]};
+const PHONE_MODELS=(function(){
+  const L=[];
+  const yrI={4:2010,5:2012,6:2014,7:2016,8:2017,10:2017,11:2019,12:2020,13:2021,14:2022,15:2023,16:2024,17:2025};
+  for(let i=4;i<=17;i++){
+    if(i===9)continue;   // Apple really skipped the iPhone 9!
+    const nm=i===10?"iPhone X":"iPhone "+i;
+    L.push({m:nm,br:"Apple",tier:i-3,yr:yrI[i]});
+    if(i>=11){
+      L.push({m:nm+" Pro",br:"Apple",tier:i-1.5,yr:yrI[i]});
+      L.push({m:nm+" Pro Max",br:"Apple",tier:i-1,yr:yrI[i]});
+    }
+  }
+  for(let i=1;i<=10;i++){
+    L.push({m:"Google Pixel "+i,br:"Google",tier:i+2,yr:2015+i});
+    if(i>=3&&i<=9)L.push({m:"Google Pixel "+i+"a",br:"Google",tier:i+1,yr:2016+i});   // the cheaper, smaller one
+    if(i>=6)L.push({m:"Google Pixel "+i+" Pro",br:"Google",tier:i+4,yr:2015+i});
+  }
+  [1,2,3,4,5,6,7,8,9,10,20,21,22,23,24,25,26].forEach(s=>{   // S11-S19 never existed!
+    const t=s>=20?s-9:s,yr=s>=20?2000+s:2009+s;
+    L.push({m:"Samsung Galaxy S"+s,br:"Samsung",tier:t,yr});
+    if(s>=8)L.push({m:"Samsung Galaxy S"+s+"+",br:"Samsung",tier:t+0.6,yr});
+    if(s>=20)L.push({m:"Samsung Galaxy S"+s+" Ultra",br:"Samsung",tier:t+1.4,yr});
+  });
+  [["A3",2015],["A5",2015],["A7",2015],["A8",2018],["A9",2018],["A10",2019],["A20",2019],["A30",2019],
+   ["A40",2019],["A50",2019],["A70",2019],["A90",2019],["A12",2020],["A32",2021],["A52",2021],["A72",2021],
+   ["A13",2022],["A33",2022],["A53",2022],["A73",2022],["A14",2023],["A34",2023],["A54",2023],
+   ["A15",2024],["A35",2024],["A55",2024],["A16",2025],["A36",2025],["A56",2025]]
+    .forEach(([a,yr],i)=>L.push({m:"Samsung Galaxy "+a,br:"Samsung",tier:2+i*0.35,yr}));
+  return L;
+})();
+const PHONE_COLORS=[...DUMP_COLORS,["Black","#1c1c1e"],["Gold","#ffd700"]];
+function phoneValue(ph){return Math.round((200+ph.tier*95)*(ph.color==="Rainbow"?4:1));}
+function rollPhone(){
+  PHONE.unopened--;
+  /* weighted: old cheap phones are common, new Ultras/Pro Maxes are the jackpot */
+  let tot=0;
+  const ws=PHONE_MODELS.map(M=>{const w=Math.pow(0.87,M.tier);tot+=w;return w;});
+  let r2=Math.random()*tot,mi=0;
+  for(;mi<ws.length-1&&r2>ws[mi];r2-=ws[mi],mi++);
+  const M=PHONE_MODELS[mi];
+  let color,hex;
+  if(Math.random()<0.015){color="Rainbow";hex=RAINBOW_CSS;}   // 🌈 the rarest!
+  else{const c=PHONE_COLORS[Math.floor(Math.random()*PHONE_COLORS.length)];color=c[0];hex=c[1];}
+  const ph={m:M.m,br:M.br,tier:M.tier,yr:M.yr||2020,color,hex};
+  PHONE.owned.push(ph);
+  if(color==="Rainbow")pushNews("\u{1F4F1}\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+" — the rarest phone in the world!");
+  return ph;
+}
+/* ---------- the PHONE SCREEN: browser, info, calculator, timer, alarm & more ---------- */
+const PHAPP={timers:[],alarms:[],swT0:0,swAcc:0,swOn:false,expr:""};
+function fmt2(n){return String(n).padStart(2,"0");}
+function phoneOpen(){
+  const ph=HOLD.d;
+  if(!ph||!ph.m)return;
+  $("phModelTop").textContent=ph.m;
+  phoneHome();
+  $("phoneModal").classList.add("open");
+}
+function phoneHome(){
+  $("phScreen").innerHTML=
+    "<div style='text-align:center;font-size:26px;font-weight:800;margin:6px 0' id='phBigTime'></div>"+
+    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px'>"+
+    [["browser","\u{1F310}","Browser"],["info","ℹ️","Info"],["calc","\u{1F9EE}","Calc"],
+     ["timer","⏲️","Timer"],["alarm","⏰","Alarm"],["stop","⏱️","Stopwatch"],["clock","\u{1F550}","Clock"]]
+      .map(a=>"<button class='btn' data-app='"+a[0]+"' style='padding:12px 4px;font-size:13px'>"+a[1]+"<br>"+a[2]+"</button>").join("")+
+    "</div>";
+  $("phScreen").querySelectorAll("[data-app]").forEach(b=>b.onclick=()=>phoneApp(b.dataset.app));
+  phTick();
+}
+function phoneApp(app){
+  const s=$("phScreen"),ph=HOLD.d||{};
+  if(app==="browser"){
+    s.innerHTML="<b>\u{1F310} Browser</b><div style='display:flex;gap:6px;margin-top:8px'>"+
+      "<input id='phQ' placeholder='search the internet...' style='flex:1;min-width:0;background:#1a2233;border:1px solid #2a3448;border-radius:8px;color:#e8edf7;padding:8px'>"+
+      "<button class='btn warn' id='phGo'>Go</button></div>"+
+      "<div id='phRes' style='margin-top:10px;color:#8ea2c0;font-size:13px'>Type something and press Go — the results open in a new tab!</div>";
+    $("phGo").onclick=()=>{
+      const q=$("phQ").value.trim();
+      if(!q)return;
+      $("phRes").textContent="\u{1F50E} Searching for \""+q+"\" — check the new tab!";
+      window.open("https://www.google.com/search?q="+encodeURIComponent(q),"_blank");
+    };
+    $("phQ").addEventListener("keydown",e=>{if(e.key==="Enter")$("phGo").click();});
+  }else if(app==="info"){
+    const scr=Math.min(6.9,3.5+ph.tier*0.22).toFixed(1);
+    const gb=Math.min(1024,Math.pow(2,Math.floor(3+ph.tier/2.2)));
+    s.innerHTML="<b>ℹ️ About this phone</b><div style='margin-top:8px;line-height:1.9'>"+
+      "\u{1F4F1} <b>"+ph.m+"</b><br>\u{1F3ED} Brand: "+ph.br+"<br>\u{1F4C5} Year: "+(ph.yr||"?")+
+      "<br>\u{1F3A8} Color: "+(ph.color==="Rainbow"?"\u{1F308} RAINBOW (the rarest!)":ph.color)+
+      "<br>\u{1F4D0} Screen: "+scr+"\"<br>\u{1F4BE} Storage: "+(gb>=1024?"1 TB":gb+" GB")+
+      "<br>\u{1F4B0} Worth: $"+fmtMoney(phoneValue(ph))+"</div>";
+  }else if(app==="calc"){
+    PHAPP.expr="";
+    s.innerHTML="<b>\u{1F9EE} Calculator</b><div id='phCd' style='background:#1a2233;border-radius:8px;padding:10px;text-align:right;font-size:20px;min-height:28px;margin:8px 0'>0</div>"+
+      "<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:6px'>"+
+      ["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","C","+","="]
+        .map(k=>"<button class='btn"+(k==="="?" warn":"")+"' data-k='"+k+"' style='padding:10px 0"+(k==="="?";grid-column:span 4":"")+"'>"+k+"</button>").join("")+"</div>";
+    s.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{
+      const k=b.dataset.k;
+      if(k==="C")PHAPP.expr="";
+      else if(k==="="){
+        const e2=PHAPP.expr.replace(/÷/g,"/").replace(/×/g,"*").replace(/−/g,"-");
+        if(/^[0-9+\-*/. ]+$/.test(e2)){
+          try{const r2=Function('"use strict";return('+e2+")")();PHAPP.expr=String(Math.round(r2*1e6)/1e6);}catch(err){PHAPP.expr="oops";}
+        }
+      }else PHAPP.expr=(PHAPP.expr==="oops"?"":PHAPP.expr)+k;
+      $("phCd").textContent=PHAPP.expr||"0";
+    });
+  }else if(app==="timer"){
+    s.innerHTML="<b>⏲️ Timer</b><div style='display:flex;gap:6px;margin-top:8px;align-items:center'>"+
+      "<input id='phTm' type='number' min='1' value='5' style='width:80px;background:#1a2233;border:1px solid #2a3448;border-radius:8px;color:#e8edf7;padding:8px'> minutes "+
+      "<button class='btn warn' id='phTgo'>Start!</button></div><div id='phTlist' style='margin-top:10px;color:#8ea2c0'></div>";
+    $("phTgo").onclick=()=>{
+      const m2=parseFloat($("phTm").value);
+      if(!(m2>0))return;
+      PHAPP.timers.push({end:Date.now()+m2*60000,min:m2});
+      toast("⏲️ Timer set — "+m2+" minute"+(m2>1?"s":"")+"! It rings even with the phone in your pocket.");
+      phTick();
+    };
+    phTick();
+  }else if(app==="alarm"){
+    s.innerHTML="<b>⏰ Alarm (real time)</b><div style='display:flex;gap:6px;margin-top:8px;align-items:center'>"+
+      "<input id='phAl' type='time' style='background:#1a2233;border:1px solid #2a3448;border-radius:8px;color:#e8edf7;padding:8px'>"+
+      "<button class='btn warn' id='phAgo'>Set!</button></div><div id='phAlist' style='margin-top:10px;color:#8ea2c0'></div>";
+    const list=()=>{$("phAlist").innerHTML=PHAPP.alarms.map(a=>"⏰ "+fmt2(a.h)+":"+fmt2(a.mi)).join("<br>")||"No alarms set.";};
+    $("phAgo").onclick=()=>{
+      const v=$("phAl").value;
+      if(!v)return;
+      const parts=v.split(":");
+      PHAPP.alarms.push({h:+parts[0],mi:+parts[1],day:-1});
+      toast("⏰ Alarm set for "+v+"!");list();
+    };
+    list();
+  }else if(app==="stop"){
+    s.innerHTML="<b>⏱️ Stopwatch</b><div id='phSw' style='text-align:center;font-size:30px;font-weight:800;margin:12px 0'>0.0 s</div>"+
+      "<div style='display:flex;gap:6px'><button class='btn warn' id='phSs' style='flex:1'>Start</button><button class='btn' id='phSr' style='flex:1'>Reset</button></div>";
+    const upd=()=>{
+      const t=PHAPP.swAcc+(PHAPP.swOn?Date.now()-PHAPP.swT0:0);
+      $("phSw").textContent=(t/1000).toFixed(1)+" s";
+      $("phSs").textContent=PHAPP.swOn?"Stop":"Start";
+    };
+    $("phSs").onclick=()=>{
+      if(PHAPP.swOn){PHAPP.swAcc+=Date.now()-PHAPP.swT0;PHAPP.swOn=false;}
+      else{PHAPP.swT0=Date.now();PHAPP.swOn=true;}
+      upd();
+    };
+    $("phSr").onclick=()=>{PHAPP.swAcc=0;PHAPP.swOn=false;upd();};
+    upd();
+  }else if(app==="clock"){
+    s.innerHTML="<b>\u{1F550} Clock</b><div id='phCk' style='text-align:center;font-size:34px;font-weight:800;margin:14px 0'></div>"+
+      "<div id='phCk2' style='text-align:center;color:#8ea2c0'></div>";
+    phTick();
+  }
+  /* typing in phone inputs must never drive the car */
+  s.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>e.stopPropagation()));
+}
+function phTick(){
+  const n=new Date(),t=fmt2(n.getHours())+":"+fmt2(n.getMinutes());
+  $("phClock").textContent=t;
+  const bt=$("phBigTime");if(bt)bt.textContent=t+":"+fmt2(n.getSeconds());
+  const ck=$("phCk");
+  if(ck){ck.textContent=t+":"+fmt2(n.getSeconds());$("phCk2").textContent="\u{1F3AE} In-game: day "+CLOCK.day+" · "+$("clockTime").textContent;}
+  const sw=$("phSw");
+  if(sw&&PHAPP.swOn)sw.textContent=((PHAPP.swAcc+Date.now()-PHAPP.swT0)/1000).toFixed(1)+" s";
+  const tl=$("phTlist");
+  if(tl)tl.innerHTML=PHAPP.timers.map(t2=>"⏲️ "+Math.max(0,Math.ceil((t2.end-Date.now())/1000))+" s left").join("<br>")||"No timers running.";
+}
+setInterval(()=>{
+  /* timers & alarms ring even with the phone in your pocket */
+  const now=Date.now(),n=new Date();
+  for(let i=PHAPP.timers.length-1;i>=0;i--)if(PHAPP.timers[i].end<=now){
+    toast("⏲️\u{1F514} DRRRING — your "+PHAPP.timers[i].min+" minute timer is DONE!");
+    PHAPP.timers.splice(i,1);
+  }
+  const key=n.getDate();
+  PHAPP.alarms.forEach(a=>{
+    if(a.day!==key&&n.getHours()===a.h&&n.getMinutes()===a.mi){
+      a.day=key;
+      toast("⏰\u{1F514} DRRRING DRRRING — ALARM! It's "+fmt2(a.h)+":"+fmt2(a.mi)+"!");
+    }
+  });
+  if($("phoneModal").classList.contains("open"))phTick();
+},500);
+$("bViewPhone").onclick=phoneOpen;
+$("phHome").onclick=phoneHome;
+$("phClose").onclick=()=>$("phoneModal").classList.remove("open");
+/* ---------- COOLBLUE: walk in and buy surprise phone boxes ---------- */
+function nearCoolBlue(){
+  for(let i=coolblues.length-1;i>=0;i--){
+    const c2=coolblues[i];
+    if(offScene(c2.g)){coolblues.splice(i,1);continue;}
+    if(Math.abs(player.x-c2.x)<12&&Math.abs(player.z-c2.z)<9)return c2;
+  }
+  return null;
+}
+function openCoolBlue(){
+  $("cbMsg").textContent=PHONE.unopened?"You already have "+PHONE.unopened+" unopened box"+(PHONE.unopened>1?"es":"")+" waiting in \u{1F381} Unbox!":"";
+  $("cbModal").classList.add("open");
+}
+$("cbBuy").onclick=()=>{
+  const price=600+Math.floor(Math.random()*901);   // every box costs $600 - $1,500
+  if(MONEY.v<price){toast("\u{1F4B0} This box costs $"+fmtMoney(price)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
+  MONEY.v-=price;updateMoneyUI();
+  PHONE.unopened++;saveGame();
+  $("cbMsg").textContent="\u{1F4E6} Phone box bought for $"+fmtMoney(price)+"! You have "+PHONE.unopened+" to unbox (\u{1F381} Unbox menu). Buy another?";
+};
+$("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
 const _starGeo=new THREE.OctahedronGeometry(1,0);
 const _starMat=new THREE.MeshBasicMaterial({color:0xffffff});
@@ -611,15 +822,47 @@ function holdDump(d){
   }
   renderDump();
 }
+/* holding a PHONE: a little slab with a glowing screen, plus the View Phone button */
+const PHMESH=(function(){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.32,0.022),new THREE.MeshLambertMaterial({color:0x1c1c1e}));
+  g.add(body);
+  const scr=new THREE.Mesh(new THREE.PlaneGeometry(0.13,0.27),new THREE.MeshBasicMaterial({color:0x9fd8ff}));
+  scr.position.z=0.013;g.add(scr);
+  g.visible=false;scene.add(g);
+  return{g,mat:body.material};
+})();
+function holdPhone(ph){
+  if(HOLD.d===ph){
+    HOLD.d=null;
+    toast("You put the phone away.");
+  }else{
+    HOLD.d=ph;
+    if(ph.color!=="Rainbow")PHMESH.mat.color.set(ph.hex);
+    toast("✋\u{1F4F1} You're holding your "+ph.color+" "+ph.m+" — tap the \u{1F4F1} VIEW PHONE button!");
+  }
+  renderDump();
+}
 function updateHeld(){
-  const m=HOLD.mesh;
-  if(!HOLD.d||!player.onFoot||!player.mesh.visible){m.visible=false;return;}
-  m.visible=true;
+  const isPhone=!!(HOLD.d&&HOLD.d.m);
+  const btn=$("bViewPhone"),want=isPhone?"":"none";
+  if(btn.style.display!==want)btn.style.display=want;
+  const show=HOLD.d&&player.onFoot&&player.mesh.visible;
+  HOLD.mesh.visible=!!show&&!isPhone;
+  PHMESH.g.visible=!!show&&isPhone;
+  if(!show)return;
   const yaw=player.yaw;
-  m.position.set(
-    player.x+Math.sin(yaw)*0.5+Math.sin(yaw+Math.PI/2)*0.3,
-    player.y+1.12,
-    player.z+Math.cos(yaw)*0.5+Math.cos(yaw+Math.PI/2)*0.3);
+  const px=player.x+Math.sin(yaw)*0.5+Math.sin(yaw+Math.PI/2)*0.3,
+        py=player.y+1.12,
+        pz=player.z+Math.cos(yaw)*0.5+Math.cos(yaw+Math.PI/2)*0.3;
+  if(isPhone){
+    PHMESH.g.position.set(px,py+0.05,pz);
+    PHMESH.g.rotation.y=yaw;
+    if(HOLD.d.color==="Rainbow")PHMESH.mat.color.setHSL((performance.now()/1500)%1,0.9,0.55);
+    return;
+  }
+  const m=HOLD.mesh;
+  m.position.set(px,py,pz);
   if(HOLD.d.color==="Rainbow")HOLD.mat.color.setHSL((performance.now()/1500)%1,0.9,0.55);
   if(HOLD.d.glitter)HOLD.mat.emissive.setHSL((performance.now()/300)%1,0.8,0.3);
   else HOLD.mat.emissive.setRGB(0,0,0);
@@ -681,11 +924,39 @@ function chunkedList(list,items,makeEl,chunk=1000){
     }
   })();
 }
-const SQTAB={v:"dump"};   // which Squishies tab is open: dumplings or butter
+const SQTAB={v:"dump"};   // which Unbox tab is open: dumplings, butter or phones
+function renderPhoneTab(){
+  $("dumpInfo").textContent=PHONE.unopened
+    ?"You have "+PHONE.unopened+" unopened phone box"+(PHONE.unopened>1?"es":"")+" — unbox one!"
+    :"No phone boxes — buy them at a \u{1F4F1} CoolBlue (the blue & orange store, one every ~3 km)!";
+  $("dumpOpen").textContent="\u{1F4F1} Unbox a phone!";
+  $("dumpOpenAll").textContent="\u{1F389} Unbox ALL phone boxes!";
+  $("dumpOpen").style.display=PHONE.unopened?"":"none";
+  $("dumpDisplay").style.display="none";
+  const list=$("dumpList");list.innerHTML="";
+  if(!PHONE.owned.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent="No phones yet — the newest Pro Max & Ultra models are the rarest pulls!";
+    list.appendChild(d);
+  }
+  chunkedList(list,PHONE.owned,ph=>{
+    const el=document.createElement("button");
+    el.className="dumpItem"+(ph.color==="Rainbow"?" glitter":"")+(HOLD.d===ph?" held":"");
+    el.innerHTML="<span class='swatch' style='background:"+ph.hex+"'></span>"
+      +(ph.color==="Rainbow"?"\u{1F308} RAINBOW ":ph.color+" ")+ph.m
+      +" <span style='color:var(--dim)'>$"+fmtMoney(phoneValue(ph))+"</span>"
+      +(HOLD.d===ph?" ✋ holding":"");
+    el.onclick=()=>holdPhone(ph);
+    return el;
+  });
+}
 function renderDump(){
   const butter=SQTAB.v==="butter";
-  $("dumpTabD").classList.toggle("on",!butter);
+  $("dumpTabD").classList.toggle("on",SQTAB.v==="dump");
   $("dumpTabB").classList.toggle("on",butter);
+  $("dumpTabP").classList.toggle("on",SQTAB.v==="phone");
+  if(SQTAB.v==="phone"){renderPhoneTab();return;}
   const C=butter?BUTTER:DUMP,one=butter?"butter squishy":"dumpling",many=butter?"butter squishies":"dumplings";
   $("dumpInfo").textContent=C.unopened
     ?"You have "+C.unopened+" unopened "+(C.unopened>1?many:one)+" — open one!"
@@ -718,6 +989,7 @@ function renderDump(){
 }
 $("dumpTabD").onclick=()=>{SQTAB.v="dump";renderDump();};
 $("dumpTabB").onclick=()=>{SQTAB.v="butter";renderDump();};
+$("dumpTabP").onclick=()=>{SQTAB.v="phone";renderDump();};
 $("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 function rollDump(){
@@ -759,6 +1031,14 @@ function rollButter(){
   return d;
 }
 $("dumpOpen").onclick=()=>{
+  if(SQTAB.v==="phone"){
+    if(!PHONE.unopened)return;
+    const ph=rollPhone();
+    if(ph.color==="Rainbow")toast("\u{1F308}\u{1F4F1} NO WAY — a RAINBOW "+ph.m+"!! The rarest color! ($"+fmtMoney(phoneValue(ph))+")");
+    else if(ph.tier>=13)toast("\u{1F929}\u{1F4F1} JACKPOT — a "+ph.color+" "+ph.m+"! ($"+fmtMoney(phoneValue(ph))+")");
+    else toast("\u{1F4F1} You unboxed a "+ph.color+" "+ph.m+"! ($"+fmtMoney(phoneValue(ph))+")");
+    renderDump();saveGame();return;
+  }
   if(SQTAB.v==="butter"){
     if(!BUTTER.unopened)return;
     const d=rollButter();
@@ -781,9 +1061,10 @@ $("dumpOpen").onclick=()=>{
 let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
   if(OPENALL_BUSY)return;
-  const butter=SQTAB.v==="butter",C=butter?BUTTER:DUMP;
-  const roll=butter?rollButter:rollDump,val=butter?butterValue:dumpValue;
-  const many=butter?"butter squishies":"dumplings";
+  const phone=SQTAB.v==="phone",butter=SQTAB.v==="butter";
+  const C=phone?PHONE:butter?BUTTER:DUMP;
+  const roll=phone?rollPhone:butter?rollButter:rollDump,val=phone?phoneValue:butter?butterValue:dumpValue;
+  const many=phone?"phone boxes":butter?"butter squishies":"dumplings";
   if(!C.unopened){toast("No unopened "+many+" — buy them at a \u{1F6D2} MEGA MART!");return;}
   OPENALL_BUSY=true;
   const total=C.unopened;
@@ -798,12 +1079,12 @@ $("dumpOpenAll").onclick=()=>{
       if(v>bestVal){bestVal=v;best=d;}
     }
     if(C.unopened>0){
-      toast((butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
+      toast((phone?"\u{1F4F1}":butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
       setTimeout(step,0);
     }else{
       OPENALL_BUSY=false;
       toast("\u{1F389} You opened "+opened+" "+many+(glit?" ("+glit+" ✨ GLITTER!)":"")+(mega?" ("+mega+" \u{1F31F} MEGA!!)":"")
-        +" — best pull: "+(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color+" ($"+fmtMoney(bestVal)+")!");
+        +" — best pull: "+(phone?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color)+" ($"+fmtMoney(bestVal)+")!");
       renderDump();saveGame();
     }
   })();
@@ -5934,6 +6215,7 @@ function saveGame(){
       money:MONEY.v,rainbow:MONEY.rainbow,
       unopened:DUMP.unopened,owned:DUMP.owned,
       bu:BUTTER.unopened,bo:BUTTER.owned,
+      phu:PHONE.unopened,pho:PHONE.owned,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
@@ -5950,6 +6232,7 @@ function loadGame(){
     MONEY.v=d.money||0;MONEY.rainbow=!!d.rainbow;
     DUMP.unopened=d.unopened||0;DUMP.owned=Array.isArray(d.owned)?d.owned:[];
     BUTTER.unopened=d.bu||0;BUTTER.owned=Array.isArray(d.bo)?d.bo:[];
+    PHONE.unopened=d.phu||0;PHONE.owned=Array.isArray(d.pho)?d.pho:[];
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
@@ -6057,6 +6340,9 @@ function tryCall(){
     if(by){openSell();return;}
     const bby=nearButterBuyer();
     if(bby){openSell("butter");return;}
+    /* CoolBlue: surprise phone boxes! */
+    const cb2=nearCoolBlue();
+    if(cb2){openCoolBlue();return;}
     /* marketing plots: claim it, edit your stalls, or shop at someone else's */
     const mk=nearMarketPlot();
     if(mk){openMarket(mk);return;}
@@ -7705,6 +7991,21 @@ function drawMap(){
         }
       }
     }
+    /* CoolBlue phone stores every ~3 km */
+    if(sc>=0.14){
+      const yi0=Math.floor((mapView.cx-halfW-1700)/CBSP),yi1=Math.ceil((mapView.cx+halfW+100)/CBSP);
+      const yj0=Math.floor((mapView.cz-halfH-2400)/CBSP),yj1=Math.ceil((mapView.cz+halfH+100)/CBSP);
+      for(let i=yi0;i<=yi1;i++)for(let j=yj0;j<=yj1;j++){
+        const s=cbSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#1d7fd6",6);
+        const px=(s.x-mapView.cx)*sc+cv.width/2,py=-(s.z-mapView.cz)*sc+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#ffb27a";c.font="bold 11px Segoe UI";c.textAlign="center";
+          c.fillText("\u{1F4F1}",px,py-9);
+        }
+      }
+    }
     /* marketing plots every ~3 km */
     {
       const ki0=Math.floor((mapView.cx-halfW-2300)/MKSP),ki1=Math.ceil((mapView.cx+halfW+100)/MKSP);
@@ -8166,6 +8467,10 @@ function mapEntries(q){
     ["\u{1F3E1} Nearest FAMILY HOUSE for sale",()=>{
       switchWorld("earth");
       goNearest("\u{1F3E1} Nearest family house",nearestSpot(familyHouseSpot,FHSP,510,1710,5),9,18);
+    }],
+    ["\u{1F4F1} Nearest CoolBlue (phone store)",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F4F1} Nearest CoolBlue",nearestSpot(cbSpot,CBSP,1488,2190,4),0,10);
     }],
     ["\u{1F3EA} Nearest MARKETING PLOT",()=>{
       switchWorld("earth");
@@ -8663,6 +8968,7 @@ function updateHint(){
           const by=nearBuyer();
           if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
           else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
+          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T to buy surprise PHONE boxes ($600-$1,500)!";showT=true;}
           else{
             const mk=nearMarketPlot();
             if(mk){
@@ -10879,7 +11185,17 @@ const UPDATE_PAGES=[
 <li>Visiting someone's <b>mansion, house or plot</b>? Same thing every 6 seconds — their new furniture and dumpling shop pop in while you watch.</li></ul>
 <h4>\u{1F446} THE BOX PICKER</h4><ul>
 <li>Stocking a table or display case with dumplings/butter now opens a <b>box picker</b>: turn ✨ GLITTER on or off, pick a size (butter: Small / \u{1F538} Medium / \u{1F31F} Mega) and click a color — sell exactly <b>GLITTER MEGA PURPLE</b> if you want!</li>
-<li>The color chips always show how many of that exact combo you own, and impossible combos say so.</li></ul>`}
+<li>The color chips always show how many of that exact combo you own, and impossible combos say so.</li></ul>`},
+{t:"Round 36 — \u{1F4F1} CoolBlue phone stores & the Unbox menu",h:`
+<h4>\u{1F4F1} COOLBLUE — every ~3 km</h4><ul>
+<li>A mid-blue store with orange trim (\u{1F4F1} on the map): walk in, press T, and buy <b>surprise phone boxes for $600 - $1,500</b> — the menu stays open so you can grab a whole stack.</li></ul>
+<h4>\u{1F381} THE UNBOX MENU</h4><ul>
+<li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
+<li>Unbox one or ALL your phone boxes. You can pull the REAL line-ups: <b>iPhone 4-17</b> (Pro &amp; Pro Max from 11 up — and no iPhone 9, Apple really skipped it; number 10 is the iPhone X!), <b>Google Pixel 1-10</b> (Pro from 6, the smaller cheaper "a" models 3a-9a) and <b>Samsung Galaxy S1-S26</b> (S11-S19 never existed — Samsung jumped from S10 to S20!) plus 29 Galaxy A models, Plus &amp; Ultra included.</li>
+<li>Phones come in all the colors — <b>\u{1F308} RAINBOW is the rarest</b> (worth 4x), and new Pro Max / Ultra models are the jackpot pulls.</li></ul>
+<h4>\u{1F4F1} A PHONE THAT WORKS</h4><ul>
+<li>Click a phone in the Unbox menu to <b>hold it</b> — a \u{1F4F1} VIEW PHONE button appears.</li>
+<li>On the screen: \u{1F310} a browser that really searches (opens a new tab), ℹ️ info about your exact model, \u{1F9EE} a working calculator, ⏲️ timers and ⏰ alarms that ring even with the phone in your pocket, ⏱️ a stopwatch and \u{1F550} a clock with the real AND in-game time.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
