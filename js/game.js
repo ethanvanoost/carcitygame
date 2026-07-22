@@ -3866,7 +3866,11 @@ function mktPickType(p,kind,idx){
     {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"❌ Cancel",value:"x"}
-  ],ty=>{if(ty!=="x")mktPickItem(p,kind,ty,idx);});
+  ],ty=>{
+    if(ty==="x")return;
+    if(ty==="food")mktPickItem(p,kind,ty,idx);   // food: a simple list
+    else openMktPicker(p,kind,ty,idx);           // squishies: the BOX PICKER!
+  });
 }
 function mktGroups(ty){
   const map=new Map();
@@ -3909,6 +3913,19 @@ function mktGiveGoods(it,n){
   }
   renderDump();renderPack();saveGame();
 }
+/* selection made (box picker or food list): display it, or open the price window */
+function mktApplyPick(p,kind,idx,ty,grp){
+  const d=MKT[p.id],it=d&&d.items[idx];
+  if(!it)return;
+  if(kind==="c"){
+    mktTakeStock(ty,grp,1);
+    Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
+    return;
+  }
+  openStockModal(p,idx,ty,grp);
+}
 function mktPickItem(p,kind,ty,idx){
   const groups=mktGroups(ty).slice(0,10);
   if(!groups.length){toast("You don't have any of those yet — get some first!");return;}
@@ -3916,18 +3933,70 @@ function mktPickItem(p,kind,ty,idx){
   opts.push({label:"❌ Cancel",value:"x"});
   showDest("Pick what goes "+(kind==="t"?"on the table":"in the display case"),opts,v=>{
     if(typeof v!=="number")return;
-    const grp=groups[v],d=MKT[p.id],it=d&&d.items[idx];
-    if(!it)return;
-    if(kind==="c"){
-      mktTakeStock(ty,grp,1);
-      Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
-      saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-      toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
-      return;
-    }
-    openStockModal(p,idx,ty,grp);
+    mktApplyPick(p,kind,idx,ty,groups[v]);
   });
 }
+/* the BOX PICKER: turn boxes on — ✨ Glitter, a color and (butter) a size —
+   and sell EXACTLY that one, like GLITTER MEGA PURPLE */
+const MKP={p:null,kind:"t",ty:"dump",idx:0,gl:0,sz:"norm",color:null};
+function mkpVariants(){
+  const coll=MKP.ty==="dump"?DUMP.owned:BUTTER.owned;
+  const map=new Map();
+  coll.forEach(d2=>{
+    if((d2.glitter?1:0)!==MKP.gl)return;
+    if(MKP.ty==="butter"&&(d2.size||"norm")!==MKP.sz)return;
+    const e=map.get(d2.color)||{lab:d2.color,hex:d2.hex,n:0,gl:MKP.gl,sz:MKP.ty==="butter"?MKP.sz:"",ty:MKP.ty};
+    e.n++;map.set(d2.color,e);
+  });
+  return map;
+}
+function renderMkp(){
+  const butter=MKP.ty==="butter";
+  $("mkpTitle").textContent=(butter?"\u{1F9C8}":"\u{1F95F}")+" Pick your "+(butter?"butter squishy":"dumpling");
+  $("mkpSizeRow").style.display=butter?"":"none";
+  $("mkpGlitOn").classList.toggle("on",MKP.gl===1);
+  $("mkpGlitOff").classList.toggle("on",MKP.gl===0);
+  $("mkpSzN").classList.toggle("on",MKP.sz==="norm");
+  $("mkpSzM").classList.toggle("on",MKP.sz==="med");
+  $("mkpSzX").classList.toggle("on",MKP.sz==="mega");
+  const vars=mkpVariants();
+  if(MKP.color&&!vars.has(MKP.color))MKP.color=null;   // that combo ran out — unpick it
+  const wrap=$("mkpColors");wrap.innerHTML="";
+  if(!vars.size){
+    const d2=document.createElement("div");
+    d2.style.cssText="color:var(--dim);font-size:13px;margin-top:8px";
+    d2.textContent="You have NONE with these boxes — try other ones!";
+    wrap.appendChild(d2);
+  }
+  [...vars.values()].sort((a,b)=>b.n-a.n).forEach(g2=>{
+    const b=document.createElement("button");
+    b.innerHTML="<span class='swatch' style='background:"+g2.hex+"'></span>"+g2.lab+" ("+g2.n+")";
+    if(MKP.color===g2.lab)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
+    b.onclick=()=>{MKP.color=g2.lab;renderMkp();};
+    wrap.appendChild(b);
+  });
+  const sel=MKP.color?vars.get(MKP.color):null;
+  $("mkpCount").textContent=sel
+    ?"Your pick: "+mktItemName(sel)+" — you have "+sel.n
+    :"\u{1F446} Now pick a color!";
+}
+function openMktPicker(p,kind,ty,idx){
+  MKP.p=p;MKP.kind=kind;MKP.ty=ty;MKP.idx=idx;MKP.gl=0;MKP.sz="norm";MKP.color=null;
+  renderMkp();
+  $("mktPickModal").classList.add("open");
+}
+$("mkpGlitOn").onclick=()=>{MKP.gl=1;renderMkp();};
+$("mkpGlitOff").onclick=()=>{MKP.gl=0;renderMkp();};
+$("mkpSzN").onclick=()=>{MKP.sz="norm";renderMkp();};
+$("mkpSzM").onclick=()=>{MKP.sz="med";renderMkp();};
+$("mkpSzX").onclick=()=>{MKP.sz="mega";renderMkp();};
+$("mkpCancel").onclick=()=>$("mktPickModal").classList.remove("open");
+$("mkpOk").onclick=()=>{
+  const grp=MKP.color?mkpVariants().get(MKP.color):null;
+  if(!grp||!grp.n){toast("\u{1F446} Pick a color first — with boxes you actually own!");return;}
+  $("mktPickModal").classList.remove("open");
+  mktApplyPick(MKP.p,MKP.kind,MKP.idx,MKP.ty,grp);
+};
 /* the STOCK THE TABLE window: amount, price and the <field> + <field> FREE bonus */
 const MKTM={p:null,idx:0,ty:null,grp:null};
 function openStockModal(p,idx,ty,grp){
@@ -10807,7 +10876,10 @@ const UPDATE_PAGES=[
 <li>If players stopped seeing each other after updating the database rules: the old rules limited the avatar to 32 letters, but avatars have 5 colors (34 letters) since the shoes update. FIREBASE-SETUP.md now says <b>av ≤ 64</b> (and own ≤ 12000) — re-publish the rules and everyone reappears instantly.</li></ul>
 <h4>\u{1F504} LIVE UPDATES — no more refreshing!</h4><ul>
 <li>Standing on someone's <b>marketing plot</b>? It re-checks every 5 seconds — new tables, prices, stock, names and the building appear for you live.</li>
-<li>Visiting someone's <b>mansion, house or plot</b>? Same thing every 6 seconds — their new furniture and dumpling shop pop in while you watch.</li></ul>`}
+<li>Visiting someone's <b>mansion, house or plot</b>? Same thing every 6 seconds — their new furniture and dumpling shop pop in while you watch.</li></ul>
+<h4>\u{1F446} THE BOX PICKER</h4><ul>
+<li>Stocking a table or display case with dumplings/butter now opens a <b>box picker</b>: turn ✨ GLITTER on or off, pick a size (butter: Small / \u{1F538} Medium / \u{1F31F} Mega) and click a color — sell exactly <b>GLITTER MEGA PURPLE</b> if you want!</li>
+<li>The color chips always show how many of that exact combo you own, and impossible combos say so.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

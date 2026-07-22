@@ -146,9 +146,9 @@ kbd{background:#1a2233;border:1px solid #33405c;border-bottom-width:3px;border-r
 .dumpItem.sel{border-color:var(--good);box-shadow:0 0 0 1px var(--good)}
 /* selling */
 #sellList{display:flex;flex-direction:column;gap:6px;max-height:32vh;overflow-y:auto;margin-top:10px}
-#sellColors{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-#sellColors button{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:8px;border:1px solid var(--line);background:#141b2a;font-size:12px;color:var(--ink)}
-#sellColors button:hover{border-color:var(--acc2)}
+#sellColors,#mkpColors{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+#sellColors button,#mkpColors button{display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:8px;border:1px solid var(--line);background:#141b2a;font-size:12px;color:var(--ink)}
+#sellColors button:hover,#mkpColors button:hover{border-color:var(--acc2)}
 /* money */
 #moneyTxt{font-size:14px;color:var(--good);font-weight:800;margin-top:2px}
 #worldTxt{font-size:11px;color:var(--acc2)}
