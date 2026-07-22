@@ -1629,15 +1629,20 @@ function plankMat(){
   return _plankMat;
 }
 function buildMarketPlot(x,z,g){
-  const y=terrainH(x,z);
-  /* the 100 x 100 m plot: EMPTY, just a big wooden plank floor */
-  const pad=new THREE.Mesh(new THREE.BoxGeometry(100,0.24,100),plankMat());
-  pad.position.set(x,y+0.12,z);pad.receiveShadow=true;g.add(pad);
-  /* low purple curb all around + corner pillars */
+  /* the floor sits ABOVE the highest ground bump on the whole plot, so no
+     grass or dirt can ever poke through the planks — bare wood, nothing else */
+  let top=terrainH(x,z);
+  for(let ox=-48;ox<=48;ox+=12)for(let oz=-48;oz<=48;oz+=12)top=Math.max(top,terrainH(x+ox,z+oz));
+  const y=top+0.15;   // the walkable plank floor level
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(100,3,100),plankMat());
+  pad.position.set(x,y-1.5,z);pad.receiveShadow=true;pad.castShadow=true;g.add(pad);
+  /* a REAL floor: you (and cars) stand and drive ON the planks */
+  decks.push({g,x,z,hw:50,hd:50,tops:[y],ramp:null});
+  /* low purple curb all around */
   const curbM=new THREE.MeshLambertMaterial({color:0x7a3ce8});
   for(const[cw,cd,px,pz]of[[100,0.5,0,-49.8],[100,0.5,0,49.8],[0.5,100,-49.8,0],[0.5,100,49.8,0]]){
-    const cb=new THREE.Mesh(new THREE.BoxGeometry(cw,0.4,cd),curbM);
-    cb.position.set(x+px,y+0.42,z+pz);g.add(cb);
+    const cb=new THREE.Mesh(new THREE.BoxGeometry(cw,0.3,cd),curbM);
+    cb.position.set(x+px,y+0.15,z+pz);g.add(cb);
   }
   /* the big sign at the front */
   for(const px of[-4.4,4.4]){

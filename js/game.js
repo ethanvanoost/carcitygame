@@ -3625,7 +3625,7 @@ function renderMarket(p){
   }
   const woodM=new THREE.MeshLambertMaterial({color:0x8a6f4d}),legM=new THREE.MeshLambertMaterial({color:0x6f4e37});
   (data.items||[]).forEach((it,i)=>{
-    const sl=mktSlot(i),tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y+0.24;
+    const sl=mktSlot(i),tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y;   // tables stand right on the plank floor
     if(it.k==="c"){
       /* display case: a pedestal with a glass box — look, don't touch! */
       const ped=new THREE.Mesh(new THREE.BoxGeometry(1.6,1,1.6),woodM);ped.position.set(tx,ty+0.5,tz);sg.add(ped);
