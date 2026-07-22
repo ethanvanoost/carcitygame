@@ -3355,13 +3355,20 @@ function startJob(type){
 }
 /* nearestSpot for jobs (the map sidebar has its own local copy) */
 function nearestSpot(spotFn,cell,ox,oz,range){
+  /* ring-by-ring, widening until found — water & mountains can't hide them all */
   const ci=Math.round((player.x-ox)/cell),cj=Math.round((player.z-oz)/cell);
-  let best=null;
-  for(let i=ci-range;i<=ci+range;i++)for(let j=cj-range;j<=cj+range;j++){
-    const sp=spotFn(i,j);
-    if(!sp)continue;
-    const d=Math.hypot(sp.x-player.x,sp.z-player.z);
-    if(!best||d<best.d)best={sp,d};
+  let best=null,foundRing=-1;
+  const MAXR=Math.max(range,Math.ceil(200000/cell));
+  for(let r=0;r<=MAXR;r++){
+    for(let i=ci-r;i<=ci+r;i++)for(let j=cj-r;j<=cj+r;j++){
+      if(Math.max(Math.abs(i-ci),Math.abs(j-cj))!==r)continue;
+      const sp=spotFn(i,j);
+      if(!sp)continue;
+      const d=Math.hypot(sp.x-player.x,sp.z-player.z);
+      if(!best||d<best.d)best={sp,d};
+    }
+    if(best&&foundRing<0)foundRing=r;
+    if(foundRing>=0&&r>=foundRing+1)break;
   }
   return best;
 }
@@ -8334,19 +8341,27 @@ function mapEntries(q){
   /* nearest-X finders and world travel */
   /* generic nearest-spot search over a deterministic world grid */
   function nearestSpot(spotFn,cell,ox,oz,range){
+    /* search ring by ring and KEEP WIDENING until something is found —
+       oceans and mountains can't hide every spot in a 200 km circle! */
     const ci=Math.round((player.x-ox)/cell),cj=Math.round((player.z-oz)/cell);
-    let best=null;
-    for(let i=ci-range;i<=ci+range;i++)for(let j=cj-range;j<=cj+range;j++){
-      const sp=spotFn(i,j);
-      if(!sp)continue;
-      const d=Math.hypot(sp.x-player.x,sp.z-player.z);
-      if(!best||d<best.d)best={sp,d};
+    let best=null,foundRing=-1;
+    const MAXR=Math.max(range,Math.ceil(200000/cell));
+    for(let r=0;r<=MAXR;r++){
+      for(let i=ci-r;i<=ci+r;i++)for(let j=cj-r;j<=cj+r;j++){
+        if(Math.max(Math.abs(i-ci),Math.abs(j-cj))!==r)continue;   // only this ring
+        const sp=spotFn(i,j);
+        if(!sp)continue;
+        const d=Math.hypot(sp.x-player.x,sp.z-player.z);
+        if(!best||d<best.d)best={sp,d};
+      }
+      if(best&&foundRing<0)foundRing=r;
+      if(foundRing>=0&&r>=foundRing+1)break;   // one extra ring so it's really the nearest
     }
     return best;
   }
   function goNearest(label,best,dx,dz){
     if(best)chooseDest(label+" — "+fmtDist(best.d),best.sp.x+(dx||0),best.sp.z+(dz||0),true);
-    else toast("None found nearby (too much water or mountains)!");
+    else toast("Hmm, none found — try again from another spot!");
   }
   const specials=[
     ["\u{1F354} Nearest McDrive",()=>{
