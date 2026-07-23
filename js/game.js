@@ -2918,7 +2918,7 @@ function nearButterBuyer(){
 }
 /* filters COMBINE: a color AND glitter AND (at the butter buyer) a size —
    the list only shows what matches, and matching items get auto-selected */
-const FILT={color:null,glit:"all",size:"all"};
+const FILT={color:null,glit:"all",size:"all",brand:"all",pvar:"all"};
 function passFilt(d){
   if(FILT.color&&d.color!==FILT.color)return false;
   if(SELL.kind!=="phone"){   // phones have no glitter
@@ -2926,6 +2926,22 @@ function passFilt(d){
     if(FILT.glit==="normal"&&d.glitter)return false;
   }
   if(SELL.kind==="butter"&&FILT.size!=="all"&&(d.size||"norm")!==FILT.size)return false;
+  if(SELL.kind==="phone"){
+    const m=d.m||"";
+    if(FILT.brand==="iphone"&&m.indexOf("iPhone")!==0)return false;
+    if(FILT.brand==="pixel"&&m.indexOf("Pixel")<0)return false;
+    if(FILT.brand==="gs"&&!/Galaxy S\d/.test(m))return false;
+    if(FILT.brand==="ga"&&!/Galaxy A\d/.test(m))return false;
+    if(FILT.pvar!=="all"){
+      const promax=/Pro Max$/.test(m),pro=/Pro$/.test(m),plus=/\+$/.test(m),ultra=/Ultra$/.test(m),aV=/\da$/.test(m);
+      if(FILT.pvar==="base"&&(promax||pro||plus||ultra||aV))return false;
+      if(FILT.pvar==="pro"&&!pro)return false;
+      if(FILT.pvar==="promax"&&!promax)return false;
+      if(FILT.pvar==="plus"&&!plus)return false;
+      if(FILT.pvar==="ultra"&&!ultra)return false;
+      if(FILT.pvar==="a"&&!aV)return false;
+    }
+  }
   return true;
 }
 function shownItems(){
@@ -2951,6 +2967,27 @@ function renderSell(){
   const coll=sellColl(),butter=SELL.kind==="butter",phone=SELL.kind==="phone";
   $("sellSizeRow").style.display=butter?"":"none";
   $("sellGlitRow").style.display=phone?"none":"";
+  /* phones: filter by brand AND the exact version (Pro / Pro Max / + / Ultra / a) */
+  $("sellBrandRow").style.display=phone?"":"none";
+  if(phone){
+    segOn(["fBrAll","fBrI","fBrP","fBrS","fBrA"],
+      FILT.brand==="iphone"?"fBrI":FILT.brand==="pixel"?"fBrP":FILT.brand==="gs"?"fBrS":FILT.brand==="ga"?"fBrA":"fBrAll");
+    const vw=$("sellVarRow");
+    const vops=FILT.brand==="iphone"?[["all","All versions"],["base","Base"],["pro","Pro"],["promax","Pro Max"]]
+      :FILT.brand==="pixel"?[["all","All versions"],["base","Base"],["a","a (small)"],["pro","Pro"]]
+      :FILT.brand==="gs"?[["all","All versions"],["base","Base"],["plus","+ Plus"],["ultra","Ultra"]]
+      :null;
+    if(vops){
+      vw.style.display="";vw.innerHTML="";
+      vops.forEach(([v,l])=>{
+        const b=document.createElement("button");
+        b.textContent=l;
+        if(FILT.pvar===v)b.className="on";
+        b.onclick=()=>{FILT.pvar=v;selectShown();};
+        vw.appendChild(b);
+      });
+    }else vw.style.display="none";
+  }else $("sellVarRow").style.display="none";
   segOn(["fGlitAll","fGlit","fNorm"],FILT.glit==="glitter"?"fGlit":FILT.glit==="normal"?"fNorm":"fGlitAll");
   segOn(["fSzAll","fSzNorm","fSzMed","fSzMega"],FILT.size==="norm"?"fSzNorm":FILT.size==="med"?"fSzMed":FILT.size==="mega"?"fSzMega":"fSzAll");
   renderSellChips();
@@ -2988,9 +3025,14 @@ function openSell(kind){
   $("sellTitle").textContent=SELL.kind==="butter"?"\u{1F9C8} Butter buyer — sell your butter squishies"
     :SELL.kind==="phone"?"\u{1F4F1} Phone buyer — sell your phones"
     :"\u{1F95F} Dumpling buyer — sell your dumplings";
-  FILT.color=null;FILT.glit="all";FILT.size="all";
+  FILT.color=null;FILT.glit="all";FILT.size="all";FILT.brand="all";FILT.pvar="all";
   SELL.sel.clear();renderSell();$("sellModal").classList.add("open");
 }
+$("fBrAll").onclick=()=>{FILT.brand="all";FILT.pvar="all";selectShown();};
+$("fBrI").onclick=()=>{FILT.brand="iphone";FILT.pvar="all";selectShown();};
+$("fBrP").onclick=()=>{FILT.brand="pixel";FILT.pvar="all";selectShown();};
+$("fBrS").onclick=()=>{FILT.brand="gs";FILT.pvar="all";selectShown();};
+$("fBrA").onclick=()=>{FILT.brand="ga";FILT.pvar="all";selectShown();};
 $("selAll").onclick=()=>selectShown();
 $("selNone").onclick=()=>{SELL.sel.clear();renderSell();};
 $("fGlitAll").onclick=()=>{FILT.glit="all";selectShown();};
@@ -11258,6 +11300,7 @@ const UPDATE_PAGES=[
 <h4>\u{1F4F1} COOLBLUE — every ~500 m</h4><ul>
 <li>A mid-blue store with orange trim every ~500 m (\u{1F4F1} on the map): walk in, press T, and grab <b>FREE surprise phone boxes</b> — the menu stays open so you can take a whole stack.</li>
 <li><b>\u{1F4F1} PHONE BUYERS</b> every ~500 m (little blue stands): press T to sell your phones — with the same color filters as the other buyers. New Pro Max / Ultra and \u{1F308} rainbow phones pay the most!</li>
+<li>The phone buyer has FULL filters that combine: a <b>color</b>, a <b>brand</b> (\u{1F34E} iPhone / Pixel / Galaxy S / Galaxy A) and the exact <b>version</b> — Pro or Pro Max for iPhone, + Plus or Ultra for Galaxy S, a or Pro for Pixel. Sell all your black iPhone Pro Maxes in two clicks!</li>
 <li>The ☁️ SKY RESTAURANT menu <b>stays open</b> while you shop now — no more closing and reopening after every bite.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
