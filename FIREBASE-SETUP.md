@@ -14,7 +14,8 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
 3. In the left menu: **Build → Realtime Database → Create database**.
    - Location: pick `europe-west1` (Belgium — closest to you).
    - Security rules: choose **locked mode** (we replace the rules next).
-4. Open the **Rules** tab of the database, replace everything with this, and click **Publish**:
+4. Open the **Rules** tab of the database, replace everything with this, and click **Publish**.
+   (Tip: the exact same rules are also in the file `firebase-rules.json` — copy the whole file!)
 
    ```json
    {
