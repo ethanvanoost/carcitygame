@@ -123,7 +123,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              "free": { ".validate": "newData.isBoolean()" },
              "furn": { ".validate": "newData.isString() && newData.val().length <= 6000" },
              "shop": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 100" },
-             "mkt": { ".validate": "newData.isString() && newData.val().length <= 6000" },
+             "mkt": { ".validate": "newData.isString() && newData.val().length <= 100000" },
              "$other": { ".validate": false }
            }
          }
@@ -136,7 +136,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
              ".validate": "newData.hasChildren(['t','ts'])",
              "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
              "ts": { ".validate": "newData.isNumber()" },
-             "data": { ".validate": "newData.isString() && newData.val().length <= 6000" },
+             "data": { ".validate": "newData.isString() && newData.val().length <= 100000" },
              "$other": { ".validate": false }
            }
          }

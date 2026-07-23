@@ -3942,7 +3942,7 @@ function mktMigrate(d){
 for(const k of Object.keys(MKT))mktMigrate(MKT[k]);
 function mkOffer(ty,grp,q,pr,bb,bf){
   /* slim offers: empty fields are left out so MANY more deals fit in the
-     database's 6 KB market slot */
+     database's 100 KB market slot */
   const o={ty,lab:grp.lab,q,p:pr||0};
   if(grp.hex)o.hex=grp.hex;
   if(grp.gl)o.gl=1;
@@ -4096,7 +4096,7 @@ async function syncMarket(id){
   const base={t:myToken(),n:mpName(),ts:Date.now()};
   const body=Object.assign({},base);
   const s=JSON.stringify(d);
-  if(s.length<=6000)body.mkt=s;
+  if(s.length<=100000)body.mkt=s;   // the rules allow up to 100 KB per market
   let ok=await fbPut(claimPath(id),body);
   if(!ok){
     ok=await fbPut(claimPath(id),base);   // old database rules: at least keep the claim
@@ -4357,7 +4357,7 @@ function mktApplyPick(p,kind,idx,ty,grp){
   if(!it)return;
   it.o=it.o||[];
   if(it.o.length>=mktCap(it)){toast("That one is FULL ("+mktCap(it)+" spots) — take something off first!");return;}
-  if(mktTotalOffers(d)>=40){toast("Your market is PACKED — 40 deals max across the whole plot!");return;}
+  if(mktTotalOffers(d)>=240){toast("Your market is PACKED — 240 deals max across the whole plot!");return;}
   if(kind==="c"){
     if(mktTakeStock(ty,grp,1)<1){toast("You don't have that one anymore!");return;}
     it.o.push(mkOffer(ty,grp,1,0,0,0));
@@ -4507,7 +4507,7 @@ $("mktOk").onclick=()=>{
   if((bb&&!bf)||(!bb&&bf)){toast("\u{1F381} Bonus: fill BOTH boxes (like 1 + 1) — or leave both empty.");return;}
   bb=Math.min(99,bb);bf=Math.min(99,bf);
   it.o=it.o||[];
-  if(it.o.length>=mktCap(it)||mktTotalOffers(d)>=40){toast("That one is FULL — take something off first!");$("mktModal").classList.remove("open");return;}
+  if(it.o.length>=mktCap(it)||mktTotalOffers(d)>=240){toast("That one is FULL — take something off first!");$("mktModal").classList.remove("open");return;}
   const got=mktTakeStock(ty,grp,q);   // only what REALLY leaves your collection goes on sale
   if(got<1){toast("You don't have those anymore!");$("mktModal").classList.remove("open");return;}
   it.o.push(mkOffer(ty,grp,got,pr,bb,bf));
@@ -4607,7 +4607,7 @@ function mktDoGenerate(p,cat,adj){
   if(mktTakeStock(jewel.ty,jewel,1)>0)
     d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
   /* EVERYTHING goes on sale, most valuable first — it keeps adding deals until
-     your whole collection is out, or the plot / 6 KB database slot is full.
+     your whole collection is out, or the plot / 100 KB database slot is full.
      ONLY what really leaves your collection lands on the tables, never more. */
   const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0);
   const grid=[];
@@ -4624,7 +4624,7 @@ function mktDoGenerate(p,cat,adj){
       const price=Math.max(1,worth(g2)+adj);
       /* stop BEFORE the database slot overflows — the rest stays with you */
       const test=mkOffer(g2.ty,g2,count,price,0,0);
-      if(JSON.stringify(d).length+JSON.stringify(piece).length+JSON.stringify(test).length+24>5700){full=true;break;}
+      if(JSON.stringify(d).length+JSON.stringify(piece).length+JSON.stringify(test).length+24>98000){full=true;break;}
       gi++;
       const got=mktTakeStock(g2.ty,g2,count);   // whatever REALLY left your collection
       if(got>0){piece.o.push(mkOffer(g2.ty,g2,got,price,0,0));stocked+=got;deals++;}
@@ -4662,7 +4662,7 @@ function openShopDesigns(p){
     if(v[0]==="s"){
       const d=MKT[p.id]||{b:0,name:"",items:[]};
       const s2=JSON.stringify({b:d.b||0,name:d.name||"",sub:d.sub||"",items:d.items||[]});
-      if(s2.length>6000){toast("Your shop is too big to save — take a few deals off first!");return;}
+      if(s2.length>100000){toast("Your shop is too big to save — take a few deals off first!");return;}
       const ok=await fbPut("/shopdesigns/"+profileKey()+"/"+slot,{t:myToken(),ts:Date.now(),data:s2});
       toast(ok?"\u{1F4BE} Shop saved to slot "+slot+"!":"\u{1F534} Couldn't save — the database rules need the small update in FIREBASE-SETUP.md.");
       return;
