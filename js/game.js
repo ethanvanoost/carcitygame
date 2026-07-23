@@ -4592,25 +4592,41 @@ function mktGenerate(p){
     {label:"❌ No, keep my shop as it is",value:"x"}
   ],a=>{
     if(a!=="go")return;
-    showDest("\u{1F3EA} What should your shop sell?",[
-      {label:"\u{1F4F1} Phones",value:"phone"},
-      {label:"\u{1F95F} Dumplings",value:"dump"},
-      {label:"\u{1F9C8} Butter squishies",value:"butter"},
-      {label:"\u{1F354} Food",value:"food"},
-      {label:"\u{1F31F} ALL of it",value:"all"},
-      {label:"❌ Cancel",value:"x"}
-    ],cat=>{
-      if(cat==="x")return;
-      showDest("\u{1F4B2} How should it be priced?",[
-        {label:"\u{1F4B0} EXPENSIVE shop — everything $20 ABOVE its worth",value:20},
-        {label:"⚖️ NORMAL shop — exactly what it's worth",value:0},
-        {label:"\u{1F525} CHEAP shop — everything $20 BELOW its worth (deal magnet!)",value:-20},
-        {label:"❌ Cancel",value:"x"}
-      ],adj=>{
-        if(typeof adj!=="number")return;
-        mktDoGenerate(p,cat,adj);
-      });
-    });
+    mktGenPick(p,new Set());
+  });
+}
+/* multi-pick: tick as many kinds as you like, then CONTINUE */
+function mktGenPick(p,sel){
+  const row=(key,label)=>({label:(sel.has(key)?"✅ ":"⬜ ")+label,value:key});
+  showDest("\u{1F3EA} What should your shop sell? Tick boxes, then CONTINUE!",[
+    row("phone","\u{1F4F1} Phones"),
+    row("dump","\u{1F95F} Dumplings"),
+    row("butter","\u{1F9C8} Butter squishies"),
+    row("food","\u{1F354} Food"),
+    {label:"\u{1F31F} ALL of it (everything at once)",value:"all"},
+    {label:"▶️ CONTINUE"+(sel.size?" — "+sel.size+" kind"+(sel.size>1?"s":"")+" ticked":""),value:"go"},
+    {label:"❌ Cancel",value:"x"}
+  ],v=>{
+    if(v==="x")return;
+    if(v==="all"){mktGenPrice(p,["phone","dump","butter","food"]);return;}
+    if(v==="go"){
+      if(!sel.size){toast("Tick at least ONE box first!");mktGenPick(p,sel);return;}
+      mktGenPrice(p,[...sel]);
+      return;
+    }
+    sel.has(v)?sel.delete(v):sel.add(v);
+    mktGenPick(p,sel);
+  });
+}
+function mktGenPrice(p,cats){
+  showDest("\u{1F4B2} How should it be priced?",[
+    {label:"\u{1F4B0} EXPENSIVE shop — everything $20 ABOVE its worth",value:20},
+    {label:"⚖️ NORMAL shop — exactly what it's worth",value:0},
+    {label:"\u{1F525} CHEAP shop — everything $20 BELOW its worth (deal magnet!)",value:-20},
+    {label:"❌ Cancel",value:"x"}
+  ],adj=>{
+    if(typeof adj!=="number")return;
+    mktDoGenerate(p,cats,adj);
   });
 }
 function mktDoGenerate(p,cat,adj){
@@ -4618,7 +4634,7 @@ function mktDoGenerate(p,cat,adj){
   /* old shop comes off — every bit of stock returns to your collection */
   (d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
   d.items=[];
-  const cats=cat==="all"?["phone","dump","butter","food"]:[cat];
+  const cats=Array.isArray(cat)?cat:cat==="all"?["phone","dump","butter","food"]:[cat];
   const groups=[];
   cats.forEach(ty=>mktGroups(ty).forEach(g2=>groups.push(g2)));
   const worth=g2=>g2.ty==="food"?Math.max(1,g2.fh||10):Math.max(1,mkpWorth(g2));
