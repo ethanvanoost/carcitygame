@@ -4078,6 +4078,7 @@ function mktMakeLabel(text,w){
 }
 window.onMarketBuilt=p=>{if(rentedAt(p.id)&&MKT[p.id])renderMarket(p);};
 function mktRegPath(id){return "/markets/"+mpWorldKey()+"/"+fbKey(id);}
+let _mktWarnRules=false,_mktWarnClaim=false;
 async function syncMarket(id){
   if(!SERVER_READY)return;
   const d=MKT[id];if(!d)return;
@@ -4085,10 +4086,26 @@ async function syncMarket(id){
   const body=Object.assign({},base);
   const s=JSON.stringify(d);
   if(s.length<=6000)body.mkt=s;
-  if(!await fbPut(claimPath(id),body))await fbPut(claimPath(id),base);   // old database rules: at least keep the claim
+  let ok=await fbPut(claimPath(id),body);
+  if(!ok){
+    ok=await fbPut(claimPath(id),base);   // old database rules: at least keep the claim
+    if(ok&&!_mktWarnRules){
+      _mktWarnRules=true;
+      toast("⚠️ Your market's TABLES can't be stored online yet — the database rules need the update from FIREBASE-SETUP.md. Other players see an EMPTY market!");
+    }
+  }
+  if(!ok&&!_mktWarnClaim){
+    _mktWarnClaim=true;
+    toast("⚠️ Your market couldn't be stored ONLINE — other players still see the plot FOR SALE! (Database rules or connection problem.)");
+  }
   const co=String(id).slice(2).split(",").map(Number);
   fbPut(mktRegPath(id),{n:(d.name||"").slice(0,24),o:mpName(),x:co[0]||0,z:co[1]||0,ts:Date.now()});
 }
+/* self-healing: shortly after joining, re-store every market you own online —
+   fixes plots that were claimed while offline or before the rules update */
+setTimeout(()=>{
+  RENT.list.forEach(rm=>{if(String(rm.id).startsWith("K:")&&MKT[rm.id])syncMarket(rm.id);});
+},15000);
 async function fetchMarketFresh(id){
   const g2=await fbGet(claimPath(id));
   if(g2.ok&&g2.data&&!g2.data.free&&g2.data.t!==myToken()){
@@ -4667,7 +4684,14 @@ function updateMarketVisit(dt){
   _mvT-=dt;if(_mvT>0)return;_mvT=2;
   if(S.world!=="earth"||!SERVER_READY)return;
   const p=nearMarketPlot();
-  if(!p||rentedAt(p.id))return;
+  if(!p)return;
+  if(rentedAt(p.id)){
+    /* YOUR plot: re-store it online once a minute while you're here, so other
+       players always find your market (heals failed earlier syncs) */
+    const now2=performance.now();
+    if(!p._osNext||now2>=p._osNext){p._osNext=now2+60000;if(MKT[p.id])syncMarket(p.id);}
+    return;
+  }
   /* LIVE market: while you're on the plot we re-check every 5 s — new tables,
      stock and prices appear for you WITHOUT a refresh */
   const now=performance.now();
