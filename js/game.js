@@ -3875,7 +3875,7 @@ function unrentProperty(rm){
   releaseClaim(rm.id);
   if(String(rm.id).startsWith("K:")){   // marketing plot: leftover stock comes back, registry entry goes
     const md=MKT[rm.id];
-    if(md)(md.items||[]).forEach(it=>{if(it.q>0)mktGiveGoods(it,it.q);});
+    if(md)(md.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
     delete MKT[rm.id];saveMkt();
     if(SERVER_READY)fbPut(mktRegPath(rm.id),null);
     const mp2=marketPlots.find(q=>q.id===rm.id);
@@ -3922,8 +3922,28 @@ function switchToBuy(rm){
    then stock LONG TABLES (with prices & bonus deals) and DISPLAY CASES. Other players
    walk in and buy — the money rides the payments inbox straight to you. */
 const MKT_PRICE=80000,MKT_RENT=100;
-const MKT={};    // my plots: id -> {b,name,items:[{k,ty,lab,hex,gl,sz,fh,q,p,bb,bf}]}
+const MKT={};    // my plots: id -> {b,name,sub,items:[{k,dx,dz,r,o:[offers]}]}
 try{Object.assign(MKT,JSON.parse(localStorage.getItem("vc4mkt")||"{}"));}catch(e){}
+/* pieces hold MULTIPLE offers now: table = 5, store shelf = 15 (3 rows x 5), case = 1.
+   Old saves had ONE offer glued onto the piece — move it into the o[] list. */
+function mktCap(it){return it.k==="c"?1:it.k==="s"?15:5;}
+function mktMigrate(d){
+  if(!d||!Array.isArray(d.items))return d;
+  d.items.forEach(it=>{
+    if(!Array.isArray(it.o)){
+      it.o=[];
+      if(it.ty)it.o.push({ty:it.ty,lab:it.lab,hex:it.hex||"",gl:it.gl||0,sz:it.sz||"",fh:it.fh||0,
+        pm:it.pm||"",br:it.br||"",tier:it.tier||0,yr:it.yr||0,q:it.q||0,p:it.p||0,bb:it.bb||0,bf:it.bf||0});
+      delete it.ty;
+    }
+  });
+  return d;
+}
+for(const k of Object.keys(MKT))mktMigrate(MKT[k]);
+function mkOffer(ty,grp,q,pr,bb,bf){
+  return{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
+    pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q,p:pr||0,bb:bb||0,bf:bf||0};
+}
 function saveMkt(){try{localStorage.setItem("vc4mkt",JSON.stringify(MKT))}catch(e){}}
 const MKTR=new Map();   // other players' plots: id -> {n:ownerName, d:data}
 function nearMarketPlot(){
@@ -4005,22 +4025,40 @@ function renderMarket(p){
   (data.items||[]).forEach((it,i)=>{
     const sl=(typeof it.dx==="number")?it:mktSlot(i);   // old items fall back to the grid
     const tx=p.x+sl.dx,tz=p.z+sl.dz,ty=p.y,r=it.r||0;
-    buildFurnPiece(it.k==="c"?"mcase":"mtable",tx,tz,ty,r,sg,null);
+    const offers=Array.isArray(it.o)?it.o:[];
+    const rx=o=>tx+Math.cos(r)*o,rz=o=>tz-Math.sin(r)*o;
+    buildFurnPiece(it.k==="c"?"mcase":it.k==="s"?"mshelf":"mtable",tx,tz,ty,r,sg,null);
     if(it.k==="c"){
-      if(it.ty)addMktGood(sg,it,tx,ty+1.15,tz,0.3);
-      const l2=mktMakeLabel(it.ty?mktItemName(it)+" — just LOOK!":(mine?"Empty case — press T here!":"Empty display case"),7);
+      const o=offers[0];
+      if(o&&o.ty)addMktGood(sg,o,tx,ty+1.15,tz,0.3);
+      const l2=mktMakeLabel(o&&o.ty?mktItemName(o)+" — just LOOK!":(mine?"Empty case — press T here!":"Empty display case"),7);
       l2.position.set(tx,ty+3.1,tz);sg.add(l2);
+    }else if(it.k==="s"){
+      /* STORE SHELF: 3 rows x 5 spots, the goods sit right on the boards */
+      offers.forEach((o,oi)=>{
+        if(!o.ty)return;
+        const row=Math.floor(oi/5),col=oi%5;
+        addMktGood(sg,o,rx(-1.8+col*0.9),ty+0.62+row*0.8,rz(-1.8+col*0.9),0.17);
+      });
+      const inStock=offers.filter(o=>o.ty&&o.q>0).length;
+      const l2=mktMakeLabel(offers.length
+        ?"\u{1F6D2} STORE SHELF — "+inStock+" deal"+(inStock===1?"":"s")+" in stock (press T!)"
+        :(mine?"Empty shelf — press T to stock it!":"Empty store shelf"),9);
+      l2.position.set(tx,ty+3.6,tz);sg.add(l2);
     }else{
-      /* goods lie along the (rotated) table top */
-      if(it.ty)for(let n=0;n<Math.min(it.q,6);n++){
-        const o=-2.5+n*1;
-        addMktGood(sg,it,tx+Math.cos(r)*o,ty+1.12,tz-Math.sin(r)*o,0.26);
+      /* LONG TABLE: up to 5 different offers side by side + stacked price signs */
+      offers.forEach((o,oi)=>{
+        if(o.ty&&o.q>0)addMktGood(sg,o,rx(-2.8+oi*1.4),ty+1.12,rz(-2.8+oi*1.4),0.24);
+        const bon=(o.bb&&o.bf)?" · "+o.bb+"+"+o.bf+" FREE!":"";
+        const l2=mktMakeLabel(o.ty
+          ?(o.q>0?mktItemName(o)+" ×"+o.q+" — $"+fmtMoney(o.p)+bon:mktItemName(o)+" — NO STOCK")
+          :"(empty spot)",8);
+        l2.position.set(tx,ty+2.9+oi*0.75,tz);sg.add(l2);
+      });
+      if(!offers.length){
+        const l2=mktMakeLabel(mine?"Empty table — press T here to stock it!":"Empty table",9);
+        l2.position.set(tx,ty+3.3,tz);sg.add(l2);
       }
-      const bon=(it.bb&&it.bf)?" · "+it.bb+"+"+it.bf+" FREE!":"";
-      const l2=mktMakeLabel(!it.ty?(mine?"Empty table — press T here to stock it!":"Empty table")
-        :it.q>0?mktItemName(it)+" ×"+it.q+" — $"+fmtMoney(it.p)+bon
-        :mktItemName(it)+" — NO STOCK",9);
-      l2.position.set(tx,ty+3.3,tz);sg.add(l2);
     }
   });
 }
@@ -4057,6 +4095,7 @@ async function fetchMarketFresh(id){
     let d={b:0,name:"",items:[]};
     if(typeof g2.data.mkt==="string"){try{const q=JSON.parse(g2.data.mkt);if(q&&typeof q==="object")d=q;}catch(e){}}
     d.items=Array.isArray(d.items)?d.items:[];
+    mktMigrate(d);
     MKTR.set(id,{n:g2.data.n||"a player",d});
     return MKTR.get(id);
   }
@@ -4069,10 +4108,10 @@ function openMarket(p){
     const rm=await fetchMarketFresh(p.id);
     renderMarket(p);
     if(!rm){openMarketDesk(p);return;}
-    /* standing right next to one table? buy from THAT table */
+    /* standing right next to one table/shelf? show JUST its deals */
     const ni=mktNearItem(p,3.4);
     const it=ni>=0?rm.d.items[ni]:null;
-    if(it&&it.k==="t"&&it.ty)mktBuyFrom(p,rm,ni);
+    if(it&&it.k!=="c"&&(it.o||[]).some(o=>o.ty))openMarketShop(p,rm,ni);
     else openMarketShop(p,rm);
   })();
 }
@@ -4171,47 +4210,43 @@ function mktEditClick(e){
     });
     if(bi<0){toast("Click closer to a table to remove it.");return;}
     const it=d.items.splice(bi,1)[0];
-    if(it&&it.ty&&it.q>0)mktGiveGoods(it,it.q);
+    let back=0;
+    if(it&&Array.isArray(it.o))it.o.forEach(o=>{if(o.ty&&o.q>0){mktGiveGoods(o,o.q);back+=o.q;}});
     saveMkt();renderMarket(p);
-    toast("\u{1F5D1} Removed"+(it&&it.ty&&it.q>0?" — your stock came back!":"!"));
+    toast("\u{1F5D1} Removed"+(back?" — ×"+back+" stock came back to you!":"!"));
     return;
   }
   const def=furnDef(MEDIT.sel);
   if(!def){toast("Pick a table or display case from the bar first!");return;}
   if(d.items.length>=16){toast("Your plot is full — 16 pieces max!");return;}
-  d.items.push({k:def.t==="mcase"?"c":"t",dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot,ty:null,q:0,p:0,bb:0,bf:0});
+  d.items.push({k:def.t==="mcase"?"c":def.t==="mshelf"?"s":"t",dx:Math.round(dx*10)/10,dz:Math.round(dz*10)/10,r:MEDIT.rot,o:[]});
   saveMkt();renderMarket(p);
   toast("✅ "+def.n+" placed — stand next to it and press T to "+(def.t==="mcase"?"put something inside!":"stock it!"));
   if(GHOST.lastE)updateGhost(GHOST.lastE);
 }
-/* T next to one of YOUR tables: stock it, empty it, or swap the display */
+/* T next to one of YOUR pieces: add items (table 5, shelf 15, case 1) or take them off */
 function openMyTable(p,i){
   const d=MKT[p.id],it=d.items[i];
   if(!it)return;
-  if(it.k==="c"){
-    if(!it.ty){mktPickType(p,"c",i);return;}
-    showDest("\u{1F5C4} Display case — "+mktItemName(it),[
-      {label:"\u{1F4E4} Take it out (back to your collection)",value:"out"},
-      {label:"❌ Close",value:"x"}
-    ],v=>{
-      if(v!=="out")return;
-      mktGiveGoods(it,1);
-      it.ty=null;it.q=0;
-      saveMkt();syncMarket(p.id);renderMarket(p);
-      toast("\u{1F4E4} Back in your collection — the case is empty again.");
-    });
-    return;
-  }
-  if(!it.ty){mktPickType(p,"t",i);return;}
-  showDest("\u{1FA91} "+mktItemName(it)+" — ×"+it.q+" at $"+fmtMoney(it.p)+(it.bb?" ("+it.bb+"+"+it.bf+" FREE)":""),[
-    {label:"\u{1F5D1} Empty the table"+(it.q>0?" (×"+it.q+" comes back to you)":" (it's sold out)"),value:"clr"},
-    {label:"❌ Close",value:"x"}
-  ],v=>{
-    if(v!=="clr")return;
-    if(it.q>0)mktGiveGoods(it,it.q);
-    it.ty=null;it.q=0;it.p=0;it.bb=0;it.bf=0;
-    saveMkt();syncMarket(p.id);renderMarket(p);
-    toast("\u{1F5D1} Table cleared — press T next to it to stock something new!");
+  it.o=it.o||[];
+  const cap=mktCap(it);
+  /* empty case/table: jump straight to picking */
+  if(!it.o.length){mktPickType(p,it.k==="c"?"c":"t",i);return;}
+  const name=it.k==="c"?"\u{1F5C4} Display case":it.k==="s"?"\u{1F6D2} Store shelf":"\u{1FA91} Long table";
+  const opts=[];
+  if(it.o.length<cap)opts.push({label:"➕ Add another item ("+it.o.length+" / "+cap+" spots used)",value:"add"});
+  it.o.forEach((o,oi)=>opts.push({
+    label:"\u{1F5D1} "+mktItemName(o)+(it.k==="c"?"":" — ×"+o.q+" at $"+fmtMoney(o.p)+(o.bb?" ("+o.bb+"+"+o.bf+" FREE)":""))+" — take it off",
+    value:oi
+  }));
+  opts.push({label:"❌ Close",value:"x"});
+  showDest(name+" ("+it.o.length+" / "+cap+")",opts,v=>{
+    if(v==="add"){mktPickType(p,it.k==="c"?"c":"t",i);return;}
+    if(typeof v!=="number")return;
+    const o=it.o.splice(v,1)[0];
+    if(o&&o.ty&&o.q>0)mktGiveGoods(o,o.q);
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("\u{1F5D1} Taken off"+(o&&o.q>0?" — ×"+o.q+" came back to your collection!":"!"));
   });
 }
 function mktPickType(p,kind,idx){
@@ -4288,13 +4323,16 @@ function mktGiveGoods(it,n){
   renderDump();renderPack();saveGame();
 }
 /* selection made (box picker or food list): display it, or open the price window */
+function mktTotalOffers(d){return (d.items||[]).reduce((s,it)=>s+((it.o&&it.o.length)||0),0);}
 function mktApplyPick(p,kind,idx,ty,grp){
   const d=MKT[p.id],it=d&&d.items[idx];
   if(!it)return;
+  it.o=it.o||[];
+  if(it.o.length>=mktCap(it)){toast("That one is FULL ("+mktCap(it)+" spots) — take something off first!");return;}
+  if(mktTotalOffers(d)>=40){toast("Your market is PACKED — 40 deals max across the whole plot!");return;}
   if(kind==="c"){
     mktTakeStock(ty,grp,1);
-    Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
-      pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q:1,p:0,bb:0,bf:0});
+    it.o.push(mkOffer(ty,grp,1,0,0,0));
     saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
     toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
     return;
@@ -4440,50 +4478,56 @@ $("mktOk").onclick=()=>{
   if(bb<0)bb=0;if(bf<0)bf=0;
   if((bb&&!bf)||(!bb&&bf)){toast("\u{1F381} Bonus: fill BOTH boxes (like 1 + 1) — or leave both empty.");return;}
   bb=Math.min(99,bb);bf=Math.min(99,bf);
+  it.o=it.o||[];
+  if(it.o.length>=mktCap(it)||mktTotalOffers(d)>=40){toast("That one is FULL — take something off first!");$("mktModal").classList.remove("open");return;}
   mktTakeStock(ty,grp,q);
-  Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
-    pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q,p:pr,bb,bf});
+  it.o.push(mkOffer(ty,grp,q,pr,bb,bf));
   $("mktModal").classList.remove("open");
   saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
   toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
 };
-function openMarketShop(p,rm){
+function openMarketShop(p,rm,onlyPi){
   const d=rm.d,owner=rm.n;
   const title=(d.name&&String(d.name).trim())?String(d.name).trim():owner+"'s Marketing Plot";
   const opts=[];
-  (d.items||[]).forEach((it,i)=>{
-    if(it.k!=="t"||!it.ty)return;
-    opts.push(it.q>0
-      ?{label:"\u{1F6D2} "+mktItemName(it)+" — $"+fmtMoney(it.p)+" each (×"+it.q+" left"+(it.bb?" · "+it.bb+"+"+it.bf+" FREE":"")+")",value:i}
-      :{label:"❌ "+mktItemName(it)+" — NO STOCK",value:"x"});
+  (d.items||[]).forEach((it,pi)=>{
+    if(it.k==="c"||(onlyPi!==undefined&&pi!==onlyPi))return;
+    (it.o||[]).forEach((o,oi)=>{
+      if(!o.ty)return;
+      opts.push(o.q>0
+        ?{label:"\u{1F6D2} "+mktItemName(o)+" — $"+fmtMoney(o.p)+" each (×"+o.q+" left"+(o.bb?" · "+o.bb+"+"+o.bf+" FREE":"")+")",value:pi+"."+oi}
+        :{label:"❌ "+mktItemName(o)+" — NO STOCK",value:"x"});
+    });
   });
-  if(!opts.length)opts.push({label:"(No stocked tables here yet — come back later!)",value:"x"});
+  if(!opts.length)opts.push({label:"(Nothing for sale here yet — come back later!)",value:"x"});
   opts.push({label:"❌ Leave",value:"x"});
   showDest("\u{1F3EA} "+title+" — by "+owner,opts,v=>{
-    if(typeof v!=="number")return;
+    if(typeof v!=="string"||v.indexOf(".")<0)return;
     mktBuyFrom(p,rm,v);
   });
 }
-/* buying from ONE table (walk up to it and press T, or pick it from the list) */
-function mktBuyFrom(p,rm,idx){
-  const owner=rm.n,it=rm.d.items[idx];
-  if(!it||!it.ty||it.q<=0)return;
-  const deal=it.bb?"\nBONUS: every "+it.bb+" you buy = "+it.bf+" extra for FREE!":"";
-  const qs=prompt("How many "+mktItemName(it)+" do you want to BUY at $"+fmtMoney(it.p)+" each?"+deal+"\n(stock: "+it.q+")","1");
+/* buying ONE offer (walk up to its table/shelf and press T, or pick from the list) */
+function mktBuyFrom(p,rm,ref){
+  const owner=rm.n,seg=String(ref).split(".");
+  const it=rm.d.items[parseInt(seg[0],10)];
+  const o=it&&it.o&&it.o[parseInt(seg[1],10)||0];
+  if(!o||!o.ty||o.q<=0)return;
+  const deal=o.bb?"\nBONUS: every "+o.bb+" you buy = "+o.bf+" extra for FREE!":"";
+  const qs=prompt("How many "+mktItemName(o)+" do you want to BUY at $"+fmtMoney(o.p)+" each?"+deal+"\n(stock: "+o.q+")","1");
   if(qs===null)return;
   let n=Math.floor(parseInt(qs,10));
   if(!(n>=1)){toast("Type a normal number, like 2!");return;}
-  if(n>it.q)n=it.q;
-  let free=(it.bb&&it.bf)?Math.floor(n/it.bb)*it.bf:0;
-  if(n+free>it.q)free=it.q-n;
-  const total=n*it.p;
+  if(n>o.q)n=o.q;
+  let free=(o.bb&&o.bf)?Math.floor(n/o.bb)*o.bf:0;
+  if(n+free>o.q)free=o.q-n;
+  const total=n*o.p;
   (async()=>{
-    const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+idx+"|"+(n+free)).slice(0,80)},true);
+    const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+ref+"|"+(n+free)).slice(0,80)},true);
     if(!ok)return;
-    it.q-=n+free;
-    mktGiveGoods(it,n+free);
+    o.q-=n+free;
+    mktGiveGoods(o,n+free);
     renderMarket(p);
-    toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(it)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
+    toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(o)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
   })();
 }
 /* walking near someone's market loads their stalls & signs */
@@ -4560,7 +4604,7 @@ function updateRent(){
       releaseClaim(rm.id);
       if(String(rm.id).startsWith("K:")){   // lost market: your stock comes back at least
         const md=MKT[rm.id];
-        if(md)(md.items||[]).forEach(it=>{if(it.q>0)mktGiveGoods(it,it.q);});
+        if(md)(md.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
         delete MKT[rm.id];saveMkt();
         if(SERVER_READY)fbPut(mktRegPath(rm.id),null);
       }
@@ -4629,6 +4673,7 @@ const FURN=[
 /* the MARKETING PLOT editor sells exactly two things — both free to place */
 const FURN_MKT=[
   {t:"mtable",n:"Long table",e:"\u{1FA91}",p:0,out:2},
+  {t:"mshelf",n:"Store shelf",e:"\u{1F6D2}",p:0,out:2},
   {t:"mcase",n:"Display case",e:"\u{1F5C4}",p:0,out:2}
 ];
 const furnDef=t=>FURN.find(f=>f.t===t)||FURN_MKT.find(f=>f.t===t);
@@ -4642,6 +4687,20 @@ function buildFurnPiece(t,x,z,y,r,parent,man){
     [[-3.1,-0.9],[3.1,-0.9],[-3.1,0.9],[3.1,0.9]].forEach(o=>{
       const lg=new THREE.Mesh(new THREE.BoxGeometry(0.18,1,0.18),legM);
       lg.position.set(o[0],0.5,o[1]);g.add(lg);
+    });
+    return;
+  }
+  if(t==="mshelf"){   // the market's STORE SHELF: 3 rows, 5 spots each
+    const wood=new THREE.MeshLambertMaterial({color:0x8a6f4d});
+    const back=new THREE.Mesh(new THREE.BoxGeometry(4.6,2.6,0.08),wood);
+    back.position.set(0,1.3,-0.5);g.add(back);
+    [[-2.3],[2.3]].forEach(o=>{
+      const side=new THREE.Mesh(new THREE.BoxGeometry(0.1,2.6,1.1),wood);
+      side.position.set(o[0],1.3,0);g.add(side);
+    });
+    [0.5,1.3,2.1].forEach(h2=>{
+      const board=new THREE.Mesh(new THREE.BoxGeometry(4.6,0.09,1.05),wood);
+      board.position.set(0,h2,0);board.castShadow=true;g.add(board);
     });
     return;
   }
@@ -6229,13 +6288,15 @@ async function checkPayments(){
       if(typeof p.d==="string"&&p.d.startsWith("MKT|")){
         /* someone bought from my MARKETING PLOT — take the stock off that table */
         const[,mid,idxS,nS]=p.d.split("|");
-        const md=MKT[mid],idx=parseInt(idxS,10),n2=Math.max(1,parseInt(nS,10)||1);
-        if(md&&md.items[idx]&&md.items[idx].ty){
-          md.items[idx].q=Math.max(0,(md.items[idx].q||0)-n2);
+        const md=MKT[mid],seg=String(idxS).split("."),n2=Math.max(1,parseInt(nS,10)||1);
+        const pit=md&&md.items[parseInt(seg[0],10)];
+        const off=pit&&pit.o&&pit.o[parseInt(seg[1],10)||0];
+        if(off&&off.ty){
+          off.q=Math.max(0,(off.q||0)-n2);
           saveMkt();syncMarket(mid);
           const mp2=marketPlots.find(q=>q.id===mid);
           if(mp2)renderMarket(mp2);
-          toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought "+n2+"× "+mktItemName(md.items[idx])+" at your market — $"+fmtMoney(Math.floor(p.amt))+" for you!");
+          toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought "+n2+"× "+mktItemName(off)+" at your market — $"+fmtMoney(Math.floor(p.amt))+" for you!");
         }else toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought from your market — $"+fmtMoney(Math.floor(p.amt))+"!");
       }else if(typeof p.d==="string"&&p.d.startsWith("INV|")){
         /* a WORLD INVITE rides the inbox: INV|kind|worldname */
@@ -11350,6 +11411,7 @@ const UPDATE_PAGES=[
 <li>A mid-blue store with orange trim every ~500 m (\u{1F4F1} on the map): walk in, press T, and grab <b>FREE surprise phone boxes</b> — the menu stays open so you can take a whole stack.</li>
 <li><b>\u{1F4F1} PHONE BUYERS</b> every ~500 m (little blue stands): press T to sell your phones — with the same color filters as the other buyers. New Pro Max / Ultra and \u{1F308} rainbow phones pay the most!</li>
 <li>The phone buyer has FULL filters that combine: a <b>color</b>, a <b>brand</b> (\u{1F34E} iPhone / Pixel / Galaxy S / Galaxy A) and the exact <b>version</b> — Pro or Pro Max for iPhone, + Plus or Ultra for Galaxy S, a or Pro for Pixel. Sell all your black iPhone Pro Maxes in two clicks!</li>
+<li>\u{1FA91} Long tables now hold up to <b>5 DIFFERENT deals</b> side by side, each with its own price sign — and the new <b>\u{1F6D2} STORE SHELF</b> (in the market editor) has 3 rows with 5 spots each: a 15-deal mega rack!</li>
 <li>The ☁️ SKY RESTAURANT menu <b>stays open</b> while you shop now — no more closing and reopening after every bite.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
