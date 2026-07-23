@@ -2919,6 +2919,30 @@ function nearButterBuyer(){
 /* filters COMBINE: a color AND glitter AND (at the butter buyer) a size —
    the list only shows what matches, and matching items get auto-selected */
 const FILT={color:null,glit:"all",size:"all",brand:"all",pvar:"all"};
+/* shared phone filters: brand + exact version (used by the buyer AND the market picker) */
+function phoneFiltPass(m,brand,pvar){
+  m=m||"";
+  if(brand==="iphone"&&m.indexOf("iPhone")!==0)return false;
+  if(brand==="pixel"&&m.indexOf("Pixel")<0)return false;
+  if(brand==="gs"&&!/Galaxy S\d/.test(m))return false;
+  if(brand==="ga"&&!/Galaxy A\d/.test(m))return false;
+  if(pvar!=="all"){
+    const promax=/Pro Max$/.test(m),pro=/Pro$/.test(m),plus=/\+$/.test(m),ultra=/Ultra$/.test(m),aV=/\da$/.test(m);
+    if(pvar==="base"&&(promax||pro||plus||ultra||aV))return false;
+    if(pvar==="pro"&&!pro)return false;
+    if(pvar==="promax"&&!promax)return false;
+    if(pvar==="plus"&&!plus)return false;
+    if(pvar==="ultra"&&!ultra)return false;
+    if(pvar==="a"&&!aV)return false;
+  }
+  return true;
+}
+function phoneVarOpts(brand){
+  return brand==="iphone"?[["all","All versions"],["base","Base"],["pro","Pro"],["promax","Pro Max"]]
+    :brand==="pixel"?[["all","All versions"],["base","Base"],["a","a (small)"],["pro","Pro"]]
+    :brand==="gs"?[["all","All versions"],["base","Base"],["plus","+ Plus"],["ultra","Ultra"]]
+    :null;
+}
 function passFilt(d){
   if(FILT.color&&d.color!==FILT.color)return false;
   if(SELL.kind!=="phone"){   // phones have no glitter
@@ -2926,22 +2950,7 @@ function passFilt(d){
     if(FILT.glit==="normal"&&d.glitter)return false;
   }
   if(SELL.kind==="butter"&&FILT.size!=="all"&&(d.size||"norm")!==FILT.size)return false;
-  if(SELL.kind==="phone"){
-    const m=d.m||"";
-    if(FILT.brand==="iphone"&&m.indexOf("iPhone")!==0)return false;
-    if(FILT.brand==="pixel"&&m.indexOf("Pixel")<0)return false;
-    if(FILT.brand==="gs"&&!/Galaxy S\d/.test(m))return false;
-    if(FILT.brand==="ga"&&!/Galaxy A\d/.test(m))return false;
-    if(FILT.pvar!=="all"){
-      const promax=/Pro Max$/.test(m),pro=/Pro$/.test(m),plus=/\+$/.test(m),ultra=/Ultra$/.test(m),aV=/\da$/.test(m);
-      if(FILT.pvar==="base"&&(promax||pro||plus||ultra||aV))return false;
-      if(FILT.pvar==="pro"&&!pro)return false;
-      if(FILT.pvar==="promax"&&!promax)return false;
-      if(FILT.pvar==="plus"&&!plus)return false;
-      if(FILT.pvar==="ultra"&&!ultra)return false;
-      if(FILT.pvar==="a"&&!aV)return false;
-    }
-  }
+  if(SELL.kind==="phone"&&!phoneFiltPass(d.m,FILT.brand,FILT.pvar))return false;
   return true;
 }
 function shownItems(){
@@ -2973,10 +2982,7 @@ function renderSell(){
     segOn(["fBrAll","fBrI","fBrP","fBrS","fBrA"],
       FILT.brand==="iphone"?"fBrI":FILT.brand==="pixel"?"fBrP":FILT.brand==="gs"?"fBrS":FILT.brand==="ga"?"fBrA":"fBrAll");
     const vw=$("sellVarRow");
-    const vops=FILT.brand==="iphone"?[["all","All versions"],["base","Base"],["pro","Pro"],["promax","Pro Max"]]
-      :FILT.brand==="pixel"?[["all","All versions"],["base","Base"],["a","a (small)"],["pro","Pro"]]
-      :FILT.brand==="gs"?[["all","All versions"],["base","Base"],["plus","+ Plus"],["ultra","Ultra"]]
-      :null;
+    const vops=phoneVarOpts(FILT.brand);
     if(vops){
       vw.style.display="";vw.innerHTML="";
       vops.forEach(([v,l])=>{
@@ -4217,8 +4223,8 @@ function mktPickType(p,kind,idx){
     {label:"❌ Cancel",value:"x"}
   ],ty=>{
     if(ty==="x")return;
-    if(ty==="food"||ty==="phone")mktPickItem(p,kind,ty,idx);   // simple list
-    else openMktPicker(p,kind,ty,idx);                          // squishies: the BOX PICKER!
+    if(ty==="food")mktPickItem(p,kind,ty,idx);   // food: a simple list
+    else openMktPicker(p,kind,ty,idx);           // squishies & phones: the BOX PICKER!
   });
 }
 function mktGroups(ty){
@@ -4307,10 +4313,20 @@ function mktPickItem(p,kind,ty,idx){
 }
 /* the BOX PICKER: turn boxes on — ✨ Glitter, a color and (butter) a size —
    and sell EXACTLY that one, like GLITTER MEGA PURPLE */
-const MKP={p:null,kind:"t",ty:"dump",idx:0,gl:0,sz:"norm",color:null};
+const MKP={p:null,kind:"t",ty:"dump",idx:0,gl:0,sz:"norm",brand:"all",pvar:"all",color:null};
 function mkpVariants(){
-  const coll=MKP.ty==="dump"?DUMP.owned:BUTTER.owned;
   const map=new Map();
+  if(MKP.ty==="phone"){
+    /* phones: group by exact model + color, filtered by brand & version */
+    PHONE.owned.forEach(ph=>{
+      if(!phoneFiltPass(ph.m,MKP.brand,MKP.pvar))return;
+      const k=ph.m+"|"+ph.color;
+      const e=map.get(k)||{lab:ph.color,hex:ph.hex,pm:ph.m,br:ph.br,tier:ph.tier,yr:ph.yr,n:0,ty:"phone"};
+      e.n++;map.set(k,e);
+    });
+    return map;
+  }
+  const coll=MKP.ty==="dump"?DUMP.owned:BUTTER.owned;
   coll.forEach(d2=>{
     if((d2.glitter?1:0)!==MKP.gl)return;
     if(MKP.ty==="butter"&&(d2.size||"norm")!==MKP.sz)return;
@@ -4320,14 +4336,32 @@ function mkpVariants(){
   return map;
 }
 function renderMkp(){
-  const butter=MKP.ty==="butter";
-  $("mkpTitle").textContent=(butter?"\u{1F9C8}":"\u{1F95F}")+" Pick your "+(butter?"butter squishy":"dumpling");
+  const butter=MKP.ty==="butter",phone=MKP.ty==="phone";
+  $("mkpTitle").textContent=phone?"\u{1F4F1} Pick your phone"
+    :(butter?"\u{1F9C8}":"\u{1F95F}")+" Pick your "+(butter?"butter squishy":"dumpling");
+  $("mkpGlitRow").style.display=phone?"none":"";
   $("mkpSizeRow").style.display=butter?"":"none";
+  $("mkpBrandRow").style.display=phone?"":"none";
   $("mkpGlitOn").classList.toggle("on",MKP.gl===1);
   $("mkpGlitOff").classList.toggle("on",MKP.gl===0);
   $("mkpSzN").classList.toggle("on",MKP.sz==="norm");
   $("mkpSzM").classList.toggle("on",MKP.sz==="med");
   $("mkpSzX").classList.toggle("on",MKP.sz==="mega");
+  if(phone){
+    segOn(["kBrAll","kBrI","kBrP","kBrS","kBrA"],
+      MKP.brand==="iphone"?"kBrI":MKP.brand==="pixel"?"kBrP":MKP.brand==="gs"?"kBrS":MKP.brand==="ga"?"kBrA":"kBrAll");
+    const vw=$("mkpVarRow"),vops=phoneVarOpts(MKP.brand);
+    if(vops){
+      vw.style.display="";vw.innerHTML="";
+      vops.forEach(([v,l])=>{
+        const b=document.createElement("button");
+        b.textContent=l;
+        if(MKP.pvar===v)b.className="on";
+        b.onclick=()=>{MKP.pvar=v;MKP.color=null;renderMkp();};
+        vw.appendChild(b);
+      });
+    }else vw.style.display="none";
+  }else $("mkpVarRow").style.display="none";
   const vars=mkpVariants();
   if(MKP.color&&!vars.has(MKP.color))MKP.color=null;   // that combo ran out — unpick it
   const wrap=$("mkpColors");wrap.innerHTML="";
@@ -4337,23 +4371,29 @@ function renderMkp(){
     d2.textContent="You have NONE with these boxes — try other ones!";
     wrap.appendChild(d2);
   }
-  [...vars.values()].sort((a,b)=>b.n-a.n).forEach(g2=>{
+  [...vars.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,24).forEach(([key,g2])=>{
     const b=document.createElement("button");
-    b.innerHTML="<span class='swatch' style='background:"+g2.hex+"'></span>"+g2.lab+" ("+g2.n+")";
-    if(MKP.color===g2.lab)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
-    b.onclick=()=>{MKP.color=g2.lab;renderMkp();};
+    b.innerHTML="<span class='swatch' style='background:"+g2.hex+"'></span>"
+      +(phone?(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm:g2.lab)+" ("+g2.n+")";
+    if(MKP.color===key)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
+    b.onclick=()=>{MKP.color=key;renderMkp();};
     wrap.appendChild(b);
   });
   const sel=MKP.color?vars.get(MKP.color):null;
   $("mkpCount").textContent=sel
     ?"Your pick: "+mktItemName(sel)+" — you have "+sel.n
-    :"\u{1F446} Now pick a color!";
+    :"\u{1F446} Now pick "+(phone?"a phone!":"a color!");
 }
 function openMktPicker(p,kind,ty,idx){
-  MKP.p=p;MKP.kind=kind;MKP.ty=ty;MKP.idx=idx;MKP.gl=0;MKP.sz="norm";MKP.color=null;
+  MKP.p=p;MKP.kind=kind;MKP.ty=ty;MKP.idx=idx;MKP.gl=0;MKP.sz="norm";MKP.brand="all";MKP.pvar="all";MKP.color=null;
   renderMkp();
   $("mktPickModal").classList.add("open");
 }
+$("kBrAll").onclick=()=>{MKP.brand="all";MKP.pvar="all";MKP.color=null;renderMkp();};
+$("kBrI").onclick=()=>{MKP.brand="iphone";MKP.pvar="all";MKP.color=null;renderMkp();};
+$("kBrP").onclick=()=>{MKP.brand="pixel";MKP.pvar="all";MKP.color=null;renderMkp();};
+$("kBrS").onclick=()=>{MKP.brand="gs";MKP.pvar="all";MKP.color=null;renderMkp();};
+$("kBrA").onclick=()=>{MKP.brand="ga";MKP.pvar="all";MKP.color=null;renderMkp();};
 $("mkpGlitOn").onclick=()=>{MKP.gl=1;renderMkp();};
 $("mkpGlitOff").onclick=()=>{MKP.gl=0;renderMkp();};
 $("mkpSzN").onclick=()=>{MKP.sz="norm";renderMkp();};

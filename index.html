@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=88">
+<link rel="stylesheet" href="style.css?v=89">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -415,7 +415,7 @@
   <div class="box">
     <h2 id="mkpTitle">&#129375; Pick your squishy</h2>
     <div style="font-size:13px;color:var(--dim)">Turn the boxes on and off &mdash; like &#10024; GLITTER + &#127775; MEGA + Purple!</div>
-    <div class="seg mini" style="margin-top:10px">
+    <div class="seg mini" id="mkpGlitRow" style="margin-top:10px">
       <button id="mkpGlitOff" class="on">No glitter</button>
       <button id="mkpGlitOn">&#10024; GLITTER</button>
     </div>
@@ -424,6 +424,14 @@
       <button id="mkpSzM">&#128312; Medium</button>
       <button id="mkpSzX">&#127775; Mega</button>
     </div>
+    <div class="seg mini" id="mkpBrandRow" style="display:none;flex-wrap:wrap;margin-top:10px">
+      <button id="kBrAll" class="on">All phones</button>
+      <button id="kBrI">&#127822; iPhone</button>
+      <button id="kBrP">Pixel</button>
+      <button id="kBrS">Galaxy S</button>
+      <button id="kBrA">Galaxy A</button>
+    </div>
+    <div class="seg mini" id="mkpVarRow" style="display:none"></div>
     <div id="mkpColors"></div>
     <div id="mkpCount" style="margin-top:10px;font-size:13px;color:var(--dim)"></div>
     <button class="btn warn" id="mkpOk" style="width:100%;margin-top:10px">&#9989; Choose this one!</button>
@@ -561,9 +569,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=88"></script>
-<script src="js/world.js?v=88"></script>
-<script src="js/vehicles.js?v=88"></script>
-<script src="js/game.js?v=88"></script>
+<script src="js/core.js?v=89"></script>
+<script src="js/world.js?v=89"></script>
+<script src="js/vehicles.js?v=89"></script>
+<script src="js/game.js?v=89"></script>
 </body>
 </html>
