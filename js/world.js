@@ -1655,9 +1655,9 @@ function buildMarketPlot(x,z,g){
   marketPlots.push(p);
   if(window.onMarketBuilt)onMarketBuilt(p);
 }
-/* ---- COOLBLUE: the mid-blue & orange PHONE STORE, one every ~3 km ---- */
+/* ---- COOLBLUE: the mid-blue & orange PHONE STORE, one every ~500 m ---- */
 const coolblues=[];
-const CBSP=3000;
+const CBSP=500;
 let _cbSign=null;
 function cbSignMat(){
   if(_cbSign)return _cbSign;
@@ -3380,7 +3380,7 @@ function buildChunk(cx,cz){
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     g.userData.recs.push(familyHouse(sp.x,sp.z,r,g,terrainH(sp.x,sp.z)));
   }
-  /* a COOLBLUE phone store every ~3 km */
+  /* a COOLBLUE phone store every ~500 m */
   for(let i=Math.floor((x0-1700)/CBSP);i<=Math.ceil((x1+100)/CBSP);i++)
   for(let j=Math.floor((z0-2400)/CBSP);j<=Math.ceil((z1+100)/CBSP);j++){
     const sp=cbSpot(i,j);

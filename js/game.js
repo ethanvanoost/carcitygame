@@ -928,7 +928,7 @@ const SQTAB={v:"dump"};   // which Unbox tab is open: dumplings, butter or phone
 function renderPhoneTab(){
   $("dumpInfo").textContent=PHONE.unopened
     ?"You have "+PHONE.unopened+" unopened phone box"+(PHONE.unopened>1?"es":"")+" — unbox one!"
-    :"No phone boxes — buy them at a \u{1F4F1} CoolBlue (the blue & orange store, one every ~3 km)!";
+    :"No phone boxes — buy them at a \u{1F4F1} CoolBlue (the blue & orange store, one every ~500 m)!";
   $("dumpOpen").textContent="\u{1F4F1} Unbox a phone!";
   $("dumpOpenAll").textContent="\u{1F389} Unbox ALL phone boxes!";
   $("dumpOpen").style.display=PHONE.unopened?"":"none";
@@ -7998,8 +7998,8 @@ function drawMap(){
         }
       }
     }
-    /* CoolBlue phone stores every ~3 km */
-    if(sc>=0.14){
+    /* CoolBlue phone stores every ~500 m (zoom in to see them) */
+    if(sc>=0.35){
       const yi0=Math.floor((mapView.cx-halfW-1700)/CBSP),yi1=Math.ceil((mapView.cx+halfW+100)/CBSP);
       const yj0=Math.floor((mapView.cz-halfH-2400)/CBSP),yj1=Math.ceil((mapView.cz+halfH+100)/CBSP);
       for(let i=yi0;i<=yi1;i++)for(let j=yj0;j<=yj1;j++){
@@ -11202,8 +11202,8 @@ const UPDATE_PAGES=[
 <li>Stocking a table or display case with dumplings/butter now opens a <b>box picker</b>: turn ✨ GLITTER on or off, pick a size (butter: Small / \u{1F538} Medium / \u{1F31F} Mega) and click a color — sell exactly <b>GLITTER MEGA PURPLE</b> if you want!</li>
 <li>The color chips always show how many of that exact combo you own, and impossible combos say so.</li></ul>`},
 {t:"Round 36 — \u{1F4F1} CoolBlue phone stores & the Unbox menu",h:`
-<h4>\u{1F4F1} COOLBLUE — every ~3 km</h4><ul>
-<li>A mid-blue store with orange trim (\u{1F4F1} on the map): walk in, press T, and buy <b>surprise phone boxes for $600 - $1,500</b> — the menu stays open so you can grab a whole stack.</li></ul>
+<h4>\u{1F4F1} COOLBLUE — every ~500 m</h4><ul>
+<li>A mid-blue store with orange trim every ~500 m (\u{1F4F1} on the map): walk in, press T, and buy <b>surprise phone boxes for $600 - $1,500</b> — the menu stays open so you can grab a whole stack.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
 <li>Unbox one or ALL your phone boxes. You can pull the REAL line-ups: <b>iPhone 4-17</b> (Pro &amp; Pro Max from 11 up — and no iPhone 9, Apple really skipped it; number 10 is the iPhone X!), <b>Google Pixel 1-10</b> (Pro from 6, the smaller cheaper "a" models 3a-9a) and <b>Samsung Galaxy S1-S26</b> (S11-S19 never existed — Samsung jumped from S10 to S20!) plus 29 Galaxy A models, Plus &amp; Ultra included.</li>
