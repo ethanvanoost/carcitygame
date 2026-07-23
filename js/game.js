@@ -4206,8 +4206,27 @@ function openMarketOwner(p){
     {label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"},
     {label:"✏️ Sign subtitle"+(d.sub?" (now: \""+d.sub+"\")":" — the line UNDER the name"),value:"sub"},
     {label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"},
+    {label:"\u{1F50E} CHECK: can other players see my shop?",value:"chk"},
     {label:"❌ Close",value:"x"}
   ],v=>{
+    if(v==="chk"){
+      (async()=>{
+        if(!SERVER_READY){toast("\u{1F534} No database connection — NOBODY can see your shop right now.");return;}
+        const g2=await fbGet(claimPath(p.id));
+        if(!g2.ok||!g2.data||g2.data.free){
+          toast("\u{1F534} Your plot is NOT stored online yet — others see it FOR SALE! Re-syncing now, check again in a minute.");
+          syncMarket(p.id);return;
+        }
+        if(typeof g2.data.mkt!=="string"){
+          toast("\u{1F7E0} The plot IS yours online, but your TABLES are blocked — the database rules still refuse 'mkt'. Publish firebase-rules.json in the Firebase console, then check again!");
+          syncMarket(p.id);return;
+        }
+        let n2=0;
+        try{const q=JSON.parse(g2.data.mkt);(q.items||[]).forEach(it=>n2+=((it.o&&it.o.length)||0));}catch(e){}
+        toast("✅ ALL GOOD — other players (in THIS world) see your shop with "+n2+" deal"+(n2===1?"":"s")+"!");
+      })();
+      return;
+    }
     if(v==="edit")openMarketEdit(p);
     else if(v==="name"){
       const s=prompt("Name your market! (max 20 letters — this goes BIG on the sign, like SUPER DEAL)",d.name||"");
