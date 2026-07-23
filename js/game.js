@@ -4335,6 +4335,13 @@ function mkpVariants(){
   });
   return map;
 }
+/* what an item is WORTH (the buyer price) — shown while stocking, so you can price it right */
+function mkpWorth(g2){
+  if(g2.ty==="phone")return phoneValue({tier:g2.tier||0,color:g2.lab});
+  if(g2.ty==="butter")return butterValue({color:g2.lab,glitter:!!g2.gl,size:g2.sz||"norm"});
+  if(g2.ty==="dump")return dumpValue({color:g2.lab,glitter:!!g2.gl});
+  return 0;
+}
 function renderMkp(){
   const butter=MKP.ty==="butter",phone=MKP.ty==="phone";
   $("mkpTitle").textContent=phone?"\u{1F4F1} Pick your phone"
@@ -4374,14 +4381,15 @@ function renderMkp(){
   [...vars.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,24).forEach(([key,g2])=>{
     const b=document.createElement("button");
     b.innerHTML="<span class='swatch' style='background:"+g2.hex+"'></span>"
-      +(phone?(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm:g2.lab)+" ("+g2.n+")";
+      +(phone?(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm:g2.lab)+" ("+g2.n+")"
+      +" <span style='color:var(--acc2)'>$"+fmtMoney(mkpWorth(g2))+"</span>";
     if(MKP.color===key)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
     b.onclick=()=>{MKP.color=key;renderMkp();};
     wrap.appendChild(b);
   });
   const sel=MKP.color?vars.get(MKP.color):null;
   $("mkpCount").textContent=sel
-    ?"Your pick: "+mktItemName(sel)+" — you have "+sel.n
+    ?"Your pick: "+mktItemName(sel)+" — you have "+sel.n+", worth $"+fmtMoney(mkpWorth(sel))+" each"
     :"\u{1F446} Now pick "+(phone?"a phone!":"a color!");
 }
 function openMktPicker(p,kind,ty,idx){
@@ -4410,7 +4418,8 @@ $("mkpOk").onclick=()=>{
 const MKTM={p:null,idx:0,ty:null,grp:null};
 function openStockModal(p,idx,ty,grp){
   MKTM.p=p;MKTM.idx=idx;MKTM.ty=ty;MKTM.grp=grp;
-  $("mktTitle").textContent="\u{1FA91} "+(ty==="food"?grp.lab:mktItemName(grp));
+  $("mktTitle").textContent="\u{1FA91} "+(ty==="food"?grp.lab
+    :mktItemName(grp)+" (worth $"+fmtMoney(mkpWorth(grp))+" each)");
   $("mktMax").textContent=grp.n;
   $("mktQty").value=1;$("mktQty").max=grp.n;
   $("mktPrice").value=25;
