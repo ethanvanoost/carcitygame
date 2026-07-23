@@ -4635,23 +4635,26 @@ function mktDoGenerate(p,cat,adj){
   (d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
   d.items=[];
   const cats=Array.isArray(cat)?cat:cat==="all"?["phone","dump","butter","food"]:[cat];
-  const groups=[];
-  cats.forEach(ty=>mktGroups(ty).forEach(g2=>groups.push(g2)));
   const worth=g2=>g2.ty==="food"?Math.max(1,g2.fh||10):Math.max(1,mkpWorth(g2));
-  groups.sort((a,b)=>worth(b)-worth(a));
+  /* FAIR MIX: each ticked kind is sorted by worth, then they take turns —
+     so phones can never hog every stand and push the other kinds out */
+  const perCat=cats.map(ty=>mktGroups(ty).sort((a,b)=>worth(b)-worth(a)));
+  const groups=[];
+  for(let r2=0;perCat.some(l=>r2<l.length);r2++)
+    perCat.forEach(l=>{if(r2<l.length)groups.push(l[r2]);});
   if(!groups.length){
     saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-    toast("You own NOTHING in that category — go collect some first! (Your plot is empty now.)");
+    toast("You own NOTHING in those categories — go collect some first! (Your plot is empty now.)");
     return;
   }
-  /* the crown jewel goes in a display case at the entrance — taken from YOUR collection */
-  const jewel=groups[0];
+  /* the crown jewel (most valuable of everything) goes in a display case at the entrance */
+  const jewel=groups.reduce((a,b)=>worth(b)>worth(a)?b:a,groups[0]);
   if(mktTakeStock(jewel.ty,jewel,1)>0)
     d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
-  /* EVERYTHING goes on sale, most valuable first — it keeps adding deals until
-     your whole collection is out, or the plot / 100 KB database slot is full.
-     ONLY what really leaves your collection lands on the tables, never more. */
-  const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0);
+  /* EVERYTHING goes on sale — it keeps adding deals until your collection is
+     out, or the plot / 100 KB database slot is full. ONLY what really leaves
+     your collection lands on the tables, never more. */
+  const sell=groups.map(g2=>({g2,count:g2.n-(g2===jewel?1:0)})).filter(x=>x.count>0);
   const grid=[];
   for(const gz of[16,0,-16,-32])for(const gx of[-32,-16,0,16,32])grid.push([gx,gz]);
   let gi=0,slot=0,stocked=0,deals=0,full=false;
