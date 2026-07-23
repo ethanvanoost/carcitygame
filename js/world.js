@@ -1866,6 +1866,53 @@ function buildPhoneBuyer(x,z,g){
   const sg=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1),phbSignMat());sg.position.set(x+1.9,y+3,z);g.add(sg);
   phoneBuyers.push({g,x,z});
 }
+/* ---- console buyers: they pay cash for game consoles, every ~500 m ---- */
+const consoleBuyers=[];
+let _cnbSign=null;
+function cnbSignMat(){
+  if(_cnbSign)return _cnbSign;
+  const cv=document.createElement("canvas");cv.width=256;cv.height=64;
+  const c=cv.getContext("2d");c.fillStyle="#14161c";c.fillRect(0,0,256,64);
+  c.fillStyle="#8ac926";c.font="bold 22px Segoe UI";c.textAlign="center";
+  c.fillText("CONSOLE BUYER",128,28);
+  c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.fillText("\u{1F3AE} SELL HERE \u{1F4B5}",128,52);
+  _cnbSign=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  return _cnbSign;
+}
+function consoleBuyerSpot(i,j){
+  const lx=Math.round((i*DBSP+120-30)/120)*120+30;   // on the sidewalk beside a road
+  const x=lx+12,z=j*DBSP+280;
+  if(nearGridLine(z)<16)return null;
+  if(Math.abs(x)<200&&Math.abs(z)<200)return null;
+  if(inAirport(x,z))return null;
+  const h=baseH(x,z);
+  if(h<-1||h>14)return null;
+  if(nearestRail(x,z).d<14)return null;
+  if(Math.abs(x-curveXC(x,z))<14||Math.abs(z-curveZC(x,z))<14)return null;
+  if(rocketPadDist(x,z)<60)return null;
+  const hs=hugeShopSpot(Math.round((x-750)/HSP),Math.round((z-390)/HSP));
+  if(hs&&Math.abs(x-hs.x)<62&&Math.abs(z-hs.z)<50)return null;
+  const ms=mansionSpot(Math.round((x-1230)/MSP),Math.round((z-870)/MSP));
+  if(ms&&Math.abs(x-ms.x)<62&&Math.abs(z-ms.z)<50)return null;
+  const fh=familyHouseSpot(Math.round((x-510)/FHSP),Math.round((z-1710)/FHSP));
+  if(fh&&Math.abs(x-fh.x)<62&&Math.abs(z-fh.z)<50)return null;
+  const mk=marketPlotSpot(Math.round((x-2070)/MKSP),Math.round((z-630)/MKSP));
+  if(mk&&Math.abs(x-mk.x)<62&&Math.abs(z-mk.z)<56)return null;
+  return{x,z};
+}
+function buildConsoleBuyer(x,z,g){
+  const y=terrainH(x,z);
+  const ct=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.6,1.05,1),new THREE.MeshLambertMaterial({color:0x14161c})));
+  ct.position.set(x,y+0.52,z);g.add(ct);
+  for(let i=0;i<3;i++){
+    const cs=new THREE.Mesh(new THREE.BoxGeometry(0.44,0.16,0.34),new THREE.MeshLambertMaterial({color:[0x1b98e0,0x8ac926,0xd7263d][i]}));
+    cs.position.set(x-0.7+i*0.7,y+1.14,z);g.add(cs);
+  }
+  const man=makePerson(0.95,0x8ac926);man.position.set(x,y,z-1.3);g.add(man);
+  const sp=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,2.6),poleMat);sp.position.set(x+1.9,y+1.3,z);g.add(sp);
+  const sg=new THREE.Mesh(new THREE.PlaneGeometry(3.4,1),cnbSignMat());sg.position.set(x+1.9,y+3,z);g.add(sg);
+  consoleBuyers.push({g,x,z});
+}
 /* ---- McDrive: a drive-through restaurant every ~500 m, right beside a road ---- */
 const mcds=[];
 let _mcdSign=null,_mcdBoard=null;
@@ -3522,6 +3569,14 @@ function buildChunk(cx,cz){
     if(!sp)continue;
     if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
     buildPhoneBuyer(sp.x,sp.z,g);
+  }
+  /* and a console buyer every ~500 m */
+  for(let i=Math.floor((x0-260)/DBSP);i<=Math.ceil((x1+160)/DBSP);i++)
+  for(let j=Math.floor((z0-360)/DBSP);j<=Math.ceil((z1+160)/DBSP);j++){
+    const sp=consoleBuyerSpot(i,j);
+    if(!sp)continue;
+    if(sp.x<x0||sp.x>=x1||sp.z<z0||sp.z>=z1)continue;
+    buildConsoleBuyer(sp.x,sp.z,g);
   }
   /* vegetation + wildlife by biome (ULTRA graphics: noticeably lusher) */
   const dense=(biome==="forest"?22:(biome==="desert"?5:10))*(window.ULTRA?1.6:1);
