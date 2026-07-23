@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=102">
+<link rel="stylesheet" href="style.css?v=103">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -413,6 +413,16 @@
   </div>
 </div>
 
+<div class="modal" id="gameModal">
+  <div class="box" style="max-width:580px;width:min(94vw,580px)">
+    <h2 id="gmTitle">&#127918; Game</h2>
+    <div id="gmInfo" style="font-size:13px;color:var(--dim)"></div>
+    <canvas id="gmCv" width="520" height="320" style="width:100%;border-radius:12px;background:#0b0f16;margin-top:8px;touch-action:none;cursor:pointer"></canvas>
+    <button class="btn warn" id="gmRestart" style="width:100%;margin-top:8px">&#128260; Restart</button>
+    <button class="btn close" id="gmClose">Turn the console off</button>
+  </div>
+</div>
+
 <div class="modal" id="genEmptyModal">
   <div class="box">
     <h2>&#10133; Empty stands</h2>
@@ -589,9 +599,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=102"></script>
-<script src="js/world.js?v=102"></script>
-<script src="js/vehicles.js?v=102"></script>
-<script src="js/game.js?v=102"></script>
+<script src="js/core.js?v=103"></script>
+<script src="js/world.js?v=103"></script>
+<script src="js/vehicles.js?v=103"></script>
+<script src="js/game.js?v=103"></script>
 </body>
 </html>

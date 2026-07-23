@@ -658,25 +658,221 @@ function rollConsole(){
 /* placed consoles at your home: walk up, press T, pick a game! */
 const GCONS=[];
 const GFI={it:null};   // side-channel: which furniture item is being built right now
+/* REAL mini-games on a pop-up screen! All our own little heroes. */
+const GM={on:false,raf:0,id:null,cm:"console",st:null,keys:{},last:0};
+const GMDEF={
+  panda:{n:"\u{1F43C} Parkour Panda",tip:"SPACE or tap = JUMP over the crates!"},
+  kart:{n:"\u{1F3CE} Turbo Kart Racers",tip:"← → (or tap left/right) to dodge the traffic!"},
+  foot:{n:"⚽ Football Stars",tip:"SPACE or tap to SHOOT when the arrow points where you want — 5 shots!"},
+  zombie:{n:"\u{1F9DF} Zombie Chase",tip:"SPACE or tap = JUMP the graves — the zombie is right behind you!"},
+  stack:{n:"\u{1F9F1} Blocky Builder",tip:"SPACE or tap to DROP the block — build the highest tower!"},
+  space:{n:"\u{1F680} Space Blasters",tip:"← → to fly, SPACE or tap to BLAST the asteroids!"}
+};
 function openConsoleGames(cm){
-  const games=["\u{1F344} Parkour Mario","\u{1F3CE} Turbo Kart Racers","⚽ Football Stars",
-    "\u{1F9DF} Zombie Chase","\u{1F9F1} Blocky Builder","\u{1F680} Space Blasters"];
-  const opts=games.map((g2,i)=>({label:g2,value:i}));
+  const ids=["panda","kart","foot","zombie","stack","space"];
+  const opts=ids.map(id=>({label:GMDEF[id].n,value:id}));
   opts.push({label:"❌ Turn it off",value:"x"});
   showDest("\u{1F3AE} "+cm+" — pick a game!",opts,v=>{
-    if(typeof v!=="number")return;
-    const name=games[v];
-    toast("\u{1F3AE} "+name+" — 3... 2... 1... GO!");
-    setTimeout(()=>{
-      const ends=[
-        "\u{1F3C6} You WON! Final score: "+(1000+Math.floor(Math.random()*9000))+" points!",
-        "\u{1F624} SO close — the level "+(2+Math.floor(Math.random()*8))+" boss got you. Rematch?",
-        "⭐ NEW HIGH SCORE: "+(5000+Math.floor(Math.random()*50000))+"!",
-        "\u{1F389} Level "+(1+Math.floor(Math.random()*20))+" complete — your "+cm+" is glowing!"
-      ];
-      toast(name+" — "+ends[Math.floor(Math.random()*ends.length)]);
-    },3500);
+    if(typeof v!=="string"||v==="x")return;
+    gmStart(v,cm);
   });
+}
+function gmStart(id,cm){
+  GM.on=true;GM.id=id;GM.cm=cm||GM.cm;GM.keys={};
+  $("gmTitle").textContent=GMDEF[id].n+" — on your "+GM.cm;
+  $("gmInfo").textContent=GMDEF[id].tip;
+  const W=520;
+  if(id==="panda"||id==="zombie")GM.st={y:0,vy:0,obs:[],t:0,sp:210,score:0,over:false,next:1};
+  else if(id==="kart")GM.st={lane:1,cars:[],t:0,sp:230,score:0,over:false,next:0.75};
+  else if(id==="foot")GM.st={ang:0,t:0,shots:0,goals:0,phase:"aim",ballT:0,zone:0,keep:0,msg:"",over:false};
+  else if(id==="stack")GM.st={rows:[[W/2-70,140]],x:0,w:140,dir:1,score:0,over:false,sp:170};
+  else GM.st={x:W/2,shots:[],rocks:[],t:0,score:0,lives:3,over:false,next:1,cool:0};
+  $("gameModal").classList.add("open");
+  cancelAnimationFrame(GM.raf);
+  GM.last=performance.now();
+  GM.raf=requestAnimationFrame(gmLoop);
+}
+function gmStop(){GM.on=false;cancelAnimationFrame(GM.raf);}
+$("gmClose").onclick=()=>{gmStop();$("gameModal").classList.remove("open");};
+$("gmRestart").onclick=()=>{if(GM.id)gmStart(GM.id,GM.cm);};
+function gmPress(px){
+  const s=GM.st;
+  if(!GM.on||!s)return;
+  if(s.over){gmStart(GM.id,GM.cm);return;}   // tap after game over = instant restart
+  if(GM.id==="panda"||GM.id==="zombie"){if(s.y<=0){s.vy=560;}}
+  else if(GM.id==="kart"){
+    if(px!==undefined)s.lane=Math.max(0,Math.min(2,s.lane+(px<260?-1:1)));
+  }
+  else if(GM.id==="foot"&&s.phase==="aim"){
+    s.phase="fly";s.ballT=0;
+    s.zone=s.ang<-20?0:s.ang>20?2:1;
+    s.keep=Math.floor(Math.random()*3);
+  }
+  else if(GM.id==="stack"){
+    const top=s.rows[s.rows.length-1];
+    const nx=Math.max(s.x,top[0]),xe=Math.min(s.x+s.w,top[0]+top[1]);
+    if(xe-nx<8){s.over=true;return;}
+    s.rows.push([nx,xe-nx]);
+    s.x=0;s.w=xe-nx;s.dir=1;s.sp+=12;s.score++;
+  }
+  else if(GM.id==="space"&&s.cool<=0){s.shots.push({x:s.x,y:270});s.cool=0.22;}
+}
+addEventListener("keydown",e=>{
+  if(!GM.on)return;
+  GM.keys[e.key]=true;
+  if(e.key===" "||e.key==="ArrowUp")gmPress();
+  if(GM.id==="kart"&&e.key==="ArrowLeft")GM.st.lane=Math.max(0,GM.st.lane-1);
+  if(GM.id==="kart"&&e.key==="ArrowRight")GM.st.lane=Math.min(2,GM.st.lane+1);
+  if([" ","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key))e.preventDefault();
+});
+addEventListener("keyup",e=>{if(GM.on)GM.keys[e.key]=false;});
+$("gmCv").addEventListener("pointerdown",e=>{
+  const r2=$("gmCv").getBoundingClientRect();
+  gmPress((e.clientX-r2.left)/r2.width*520);
+});
+$("gmCv").addEventListener("pointermove",e=>{
+  if(GM.on&&GM.id==="space"&&!GM.st.over){
+    const r2=$("gmCv").getBoundingClientRect();
+    GM.st.x=Math.max(20,Math.min(500,(e.clientX-r2.left)/r2.width*520));
+  }
+});
+function gmLoop(now){
+  if(!GM.on)return;
+  const dt=Math.min(0.05,(now-GM.last)/1000);GM.last=now;
+  const cv=$("gmCv"),c=cv.getContext("2d"),W=520,H=320,s=GM.st;
+  c.clearRect(0,0,W,H);
+  c.textAlign="center";c.textBaseline="middle";
+  if(GM.id==="panda"||GM.id==="zombie"){
+    const zm=GM.id==="zombie";
+    if(!s.over){
+      s.sp+=dt*9;s.score+=s.sp*dt/10;
+      s.vy-=1500*dt;s.y=Math.max(0,s.y+s.vy*dt);
+      if(s.y===0)s.vy=0;
+      s.t-=dt;
+      if(s.t<=0){s.t=s.next=Math.max(0.55,(s.next||1)*0.985);s.obs.push({x:W+30,h:26+Math.random()*26});}
+      for(let i=s.obs.length-1;i>=0;i--){
+        const o=s.obs[i];o.x-=s.sp*dt;
+        if(o.x<-40)s.obs.splice(i,1);
+        else if(o.x<96&&o.x>44&&s.y<o.h)s.over=true;
+      }
+    }
+    c.fillStyle="#16324a";c.fillRect(0,0,W,240);
+    c.fillStyle=zm?"#2b3a2e":"#3e7d3a";c.fillRect(0,240,W,80);
+    c.font="30px serif";
+    s.obs.forEach(o=>c.fillText(zm?"\u{1FAA6}":"\u{1F4E6}",o.x,238-o.h/2));
+    c.fillText(zm?"\u{1F3C3}":"\u{1F43C}",70,232-s.y);
+    if(zm)c.fillText("\u{1F9DF}",20,234);
+    c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.textAlign="left";
+    c.fillText("Score: "+Math.floor(s.score),12,20);
+  }else if(GM.id==="kart"){
+    const lx=l=>130+l*130;
+    if(!s.over){
+      s.sp+=dt*10;s.score+=s.sp*dt/10;
+      s.t-=dt;
+      if(s.t<=0){s.t=s.next=Math.max(0.42,(s.next||0.75)*0.98);s.cars.push({l:Math.floor(Math.random()*3),y:-40});}
+      for(let i=s.cars.length-1;i>=0;i--){
+        const o=s.cars[i];o.y+=s.sp*dt;
+        if(o.y>H+40)s.cars.splice(i,1);
+        else if(o.l===s.lane&&o.y>236&&o.y<304)s.over=true;
+      }
+    }
+    c.fillStyle="#2e3440";c.fillRect(60,0,400,H);
+    c.strokeStyle="#f4d35e";c.setLineDash([16,18]);
+    [195,325].forEach(x2=>{c.beginPath();c.moveTo(x2,0);c.lineTo(x2,H);c.stroke();});
+    c.setLineDash([]);
+    c.font="30px serif";
+    s.cars.forEach(o=>c.fillText("\u{1F699}",lx(o.l),o.y));
+    c.fillText("\u{1F3CE}",lx(s.lane),270);
+    c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.textAlign="left";
+    c.fillText("Score: "+Math.floor(s.score),12,20);
+  }else if(GM.id==="foot"){
+    if(s.phase==="aim"){s.t+=dt;s.ang=Math.sin(s.t*2.6)*55;}
+    else if(s.phase==="fly"){
+      s.ballT+=dt*2.2;
+      if(s.ballT>=1){
+        const goal=s.zone!==s.keep;
+        if(goal)s.goals++;
+        s.msg=goal?"⚽ GOOOAL!":"\u{1F9E4} SAVED!";
+        s.shots++;s.phase=s.shots>=5?"done":"msg";s.t=0;
+        if(s.shots>=5)s.over=true;
+      }
+    }else if(s.phase==="msg"){s.t+=dt;if(s.t>0.9){s.phase="aim";s.t=0;}}
+    c.fillStyle="#3e7d3a";c.fillRect(0,0,W,H);
+    c.strokeStyle="#fff";c.lineWidth=4;c.strokeRect(110,40,300,110);
+    c.font="34px serif";
+    const kx=170+s.keep*90;
+    c.fillText("\u{1F9E4}",s.phase==="aim"?260:kx,120);
+    if(s.phase==="fly"){
+      const tx=170+s.zone*90;
+      c.fillText("⚽",260+(tx-260)*s.ballT,290-190*s.ballT);
+    }else c.fillText("⚽",260,290);
+    if(s.phase==="aim"){
+      c.save();c.translate(260,260);c.rotate(s.ang*Math.PI/180);
+      c.strokeStyle="#f4d35e";c.lineWidth=5;
+      c.beginPath();c.moveTo(0,0);c.lineTo(0,-70);c.stroke();
+      c.beginPath();c.moveTo(-8,-58);c.lineTo(0,-72);c.lineTo(8,-58);c.stroke();
+      c.restore();
+    }
+    if(s.phase==="msg")c.fillStyle="#fff",c.font="bold 30px Segoe UI",c.fillText(s.msg,260,200);
+    c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.textAlign="left";
+    c.fillText("Goals: "+s.goals+" / 5   Shot "+Math.min(5,s.shots+1)+" of 5",12,20);
+  }else if(GM.id==="stack"){
+    if(!s.over){
+      s.x+=s.dir*s.sp*dt;
+      if(s.x<0){s.x=0;s.dir=1;}
+      if(s.x+s.w>W){s.x=W-s.w;s.dir=-1;}
+    }
+    c.fillStyle="#16324a";c.fillRect(0,0,W,H);
+    const base=H-24,rh=22,show=Math.max(0,s.rows.length-11);
+    c.fillStyle="#8a6f4d";
+    s.rows.slice(show).forEach((r3,i)=>{c.fillRect(r3[0],base-(i+1)*rh,r3[1],rh-3);});
+    if(!s.over){
+      c.fillStyle="#f4d35e";
+      c.fillRect(s.x,base-(s.rows.length-show+1)*rh,s.w,rh-3);
+    }
+    c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.textAlign="left";
+    c.fillText("Tower: "+s.score+" blocks",12,20);
+  }else{   // space blasters
+    if(!s.over){
+      s.cool-=dt;s.t-=dt;
+      if(GM.keys.ArrowLeft)s.x=Math.max(20,s.x-320*dt);
+      if(GM.keys.ArrowRight)s.x=Math.min(500,s.x+320*dt);
+      if(GM.keys[" "])gmPress();
+      if(s.t<=0){s.t=s.next=Math.max(0.4,(s.next||1)*0.975);s.rocks.push({x:30+Math.random()*460,y:-20,sp:70+Math.random()*90});}
+      s.shots.forEach(sh=>sh.y-=460*dt);
+      s.shots=s.shots.filter(sh=>sh.y>-20);
+      for(let i=s.rocks.length-1;i>=0;i--){
+        const o=s.rocks[i];o.y+=o.sp*dt;
+        let hit=false;
+        for(let j=s.shots.length-1;j>=0;j--){
+          if(Math.abs(s.shots[j].x-o.x)<24&&Math.abs(s.shots[j].y-o.y)<24){s.shots.splice(j,1);hit=true;break;}
+        }
+        if(hit){s.rocks.splice(i,1);s.score+=10;continue;}
+        if(o.y>H-45&&Math.abs(o.x-s.x)<28){s.rocks.splice(i,1);s.lives--;if(s.lives<=0)s.over=true;continue;}
+        if(o.y>H+20)s.rocks.splice(i,1);
+      }
+    }
+    c.fillStyle="#0b0f16";c.fillRect(0,0,W,H);
+    c.fillStyle="#fff";
+    for(let i=0;i<26;i++)c.fillRect((i*97)%W,(i*61)%H,2,2);
+    c.font="28px serif";
+    s.rocks.forEach(o=>c.fillText("\u{1FAA8}",o.x,o.y));
+    c.fillStyle="#3fd0ff";
+    s.shots.forEach(sh=>c.fillRect(sh.x-2,sh.y-10,4,12));
+    c.font="30px serif";c.fillText("\u{1F680}",s.x,H-30);
+    c.fillStyle="#fff";c.font="bold 18px Segoe UI";c.textAlign="left";
+    c.fillText("Score: "+s.score+"   "+"❤️".repeat(Math.max(0,s.lives)),12,20);
+  }
+  if(s.over){
+    c.fillStyle="rgba(11,15,22,0.72)";c.fillRect(0,0,W,H);
+    c.fillStyle="#f4d35e";c.font="bold 34px Segoe UI";c.textAlign="center";
+    c.fillText(GM.id==="foot"?(s.goals>=3?"\u{1F3C6} YOU WIN — "+s.goals+" / 5!":"Final: "+s.goals+" / 5 goals"):"GAME OVER",260,140);
+    c.fillStyle="#fff";c.font="bold 20px Segoe UI";
+    c.fillText((GM.id==="stack"?"Tower: "+s.score+" blocks":GM.id==="foot"?"":"Score: "+Math.floor(s.score))+"",260,180);
+    c.font="16px Segoe UI";
+    c.fillText("Tap the screen (or \u{1F504} Restart) to play again!",260,214);
+  }
+  GM.raf=requestAnimationFrame(gmLoop);
 }
 /* ---------- the PHONE SCREEN: browser, info, calculator, timer, alarm & more ---------- */
 const PHAPP={timers:[],alarms:[],swT0:0,swAcc:0,swOn:false,expr:""};
