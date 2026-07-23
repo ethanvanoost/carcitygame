@@ -127,6 +127,19 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
            }
          }
        },
+       "shopdesigns": {
+         "$name": {
+           ".read": true,
+           "$slot": {
+             ".write": "!data.exists() || data.child('t').val() === newData.child('t').val()",
+             ".validate": "newData.hasChildren(['t','ts'])",
+             "t": { ".validate": "newData.isString() && newData.val().length <= 40" },
+             "ts": { ".validate": "newData.isNumber()" },
+             "data": { ".validate": "newData.isString() && newData.val().length <= 6000" },
+             "$other": { ".validate": false }
+           }
+         }
+       },
        "markets": {
          "$world": {
            ".read": true,

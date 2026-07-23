@@ -4530,6 +4530,135 @@ function mktBuyFrom(p,rm,ref){
     toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(o)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");
   })();
 }
+/* ✨ GENERATE SHOP: auto-builds shelves, tables & a display case with your best stuff */
+function mktGenerate(p){
+  showDest("⚠️ GENERATE SHOP — this will REPLACE your WHOLE shop!",[
+    {label:"✅ YES, continue — my old stands come off (all stock returns to me first)",value:"go"},
+    {label:"❌ No, keep my shop as it is",value:"x"}
+  ],a=>{
+    if(a!=="go")return;
+    showDest("\u{1F3EA} What should your shop sell?",[
+      {label:"\u{1F4F1} Phones",value:"phone"},
+      {label:"\u{1F95F} Dumplings",value:"dump"},
+      {label:"\u{1F9C8} Butter squishies",value:"butter"},
+      {label:"\u{1F354} Food",value:"food"},
+      {label:"\u{1F31F} ALL of it",value:"all"},
+      {label:"❌ Cancel",value:"x"}
+    ],cat=>{
+      if(cat==="x")return;
+      showDest("\u{1F4B2} How should it be priced?",[
+        {label:"\u{1F4B0} EXPENSIVE shop — everything $20 ABOVE its worth",value:20},
+        {label:"⚖️ NORMAL shop — exactly what it's worth",value:0},
+        {label:"\u{1F525} CHEAP shop — everything $20 BELOW its worth (deal magnet!)",value:-20},
+        {label:"❌ Cancel",value:"x"}
+      ],adj=>{
+        if(typeof adj!=="number")return;
+        mktDoGenerate(p,cat,adj);
+      });
+    });
+  });
+}
+function mktDoGenerate(p,cat,adj){
+  const d=MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
+  /* old shop comes off — every bit of stock returns to your collection */
+  (d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
+  d.items=[];
+  const cats=cat==="all"?["phone","dump","butter","food"]:[cat];
+  const groups=[];
+  cats.forEach(ty=>mktGroups(ty).forEach(g2=>groups.push(g2)));
+  const worth=g2=>g2.ty==="food"?Math.max(1,g2.fh||10):Math.max(1,mkpWorth(g2));
+  groups.sort((a,b)=>worth(b)-worth(a));
+  if(!groups.length){
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("You own NOTHING in that category — go collect some first! (Your plot is empty now.)");
+    return;
+  }
+  /* the crown jewel goes in a display case at the entrance */
+  const jewel=groups[0];
+  mktTakeStock(jewel.ty,jewel,1);
+  d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
+  /* everything else goes on sale, most valuable first (max 39 deals) */
+  const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0).slice(0,39);
+  const grid=[];
+  for(const gz of[16,0,-16,-32])for(const gx of[-32,-16,0,16,32])grid.push([gx,gz]);
+  let gi=0,slot=0;
+  while(gi<sell.length&&d.items.length<16){
+    const remaining=sell.length-gi;
+    const k=remaining>7?"s":"t";                 // lots left → a big shelf, tail → tables
+    const cap=k==="s"?15:5;
+    const pos=grid[slot++]||[0,-40];
+    const piece={k,dx:pos[0],dz:pos[1],r:0,o:[]};
+    for(let c2=0;c2<cap&&gi<sell.length;c2++,gi++){
+      const{g2,count}=sell[gi];
+      const price=Math.max(1,worth(g2)+adj);
+      mktTakeStock(g2.ty,g2,count);
+      piece.o.push(mkOffer(g2.ty,g2,count,price,0,0));
+    }
+    d.items.push(piece);
+  }
+  saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+  toast("✨\u{1F3EA} SHOP GENERATED: "+(d.items.length-1)+" stand"+(d.items.length-1===1?"":"s")+" + a display case with your rarest treasure, "
+    +gi+" deals priced "+(adj>0?"$20 ABOVE":adj<0?"$20 BELOW":"exactly AT")+" worth!");
+}
+/* \u{1F4BE} SAVE / LOAD shop designs — stored online, 2 slots (a 3rd costs $2M) */
+function openShopDesigns(p){
+  const extra=localStorage.getItem("vc4slot3")==="1";
+  const opts=[];
+  for(let s=1;s<=(extra?3:2);s++){
+    opts.push({label:"\u{1F4BE} SAVE my current shop → slot "+s,value:"s"+s});
+    opts.push({label:"\u{1F4C2} LOAD slot "+s,value:"l"+s});
+  }
+  if(!extra)opts.push({label:"\u{1F513} Buy a 3rd slot — $"+fmtMoney(2000000),value:"buy"});
+  opts.push({label:"❌ Close",value:"x"});
+  showDest("\u{1F4BE} Shop designs — saved ONLINE, on your account",opts,async v=>{
+    if(v==="x")return;
+    if(v==="buy"){
+      if(MONEY.v<2000000){toast("\u{1F4B0} The 3rd slot costs $2M — you have $"+fmtMoney(MONEY.v)+"!");return;}
+      MONEY.v-=2000000;updateMoneyUI();saveGame();profileSave(true);
+      try{localStorage.setItem("vc4slot3","1");}catch(e){}
+      toast("\u{1F513} 3rd design slot unlocked!");
+      openShopDesigns(p);
+      return;
+    }
+    if(!SERVER_READY){toast("\u{1F534} Shop designs live in the online database — no connection right now.");return;}
+    const slot=v.slice(1);
+    if(v[0]==="s"){
+      const d=MKT[p.id]||{b:0,name:"",items:[]};
+      const s2=JSON.stringify({b:d.b||0,name:d.name||"",sub:d.sub||"",items:d.items||[]});
+      if(s2.length>6000){toast("Your shop is too big to save — take a few deals off first!");return;}
+      const ok=await fbPut("/shopdesigns/"+profileKey()+"/"+slot,{t:myToken(),ts:Date.now(),data:s2});
+      toast(ok?"\u{1F4BE} Shop saved to slot "+slot+"!":"\u{1F534} Couldn't save — the database rules need the small update in FIREBASE-SETUP.md.");
+      return;
+    }
+    const g2=await fbGet("/shopdesigns/"+profileKey()+"/"+slot);
+    if(!g2.ok||!g2.data||typeof g2.data.data!=="string"){toast("\u{1F4C2} Slot "+slot+" is empty!");return;}
+    let sv=null;
+    try{sv=JSON.parse(g2.data.data);}catch(e){}
+    if(!sv||!Array.isArray(sv.items)){toast("\u{1F4C2} That design is broken — save a new one!");return;}
+    const d=MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
+    /* current stock comes back to you, then the design restocks from your collection */
+    (d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
+    d.b=sv.b?1:0;
+    if(typeof sv.name==="string")d.name=sv.name;
+    if(typeof sv.sub==="string")d.sub=sv.sub;
+    d.items=[];
+    let missing=0;
+    sv.items.slice(0,16).forEach(it=>{
+      const piece={k:it.k==="c"?"c":it.k==="s"?"s":"t",dx:+it.dx||0,dz:+it.dz||0,r:+it.r||0,o:[]};
+      (Array.isArray(it.o)?it.o:[]).slice(0,mktCap(piece)).forEach(o=>{
+        if(!o||!o.ty)return;
+        const grp={lab:o.lab,hex:o.hex,gl:o.gl,sz:o.sz,fh:o.fh,pm:o.pm,br:o.br,tier:o.tier,yr:o.yr};
+        const want=Math.max(0,Math.min(9999,o.q|0));
+        const got=mktTakeStock(o.ty,grp,want);
+        if(got<want)missing+=want-got;
+        piece.o.push(mkOffer(o.ty,grp,got,o.p,o.bb,o.bf));
+      });
+      d.items.push(piece);
+    });
+    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
+    toast("\u{1F4C2} Shop design loaded!"+(missing?" ("+missing+" items were missing from your collection — those deals start low on stock.)":""));
+  });
+}
 /* walking near someone's market loads their stalls & signs */
 let _mvT=0;
 function updateMarketVisit(dt){
@@ -4994,8 +5123,11 @@ function renderMeditBar(){
     w.appendChild(b);
   });
   ["meditShop","meditOrder","meditBook"].forEach(id=>$(id).style.display=MEDIT.mkt?"none":"");
+  ["meditGen","meditSaves"].forEach(id=>$(id).style.display=MEDIT.mkt?"":"none");
   $("meditRemove").classList.toggle("on",MEDIT.tool==="remove");
 }
+$("meditGen").onclick=()=>{if(MEDIT.mkt)mktGenerate(MEDIT.mkt);};
+$("meditSaves").onclick=()=>{if(MEDIT.mkt)openShopDesigns(MEDIT.mkt);};
 function openMansionEdit(man){
   MEDIT.on=true;MEDIT.man=man;MEDIT.mkt=null;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
   renderMeditBar();
@@ -11412,6 +11544,8 @@ const UPDATE_PAGES=[
 <li><b>\u{1F4F1} PHONE BUYERS</b> every ~500 m (little blue stands): press T to sell your phones — with the same color filters as the other buyers. New Pro Max / Ultra and \u{1F308} rainbow phones pay the most!</li>
 <li>The phone buyer has FULL filters that combine: a <b>color</b>, a <b>brand</b> (\u{1F34E} iPhone / Pixel / Galaxy S / Galaxy A) and the exact <b>version</b> — Pro or Pro Max for iPhone, + Plus or Ultra for Galaxy S, a or Pro for Pixel. Sell all your black iPhone Pro Maxes in two clicks!</li>
 <li>\u{1FA91} Long tables now hold up to <b>5 DIFFERENT deals</b> side by side, each with its own price sign — and the new <b>\u{1F6D2} STORE SHELF</b> (in the market editor) has 3 rows with 5 spots each: a 15-deal mega rack!</li>
+<li>✨ <b>GENERATE SHOP</b> (market editor): pick phones / dumplings / butter / food / ALL, and it auto-builds shelves, tables and a display case with your <b>most valuable</b> items — then choose \u{1F4B0} EXPENSIVE (+$20 over worth), ⚖️ NORMAL or \u{1F525} CHEAP (−$20). It replaces your whole shop (it warns you, and old stock returns to you first).</li>
+<li>\u{1F4BE} <b>SAVE / LOAD shop designs</b>: 2 online slots on your account (3rd slot: $2M). Loading restocks the design straight from your collection. ⚠️ Server owners: add the small "shopdesigns" section from FIREBASE-SETUP.md to the database rules.</li>
 <li>The ☁️ SKY RESTAURANT menu <b>stays open</b> while you shop now — no more closing and reopening after every bite.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
