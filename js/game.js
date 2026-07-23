@@ -4023,15 +4023,22 @@ function renderMarket(p){
   /* the market's name floats over the entrance too */
   const lbl=mpMakeLabel("\u{1F3EA} "+title.slice(0,22));
   lbl.scale.set(22,5.5,1);lbl.position.set(p.x,p.y+9,p.z+46);sg.add(lbl);
-  /* optional building: walls + a doorway all around the plot */
+  /* optional building: TALL walls, a doorway, and a big pointy roof with a golden tip */
   if(data.b){
     const wm=new THREE.MeshLambertMaterial({color:0xdfe3ea});
+    const WH=8;   // wall height
     for(const[bw,bd,px,pz]of[[98,0.6,0,-48.7],[0.6,98,-48.7,0],[0.6,98,48.7,0],[42,0.6,-28,48.7],[42,0.6,28,48.7]]){
-      const wl=new THREE.Mesh(new THREE.BoxGeometry(bw,5,bd),wm);
-      wl.position.set(p.x+px,p.y+2.5,p.z+pz);wl.castShadow=true;sg.add(wl);
+      const wl=new THREE.Mesh(new THREE.BoxGeometry(bw,WH,bd),wm);
+      wl.position.set(p.x+px,p.y+WH/2,p.z+pz);wl.castShadow=true;sg.add(wl);
     }
-    const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,1.2,0.7),wm);
-    hdr.position.set(p.x,p.y+4.4,p.z+48.7);sg.add(hdr);
+    const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,2.2,0.7),wm);
+    hdr.position.set(p.x,p.y+WH-1.1,p.z+48.7);sg.add(hdr);
+    /* the pointy spire roof covering the whole hall */
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(69,16,4),new THREE.MeshLambertMaterial({color:0x7a3ce8}));
+    roof.rotation.y=Math.PI/4;
+    roof.position.set(p.x,p.y+WH+8,p.z);roof.castShadow=true;sg.add(roof);
+    const tip=new THREE.Mesh(new THREE.SphereGeometry(0.9,8,8),new THREE.MeshBasicMaterial({color:0xffd700}));
+    tip.position.set(p.x,p.y+WH+16.4,p.z);sg.add(tip);
   }
   (data.items||[]).forEach((it,i)=>{
     const sl=(typeof it.dx==="number")?it:mktSlot(i);   // old items fall back to the grid
