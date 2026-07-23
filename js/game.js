@@ -3941,8 +3941,19 @@ function mktMigrate(d){
 }
 for(const k of Object.keys(MKT))mktMigrate(MKT[k]);
 function mkOffer(ty,grp,q,pr,bb,bf){
-  return{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
-    pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q,p:pr||0,bb:bb||0,bf:bf||0};
+  /* slim offers: empty fields are left out so MANY more deals fit in the
+     database's 6 KB market slot */
+  const o={ty,lab:grp.lab,q,p:pr||0};
+  if(grp.hex)o.hex=grp.hex;
+  if(grp.gl)o.gl=1;
+  if(grp.sz&&grp.sz!=="norm")o.sz=grp.sz;
+  if(grp.fh)o.fh=grp.fh;
+  if(grp.pm)o.pm=grp.pm;
+  if(grp.br)o.br=grp.br;
+  if(grp.tier)o.tier=grp.tier;
+  if(grp.yr)o.yr=grp.yr;
+  if(bb&&bf){o.bb=bb;o.bf=bf;}
+  return o;
 }
 function saveMkt(){try{localStorage.setItem("vc4mkt",JSON.stringify(MKT))}catch(e){}}
 const MKTR=new Map();   // other players' plots: id -> {n:ownerName, d:data}
@@ -4322,7 +4333,7 @@ function mktTakeStock(ty,grp,n){
   let left=n;
   for(let i=coll.length-1;i>=0&&left>0;i--){
     const d2=coll[i];
-    if(d2.color===grp.lab&&(d2.glitter?1:0)===(grp.gl||0)&&(d2.size||"")===(grp.sz||"")){
+    if(d2.color===grp.lab&&(d2.glitter?1:0)===(grp.gl||0)&&(d2.size||"norm")===(grp.sz||"norm")){
       if(HOLD.d===d2){HOLD.d=null;HOLD.mesh.visible=false;}
       coll.splice(i,1);left--;
     }
@@ -4595,29 +4606,36 @@ function mktDoGenerate(p,cat,adj){
   const jewel=groups[0];
   if(mktTakeStock(jewel.ty,jewel,1)>0)
     d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
-  /* everything else goes on sale, most valuable first (max 39 deals) —
-     ONLY what really leaves your collection lands on the tables, never more */
-  const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0).slice(0,39);
+  /* EVERYTHING goes on sale, most valuable first — it keeps adding deals until
+     your whole collection is out, or the plot / 6 KB database slot is full.
+     ONLY what really leaves your collection lands on the tables, never more. */
+  const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0);
   const grid=[];
   for(const gz of[16,0,-16,-32])for(const gx of[-32,-16,0,16,32])grid.push([gx,gz]);
-  let gi=0,slot=0,stocked=0;
-  while(gi<sell.length&&d.items.length<16){
+  let gi=0,slot=0,stocked=0,deals=0,full=false;
+  while(gi<sell.length&&d.items.length<16&&!full){
     const remaining=sell.length-gi;
     const k=remaining>7?"s":"t";                 // lots left → a big shelf, tail → tables
     const cap=k==="s"?15:5;
     const pos=grid[slot++]||[0,-40];
     const piece={k,dx:pos[0],dz:pos[1],r:0,o:[]};
-    for(let c2=0;c2<cap&&gi<sell.length;c2++,gi++){
+    for(let c2=0;c2<cap&&gi<sell.length;c2++){
       const{g2,count}=sell[gi];
       const price=Math.max(1,worth(g2)+adj);
+      /* stop BEFORE the database slot overflows — the rest stays with you */
+      const test=mkOffer(g2.ty,g2,count,price,0,0);
+      if(JSON.stringify(d).length+JSON.stringify(piece).length+JSON.stringify(test).length+24>5700){full=true;break;}
+      gi++;
       const got=mktTakeStock(g2.ty,g2,count);   // whatever REALLY left your collection
-      if(got>0){piece.o.push(mkOffer(g2.ty,g2,got,price,0,0));stocked+=got;}
+      if(got>0){piece.o.push(mkOffer(g2.ty,g2,got,price,0,0));stocked+=got;deals++;}
     }
     if(piece.o.length)d.items.push(piece);
   }
   saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-  toast("✨\u{1F3EA} SHOP GENERATED: "+(d.items.length-1)+" stand"+(d.items.length-1===1?"":"s")+" + a display case with your rarest treasure, "
-    +gi+" deals priced "+(adj>0?"$20 ABOVE":adj<0?"$20 BELOW":"exactly AT")+" worth!");
+  const leftover=sell.length-gi;
+  toast("✨\u{1F3EA} SHOP GENERATED: "+(d.items.length-1)+" stand"+(d.items.length-1===1?"":"s")+" + a display case with your rarest treasure — "
+    +deals+" deals, "+(stocked+1)+" items from YOUR collection, priced "+(adj>0?"$20 ABOVE":adj<0?"$20 BELOW":"exactly AT")+" worth!"
+    +(leftover>0?" ("+leftover+" kinds didn't fit — the plot/database is full, they stayed with you.)":""));
 }
 /* \u{1F4BE} SAVE / LOAD shop designs — stored online, 2 slots (a 3rd costs $2M) */
 function openShopDesigns(p){
