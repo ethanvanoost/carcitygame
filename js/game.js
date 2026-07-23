@@ -626,6 +626,58 @@ function rollPhone(){
   if(color==="Rainbow")pushNews("\u{1F4F1}\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+" — the rarest phone in the world!");
   return ph;
 }
+/* ---------- GAME CONSOLES: surprise boxes from CoolBlue too! ---------- */
+const CONSOLE={unopened:0,owned:[]};
+const CONSOLE_MODELS=[
+  {m:"PlayStation 1",br:"Sony",tier:1,yr:1994},{m:"PlayStation 2",br:"Sony",tier:2,yr:2000},
+  {m:"PlayStation 3",br:"Sony",tier:4,yr:2006},{m:"PlayStation 4",br:"Sony",tier:6,yr:2013},
+  {m:"PlayStation 4 Pro",br:"Sony",tier:7,yr:2016},{m:"PlayStation 5",br:"Sony",tier:9,yr:2020},
+  {m:"PlayStation 5 Pro",br:"Sony",tier:11,yr:2024},
+  {m:"Xbox Original",br:"Microsoft",tier:2,yr:2001},{m:"Xbox 360",br:"Microsoft",tier:4,yr:2005},
+  {m:"Xbox One",br:"Microsoft",tier:6,yr:2013},{m:"Xbox One X",br:"Microsoft",tier:7,yr:2017},
+  {m:"Xbox Series S",br:"Microsoft",tier:8,yr:2020},{m:"Xbox Series X",br:"Microsoft",tier:10,yr:2020},
+  {m:"Nintendo Switch",br:"Nintendo",tier:6,yr:2017},{m:"Nintendo Switch Lite",br:"Nintendo",tier:5,yr:2019},
+  {m:"Nintendo Switch OLED",br:"Nintendo",tier:7,yr:2021},{m:"Nintendo Switch 2",br:"Nintendo",tier:10,yr:2025}
+];
+function consoleValue(c2){return Math.round((150+(c2.tier||1)*80)*(c2.color==="Rainbow"?4:1));}
+function rollConsole(){
+  CONSOLE.unopened--;
+  let tot=0;
+  const ws=CONSOLE_MODELS.map(M=>{const w=Math.pow(0.85,M.tier);tot+=w;return w;});
+  let r2=Math.random()*tot,mi=0;
+  for(;mi<ws.length-1&&r2>ws[mi];r2-=ws[mi],mi++);
+  const M=CONSOLE_MODELS[mi];
+  let color,hex;
+  if(Math.random()<0.015){color="Rainbow";hex=RAINBOW_CSS;}
+  else{const c2=PHONE_COLORS[Math.floor(Math.random()*PHONE_COLORS.length)];color=c2[0];hex=c2[1];}
+  const cs={m:M.m,br:M.br,tier:M.tier,yr:M.yr,color,hex};
+  CONSOLE.owned.push(cs);
+  if(color==="Rainbow")pushNews("\u{1F3AE}\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+"!");
+  return cs;
+}
+/* placed consoles at your home: walk up, press T, pick a game! */
+const GCONS=[];
+const GFI={it:null};   // side-channel: which furniture item is being built right now
+function openConsoleGames(cm){
+  const games=["\u{1F344} Parkour Mario","\u{1F3CE} Turbo Kart Racers","⚽ Football Stars",
+    "\u{1F9DF} Zombie Chase","\u{1F9F1} Blocky Builder","\u{1F680} Space Blasters"];
+  const opts=games.map((g2,i)=>({label:g2,value:i}));
+  opts.push({label:"❌ Turn it off",value:"x"});
+  showDest("\u{1F3AE} "+cm+" — pick a game!",opts,v=>{
+    if(typeof v!=="number")return;
+    const name=games[v];
+    toast("\u{1F3AE} "+name+" — 3... 2... 1... GO!");
+    setTimeout(()=>{
+      const ends=[
+        "\u{1F3C6} You WON! Final score: "+(1000+Math.floor(Math.random()*9000))+" points!",
+        "\u{1F624} SO close — the level "+(2+Math.floor(Math.random()*8))+" boss got you. Rematch?",
+        "⭐ NEW HIGH SCORE: "+(5000+Math.floor(Math.random()*50000))+"!",
+        "\u{1F389} Level "+(1+Math.floor(Math.random()*20))+" complete — your "+cm+" is glowing!"
+      ];
+      toast(name+" — "+ends[Math.floor(Math.random()*ends.length)]);
+    },3500);
+  });
+}
 /* ---------- the PHONE SCREEN: browser, info, calculator, timer, alarm & more ---------- */
 const PHAPP={timers:[],alarms:[],swT0:0,swAcc:0,swOn:false,expr:""};
 function fmt2(n){return String(n).padStart(2,"0");}
@@ -781,6 +833,10 @@ $("cbBuy").onclick=()=>{
   PHONE.unopened++;saveGame();   // phone boxes are FREE!
   $("cbMsg").textContent="\u{1F4E6} FREE phone box grabbed! You have "+PHONE.unopened+" to unbox (\u{1F381} Unbox menu). Take another?";
 };
+$("cbBuy2").onclick=()=>{
+  CONSOLE.unopened++;saveGame();   // console boxes are FREE too!
+  $("cbMsg").textContent="\u{1F3AE} FREE console box grabbed! You have "+CONSOLE.unopened+" to unbox (\u{1F381} Unbox menu, \u{1F3AE} Consoles tab). Take another?";
+};
 $("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
 const _starGeo=new THREE.OctahedronGeometry(1,0);
@@ -829,6 +885,17 @@ const PHMESH=(function(){
   g.visible=false;scene.add(g);
   return{g,mat:body.material};
 })();
+/* held BUTTER looks like real butter: a golden stick with a pale top slab */
+const BUTMESH=(function(){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color:0xf4d35e});
+  const stick=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.18,0.2),mat);
+  g.add(stick);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.05,0.22),new THREE.MeshLambertMaterial({color:0xfdf0c2}));
+  top.position.y=0.11;g.add(top);
+  g.visible=false;scene.add(g);
+  return{g,mat};
+})();
 function holdPhone(ph){
   if(HOLD.d===ph){
     HOLD.d=null;
@@ -842,11 +909,13 @@ function holdPhone(ph){
 }
 function updateHeld(){
   const isPhone=!!(HOLD.d&&HOLD.d.m);
+  const isButter=!!(HOLD.d&&!isPhone&&HOLD.d.size);   // butter squishies carry a size
   const btn=$("bViewPhone"),want=isPhone?"":"none";
   if(btn.style.display!==want)btn.style.display=want;
   const show=HOLD.d&&player.onFoot&&player.mesh.visible;
-  HOLD.mesh.visible=!!show&&!isPhone;
+  HOLD.mesh.visible=!!show&&!isPhone&&!isButter;
   PHMESH.g.visible=!!show&&isPhone;
+  BUTMESH.g.visible=!!show&&isButter;
   if(!show)return;
   const yaw=player.yaw;
   const px=player.x+Math.sin(yaw)*0.5+Math.sin(yaw+Math.PI/2)*0.3,
@@ -856,6 +925,17 @@ function updateHeld(){
     PHMESH.g.position.set(px,py+0.05,pz);
     PHMESH.g.rotation.y=yaw;
     if(HOLD.d.color==="Rainbow")PHMESH.mat.color.setHSL((performance.now()/1500)%1,0.9,0.55);
+    return;
+  }
+  if(isButter){
+    const sc=HOLD.d.size==="mega"?2.3:HOLD.d.size==="med"?1.5:1;
+    BUTMESH.g.scale.setScalar(sc);
+    BUTMESH.g.position.set(px,py,pz);
+    BUTMESH.g.rotation.y=yaw;
+    if(HOLD.d.color==="Rainbow")BUTMESH.mat.color.setHSL((performance.now()/1500)%1,0.9,0.55);
+    else BUTMESH.mat.color.set(HOLD.d.hex);
+    if(HOLD.d.glitter)BUTMESH.mat.emissive.setHSL((performance.now()/300)%1,0.8,0.3);
+    else BUTMESH.mat.emissive.setRGB(0,0,0);
     return;
   }
   const m=HOLD.mesh;
@@ -948,12 +1028,39 @@ function renderPhoneTab(){
     return el;
   });
 }
+function renderConsoleTab(){
+  $("dumpInfo").textContent=CONSOLE.unopened
+    ?"You have "+CONSOLE.unopened+" unopened console box"+(CONSOLE.unopened>1?"es":"")+" — unbox one!"
+    :"No console boxes — grab them FREE at a \u{1F4F1} CoolBlue (one every ~500 m)!";
+  $("dumpOpen").textContent="\u{1F3AE} Unbox a console!";
+  $("dumpOpenAll").textContent="\u{1F389} Unbox ALL console boxes!";
+  $("dumpOpen").style.display=CONSOLE.unopened?"":"none";
+  $("dumpDisplay").style.display="none";
+  const list=$("dumpList");list.innerHTML="";
+  if(!CONSOLE.owned.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent="No consoles yet — place one at your home (mansion editor: \u{1F3AE} My console + TV) and PLAY!";
+    list.appendChild(d);
+  }
+  chunkedList(list,CONSOLE.owned,cs=>{
+    const el=document.createElement("button");
+    el.className="dumpItem"+(cs.color==="Rainbow"?" glitter":"");
+    el.innerHTML="<span class='swatch' style='background:"+cs.hex+"'></span>"
+      +(cs.color==="Rainbow"?"\u{1F308} RAINBOW ":cs.color+" ")+cs.m
+      +" <span style='color:var(--dim)'>$"+fmtMoney(consoleValue(cs))+"</span>";
+    el.onclick=()=>toast("\u{1F3AE} "+cs.m+" ("+cs.yr+") — place it at your home with the mansion editor, or sell it at your market!");
+    return el;
+  });
+}
 function renderDump(){
   const butter=SQTAB.v==="butter";
   $("dumpTabD").classList.toggle("on",SQTAB.v==="dump");
   $("dumpTabB").classList.toggle("on",butter);
   $("dumpTabP").classList.toggle("on",SQTAB.v==="phone");
+  $("dumpTabC").classList.toggle("on",SQTAB.v==="console");
   if(SQTAB.v==="phone"){renderPhoneTab();return;}
+  if(SQTAB.v==="console"){renderConsoleTab();return;}
   const C=butter?BUTTER:DUMP,one=butter?"butter squishy":"dumpling",many=butter?"butter squishies":"dumplings";
   $("dumpInfo").textContent=C.unopened
     ?"You have "+C.unopened+" unopened "+(C.unopened>1?many:one)+" — open one!"
@@ -987,6 +1094,7 @@ function renderDump(){
 $("dumpTabD").onclick=()=>{SQTAB.v="dump";renderDump();};
 $("dumpTabB").onclick=()=>{SQTAB.v="butter";renderDump();};
 $("dumpTabP").onclick=()=>{SQTAB.v="phone";renderDump();};
+$("dumpTabC").onclick=()=>{SQTAB.v="console";renderDump();};
 $("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 function rollDump(){
@@ -1028,6 +1136,14 @@ function rollButter(){
   return d;
 }
 $("dumpOpen").onclick=()=>{
+  if(SQTAB.v==="console"){
+    if(!CONSOLE.unopened)return;
+    const cs=rollConsole();
+    if(cs.color==="Rainbow")toast("\u{1F308}\u{1F3AE} NO WAY — a RAINBOW "+cs.m+"!! ($"+fmtMoney(consoleValue(cs))+")");
+    else if(cs.tier>=9)toast("\u{1F929}\u{1F3AE} JACKPOT — a "+cs.color+" "+cs.m+"! ($"+fmtMoney(consoleValue(cs))+")");
+    else toast("\u{1F3AE} You unboxed a "+cs.color+" "+cs.m+"! ($"+fmtMoney(consoleValue(cs))+")");
+    renderDump();saveGame();return;
+  }
   if(SQTAB.v==="phone"){
     if(!PHONE.unopened)return;
     const ph=rollPhone();
@@ -1058,10 +1174,11 @@ $("dumpOpen").onclick=()=>{
 let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
   if(OPENALL_BUSY)return;
-  const phone=SQTAB.v==="phone",butter=SQTAB.v==="butter";
-  const C=phone?PHONE:butter?BUTTER:DUMP;
-  const roll=phone?rollPhone:butter?rollButter:rollDump,val=phone?phoneValue:butter?butterValue:dumpValue;
-  const many=phone?"phone boxes":butter?"butter squishies":"dumplings";
+  const phone=SQTAB.v==="phone",butter=SQTAB.v==="butter",cons=SQTAB.v==="console";
+  const C=phone?PHONE:cons?CONSOLE:butter?BUTTER:DUMP;
+  const roll=phone?rollPhone:cons?rollConsole:butter?rollButter:rollDump;
+  const val=phone?phoneValue:cons?consoleValue:butter?butterValue:dumpValue;
+  const many=phone?"phone boxes":cons?"console boxes":butter?"butter squishies":"dumplings";
   if(!C.unopened){toast("No unopened "+many+" — buy them at a \u{1F6D2} MEGA MART!");return;}
   OPENALL_BUSY=true;
   const total=C.unopened;
@@ -1076,12 +1193,12 @@ $("dumpOpenAll").onclick=()=>{
       if(v>bestVal){bestVal=v;best=d;}
     }
     if(C.unopened>0){
-      toast((phone?"\u{1F4F1}":butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
+      toast((phone?"\u{1F4F1}":cons?"\u{1F3AE}":butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
       setTimeout(step,0);
     }else{
       OPENALL_BUSY=false;
       toast("\u{1F389} You opened "+opened+" "+many+(glit?" ("+glit+" ✨ GLITTER!)":"")+(mega?" ("+mega+" \u{1F31F} MEGA!!)":"")
-        +" — best pull: "+(phone?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color)+" ($"+fmtMoney(bestVal)+")!");
+        +" — best pull: "+((phone||cons)?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color)+" ($"+fmtMoney(bestVal)+")!");
       renderDump();saveGame();
     }
   })();
@@ -1745,11 +1862,10 @@ setInterval(()=>{
   }
 },350);
 /* ================= 🎤 THE MICROPHONE: one shared speech listener ================= */
-/* tiny version badge — so we can always SEE which game version is running */
-const GAMEVER=63;
+/* tiny version badge — always shows the REAL game version (from core.js) */
 const verBadge=document.createElement("div");
 verBadge.style.cssText="position:fixed;right:6px;bottom:4px;z-index:60;font:600 10px 'Segoe UI',sans-serif;color:#7d8aa5;opacity:.6;pointer-events:none";
-verBadge.textContent="v"+GAMEVER;
+verBadge.textContent="v"+GAME_V;
 document.body.appendChild(verBadge);
 /* live caption bar: shows EVERYTHING the mic hears, while it hears it */
 const micCap=document.createElement("div");
@@ -3282,6 +3398,9 @@ function tryFurniture(){
   /* pianos: sit down and play (computer keyboard or a real MIDI keyboard) */
   const pn=nearFurn(pianos,4.5);
   if(pn){openPiano(pn);return true;}
+  /* 🎮 your placed console: press T to pick a game */
+  const gcn=nearFurn(GCONS,2.8);
+  if(gcn){openConsoleGames(gcn.cm);return true;}
   const ex=nearFurn(roomExits,2.2);
   if(ex){
     player.x=ex.outX;player.z=ex.outZ;player.y=ex.outY;
@@ -3302,8 +3421,21 @@ function tryFurniture(){
     toast("\u{1FA91} Sitting down — press T (or walk) to stand up.");
     return true;
   }
-  /* standing in YOUR apartment room: order food to your door! */
-  if(player.onFoot&&myRoomHere()){openOrderMenu();return true;}
+  /* standing in YOUR apartment room: order food — or game on your console! */
+  if(player.onFoot&&myRoomHere()){
+    if(CONSOLE.owned.length){
+      const best=CONSOLE.owned.reduce((a,b)=>consoleValue(b)>consoleValue(a)?b:a,CONSOLE.owned[0]);
+      showDest("\u{1F6CE}️ Your room",[
+        {label:"\u{1F354} Order food to your door",value:"food"},
+        {label:"\u{1F3AE} Play on your "+best.m,value:"game"},
+        {label:"❌ Close",value:"x"}
+      ],v=>{
+        if(v==="food")openOrderMenu();
+        else if(v==="game")openConsoleGames(best.m);
+      });
+    }else openOrderMenu();
+    return true;
+  }
   return false;
 }
 /* ================= JOBS: taxi, food delivery & tow truck ================= */
@@ -3966,7 +4098,7 @@ function nearMarketPlot(){
   return null;
 }
 function mktItemName(it){
-  if(it.ty==="phone")return (it.lab==="Rainbow"?"\u{1F308} RAINBOW ":it.lab+" ")+(it.pm||"phone");
+  if(it.ty==="phone"||it.ty==="console")return (it.lab==="Rainbow"?"\u{1F308} RAINBOW ":it.lab+" ")+(it.pm||(it.ty==="phone"?"phone":"console"));
   return (it.gl?"✨ GLITTER ":"")+(it.sz==="mega"?"\u{1F31F} MEGA ":it.sz==="med"?"\u{1F538} MEDIUM ":"")+it.lab
     +(it.ty==="dump"?" dumpling":it.ty==="butter"?" butter squishy":"");
 }
@@ -3981,6 +4113,22 @@ function addMktGood(sg,it,x,y,z,r){
     const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
     const ph=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.44,0.04),mat);
     ph.position.set(x,y+0.22,z);ph.rotation.x=-0.35;sg.add(ph);return;
+  }
+  if(it.ty==="console"){
+    const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
+    const cb3=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.14,0.3),mat);
+    cb3.position.set(x,y+0.07,z);sg.add(cb3);return;
+  }
+  if(it.ty==="butter"){
+    /* butter squishies look like BUTTER: a golden stick with a pale top */
+    const s=it.sz==="mega"?1.9:it.sz==="med"?1.35:1;
+    const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#f4d35e")});
+    if(it.gl&&it.lab!=="Rainbow")mat.emissive=new THREE.Color(it.hex||"#ffffff").multiplyScalar(0.35);
+    const bt=new THREE.Mesh(new THREE.BoxGeometry(r*1.9*s,r*0.85*s,r*1.1*s),mat);
+    bt.position.set(x,y+r*0.43*s,z);sg.add(bt);
+    const top=new THREE.Mesh(new THREE.BoxGeometry(r*2*s,r*0.16*s,r*1.2*s),new THREE.MeshLambertMaterial({color:0xfdf0c2}));
+    top.position.set(x,y+r*0.9*s,z);sg.add(top);
+    return;
   }
   const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#f2f5f7")});
   if(it.gl&&it.lab!=="Rainbow")mat.emissive=new THREE.Color(it.hex||"#ffffff").multiplyScalar(0.35);
@@ -4023,18 +4171,22 @@ function renderMarket(p){
   /* the market's name floats over the entrance too */
   const lbl=mpMakeLabel("\u{1F3EA} "+title.slice(0,22));
   lbl.scale.set(22,5.5,1);lbl.position.set(p.x,p.y+9,p.z+46);sg.add(lbl);
-  /* optional building: TALL walls, a doorway, and a big pointy roof with a golden tip */
+  /* optional building: TALL walls, a doorway, and a big pointy roof — in the
+     owner's PRIMARY (walls) and SECONDARY (roof + trim) colors */
   if(data.b){
-    const wm=new THREE.MeshLambertMaterial({color:0xdfe3ea});
+    const c1=(typeof data.c1==="number")?data.c1:0xdfe3ea;
+    const c2=(typeof data.c2==="number")?data.c2:0x7a3ce8;
+    const wm=new THREE.MeshLambertMaterial({color:c1});
+    const tm=new THREE.MeshLambertMaterial({color:c2});
     const WH=8;   // wall height
     for(const[bw,bd,px,pz]of[[98,0.6,0,-48.7],[0.6,98,-48.7,0],[0.6,98,48.7,0],[42,0.6,-28,48.7],[42,0.6,28,48.7]]){
       const wl=new THREE.Mesh(new THREE.BoxGeometry(bw,WH,bd),wm);
       wl.position.set(p.x+px,p.y+WH/2,p.z+pz);wl.castShadow=true;sg.add(wl);
     }
-    const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,2.2,0.7),wm);
+    const hdr=new THREE.Mesh(new THREE.BoxGeometry(14.6,2.2,0.7),tm);
     hdr.position.set(p.x,p.y+WH-1.1,p.z+48.7);sg.add(hdr);
     /* the pointy spire roof covering the whole hall */
-    const roof=new THREE.Mesh(new THREE.ConeGeometry(69,16,4),new THREE.MeshLambertMaterial({color:0x7a3ce8}));
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(69,16,4),tm);
     roof.rotation.y=Math.PI/4;
     roof.position.set(p.x,p.y+WH+8,p.z);roof.castShadow=true;sg.add(roof);
     const tip=new THREE.Mesh(new THREE.SphereGeometry(0.9,8,8),new THREE.MeshBasicMaterial({color:0xffd700}));
@@ -4206,6 +4358,7 @@ function openMarketOwner(p){
     {label:"\u{1F3F7} Name your market"+(d.name?" (now: \""+d.name+"\")":""),value:"name"},
     {label:"✏️ Sign subtitle"+(d.sub?" (now: \""+d.sub+"\")":" — the line UNDER the name"),value:"sub"},
     {label:d.b?"\u{1F33E} Remove the building (open-air)":"\u{1F3EC} Add a building (walls + door)",value:"bld"},
+    {label:"\u{1F3A8} Building colors (primary + secondary)",value:"col"},
     {label:"\u{1F50E} CHECK: can other players see my shop?",value:"chk"},
     {label:"❌ Close",value:"x"}
   ],v=>{
@@ -4243,9 +4396,54 @@ function openMarketOwner(p){
     }else if(v==="bld"){
       d.b=d.b?0:1;saveMkt();syncMarket(p.id);renderMarket(p);
       toast(d.b?"\u{1F3EC} Building added — walls and a door around your plot!":"\u{1F33E} Building removed — open-air market!");
+    }else if(v==="col"){
+      const pal=[["⚪ White",0xf2f5f7],["⚫ Black",0x14161c],["\u{1F534} Red",0xd7263d],["\u{1F535} Blue",0x1b98e0],
+        ["\u{1F7E1} Yellow",0xf4d35e],["\u{1F7E2} Green",0x8ac926],["\u{1F7E0} Orange",0xff7f11],["\u{1F7E3} Purple",0x9b5de5],
+        ["\u{1F338} Pink",0xff5d8f],["\u{1F30A} Teal",0x2ec4b6]];
+      const pick=(title,cb2)=>showDest(title,pal.map(c2=>({label:c2[0],value:c2[1]})).concat([{label:"❌ Cancel",value:"x"}]),cb2);
+      pick("\u{1F3A8} PRIMARY color — the walls",c1=>{
+        if(typeof c1!=="number")return;
+        pick("\u{1F3A8} SECONDARY color — roof + trim",c2=>{
+          if(typeof c2!=="number")return;
+          d.c1=c1;d.c2=c2;
+          saveMkt();syncMarket(p.id);renderMarket(p);
+          toast("\u{1F3A8} Building repainted!"+(d.b?"":" Turn the \u{1F3EC} building ON to see it!"));
+        });
+      });
     }
   });
 }
+/* ➕ GENERATE EMPTY STANDS: pick how many shelves / tables / cases, they appear empty */
+function openGenEmpty(p){
+  $("genEmptyModal").classList.add("open");
+}
+$("geCancel").onclick=()=>$("genEmptyModal").classList.remove("open");
+$("geOk").onclick=()=>{
+  const p=MEDIT.mkt;
+  if(!p){$("genEmptyModal").classList.remove("open");return;}
+  const d=MKT[p.id]=MKT[p.id]||{b:0,name:"",items:[]};
+  const nS=Math.max(0,Math.min(16,Math.floor(parseInt($("geS").value,10))||0));
+  const nT=Math.max(0,Math.min(16,Math.floor(parseInt($("geT").value,10))||0));
+  const nC=Math.max(0,Math.min(16,Math.floor(parseInt($("geC").value,10))||0));
+  if(nS+nT+nC<1){toast("Type at least ONE number bigger than 0!");return;}
+  const grid=[];
+  for(const gz of[34,16,0,-16,-32])for(const gx of[-32,-16,0,16,32])grid.push([gx,gz]);
+  const used=pos=>d.items.some(it=>Math.abs((it.dx||0)-pos[0])<7&&Math.abs((it.dz||0)-pos[1])<7);
+  let placed=0;
+  const place=k=>{
+    if(d.items.length>=16)return;
+    const pos=grid.find(g2=>!used(g2))||[0,-42];
+    d.items.push({k,dx:pos[0],dz:pos[1],r:0,o:[]});
+    placed++;
+  };
+  for(let i=0;i<nC;i++)place("c");
+  for(let i=0;i<nS;i++)place("s");
+  for(let i=0;i<nT;i++)place("t");
+  $("genEmptyModal").classList.remove("open");
+  saveMkt();renderMarket(p);
+  toast("➕ "+placed+" empty stand"+(placed===1?"":"s")+" placed"
+    +(placed<nS+nT+nC?" — the plot is FULL (16 pieces max)!":" — walk to each one and press T to stock it!"));
+};
 /* clicking the floor in the market editor: place an EMPTY table/case, or remove one */
 function mktEditClick(e){
   const p=MEDIT.mkt,d=MKT[p.id];
@@ -4308,20 +4506,21 @@ function mktPickType(p,kind,idx){
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
     {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
     {label:"\u{1F4F1} A phone ("+PHONE.owned.length+" owned)",value:"phone"},
+    {label:"\u{1F3AE} A game console ("+CONSOLE.owned.length+" owned)",value:"console"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"❌ Cancel",value:"x"}
   ],ty=>{
     if(ty==="x")return;
-    if(ty==="food")mktPickItem(p,kind,ty,idx);   // food: a simple list
-    else openMktPicker(p,kind,ty,idx);           // squishies & phones: the BOX PICKER!
+    if(ty==="food"||ty==="console")mktPickItem(p,kind,ty,idx);   // simple list
+    else openMktPicker(p,kind,ty,idx);                            // squishies & phones: the BOX PICKER!
   });
 }
 function mktGroups(ty){
   const map=new Map();
   if(ty==="food"){
     MCD.pack.forEach(f=>{const k=f[0];const e=map.get(k)||{n:0,lab:f[0],fh:f[1],ty};e.n++;map.set(k,e);});
-  }else if(ty==="phone"){
-    PHONE.owned.forEach(ph=>{
+  }else if(ty==="phone"||ty==="console"){
+    (ty==="phone"?PHONE.owned:CONSOLE.owned).forEach(ph=>{
       const k=ph.m+"|"+ph.color;
       const e=map.get(k)||{n:0,lab:ph.color,hex:ph.hex,pm:ph.m,br:ph.br,tier:ph.tier,yr:ph.yr,ty};
       e.n++;map.set(k,e);
@@ -4343,13 +4542,14 @@ function mktTakeStock(ty,grp,n){
     renderPack();
     return n-left;
   }
-  if(ty==="phone"){
+  if(ty==="phone"||ty==="console"){
+    const coll2=ty==="phone"?PHONE.owned:CONSOLE.owned;
     let left=n;
-    for(let i=PHONE.owned.length-1;i>=0&&left>0;i--){
-      const ph=PHONE.owned[i];
+    for(let i=coll2.length-1;i>=0&&left>0;i--){
+      const ph=coll2[i];
       if(ph.m===grp.pm&&ph.color===grp.lab){
         if(HOLD.d===ph)HOLD.d=null;
-        PHONE.owned.splice(i,1);left--;
+        coll2.splice(i,1);left--;
       }
     }
     renderDump();
@@ -4372,6 +4572,7 @@ function mktGiveGoods(it,n){
     if(it.ty==="dump")DUMP.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl});
     else if(it.ty==="butter")BUTTER.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl,size:it.sz||"norm"});
     else if(it.ty==="phone")PHONE.owned.push({m:it.pm||"iPhone 4",br:it.br||"Apple",tier:it.tier||1,yr:it.yr||2010,color:it.lab,hex:it.hex||"#1c1c1e"});
+    else if(it.ty==="console")CONSOLE.owned.push({m:it.pm||"PlayStation 1",br:it.br||"Sony",tier:it.tier||1,yr:it.yr||2000,color:it.lab,hex:it.hex||"#1c1c1e"});
     else MCD.pack.push([it.lab,it.fh||10]);
   }
   renderDump();renderPack();saveGame();
@@ -4430,6 +4631,7 @@ function mkpVariants(){
 /* what an item is WORTH (the buyer price) — shown while stocking, so you can price it right */
 function mkpWorth(g2){
   if(g2.ty==="phone")return phoneValue({tier:g2.tier||0,color:g2.lab});
+  if(g2.ty==="console")return consoleValue({tier:g2.tier||0,color:g2.lab});
   if(g2.ty==="butter")return butterValue({color:g2.lab,glitter:!!g2.gl,size:g2.sz||"norm"});
   if(g2.ty==="dump")return dumpValue({color:g2.lab,glitter:!!g2.gl});
   return 0;
@@ -4600,6 +4802,7 @@ function mktGenPick(p,sel){
   const row=(key,label)=>({label:(sel.has(key)?"✅ ":"⬜ ")+label,value:key});
   showDest("\u{1F3EA} What should your shop sell? Tick boxes, then CONTINUE!",[
     row("phone","\u{1F4F1} Phones"),
+    row("console","\u{1F3AE} Game consoles"),
     row("dump","\u{1F95F} Dumplings"),
     row("butter","\u{1F9C8} Butter squishies"),
     row("food","\u{1F354} Food"),
@@ -4608,7 +4811,7 @@ function mktGenPick(p,sel){
     {label:"❌ Cancel",value:"x"}
   ],v=>{
     if(v==="x")return;
-    if(v==="all"){mktGenPrice(p,["phone","dump","butter","food"]);return;}
+    if(v==="all"){mktGenPrice(p,["phone","console","dump","butter","food"]);return;}
     if(v==="go"){
       if(!sel.size){toast("Tick at least ONE box first!");mktGenPick(p,sel);return;}
       mktGenPrice(p,[...sel]);
@@ -4634,7 +4837,7 @@ function mktDoGenerate(p,cat,adj){
   /* old shop comes off — every bit of stock returns to your collection */
   (d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{if(o.ty&&o.q>0)mktGiveGoods(o,o.q);}));
   d.items=[];
-  const cats=Array.isArray(cat)?cat:cat==="all"?["phone","dump","butter","food"]:[cat];
+  const cats=Array.isArray(cat)?cat:cat==="all"?["phone","console","dump","butter","food"]:[cat];
   const worth=g2=>g2.ty==="food"?Math.max(1,g2.fh||10):Math.max(1,mkpWorth(g2));
   /* FAIR MIX: each ticked kind is sorted by worth, then they take turns —
      so phones can never hog every stand and push the other kinds out */
@@ -4864,6 +5067,7 @@ const MFURN=new Map();      // mansion id -> [{t,dx,dz,r}] placed furniture
 const TRAMPS=[];            // trampolines: walk on one to bounce!
 /* the furniture & garden shop — indoor and outdoor items */
 const FURN=[
+  {t:"gcons",n:"My console + TV",e:"\u{1F3AE}",p:0,out:0},
   {t:"bed",n:"Bed",e:"\u{1F6CF}",p:500,out:0},
   {t:"chair",n:"Chair",e:"\u{1FA91}",p:100,out:0},
   {t:"couch",n:"Couch",e:"\u{1F6CB}",p:400,out:0},
@@ -4898,6 +5102,20 @@ const furnDef=t=>FURN.find(f=>f.t===t)||FURN_MKT.find(f=>f.t===t);
 /* build one piece of furniture at world (x,z), on floor y, rotated r */
 function buildFurnPiece(t,x,z,y,r,parent,man){
   const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=r||0;parent.add(g);
+  if(t==="gcons"){   // 🎮 your console hooked up to a TV — press T to play!
+    const stand=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.5,0.5),new THREE.MeshLambertMaterial({color:0x3a3f4a}));
+    stand.position.y=0.25;g.add(stand);
+    const scr=new THREE.Mesh(new THREE.BoxGeometry(1.7,1,0.08),new THREE.MeshLambertMaterial({color:0x0b0f16}));
+    scr.position.y=1.1;g.add(scr);
+    const glow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.8),new THREE.MeshBasicMaterial({color:0x3fd0ff}));
+    glow.position.set(0,1.1,0.05);g.add(glow);
+    const it2=GFI.it;
+    const cb3=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.14,0.38),
+      new THREE.MeshLambertMaterial({color:new THREE.Color((it2&&it2.chx)||"#1c1c1e")}));
+    cb3.position.set(0.5,0.57,0.1);g.add(cb3);
+    if(it2)GCONS.push({g,x,z,y,cm:it2.cm||"game console"});   // real pieces only, never the ghost
+    return;
+  }
   if(t==="mtable"){   // the market's LONG TABLE
     const top=new THREE.Mesh(new THREE.BoxGeometry(7,0.24,2.4),new THREE.MeshLambertMaterial({color:0x8a6f4d}));
     top.position.y=1;top.castShadow=true;g.add(top);
@@ -5079,7 +5297,9 @@ function buildMansionFurniture(man){
     const wx=man.x+it.dx,wz=man.z+it.dz;
     const inside=man.plot?false:(man.house?Math.abs(it.dx)<14&&Math.abs(it.dz)<10:Math.abs(it.dx)<49&&Math.abs(it.dz)<37);
     const fy=man.plot?terrainH(wx,wz)+0.14:(inside?man.baseY+0.3:terrainH(wx,wz)+0.12);
+    GFI.it=it;   // gcons pieces read their console model & color from here
     buildFurnPiece(it.t,wx,wz,fy,it.r||0,fg,man);
+    GFI.it=null;
   }
   if(rentedAt(man.id)&&!man.plot){
     /* YOUR mansion: your 3 fastest owned cars park on the driveway */
@@ -5212,10 +5432,11 @@ function renderMeditBar(){
     w.appendChild(b);
   });
   ["meditShop","meditOrder","meditBook"].forEach(id=>$(id).style.display=MEDIT.mkt?"none":"");
-  ["meditGen","meditSaves"].forEach(id=>$(id).style.display=MEDIT.mkt?"":"none");
+  ["meditGen","meditGenEmpty","meditSaves"].forEach(id=>$(id).style.display=MEDIT.mkt?"":"none");
   $("meditRemove").classList.toggle("on",MEDIT.tool==="remove");
 }
 $("meditGen").onclick=()=>{if(MEDIT.mkt)mktGenerate(MEDIT.mkt);};
+$("meditGenEmpty").onclick=()=>{if(MEDIT.mkt)openGenEmpty(MEDIT.mkt);};
 $("meditSaves").onclick=()=>{if(MEDIT.mkt)openShopDesigns(MEDIT.mkt);};
 function openMansionEdit(man){
   MEDIT.on=true;MEDIT.man=man;MEDIT.mkt=null;MEDIT.sel=null;MEDIT.tool="place";MEDIT.rot=0;
@@ -5355,6 +5576,10 @@ addEventListener("mousedown",e=>{
     items.forEach((it,i)=>{const d=Math.hypot(it.dx-dx,it.dz-dz);if(d<bd){bd=d;bi=i;}});
     if(bi<0){toast("Click closer to an item to remove it.");return;}
     const it=items.splice(bi,1)[0];
+    if(it&&it.t==="gcons"&&it.cm){   // your console comes back to your collection
+      CONSOLE.owned.push({m:it.cm,br:it.cbr||"?",tier:it.cti||1,yr:it.cyr||2000,color:it.cc||"Black",hex:it.chx||"#1c1c1e"});
+      renderDump();
+    }
     const def=furnDef(it.t);
     if(def){MONEY.v+=def.p;updateMoneyUI();}
     buildMansionFurniture(man);saveGame();
@@ -5367,6 +5592,23 @@ addEventListener("mousedown",e=>{
     const inside=man.house?Math.abs(dx)<14&&Math.abs(dz)<10:Math.abs(dx)<49&&Math.abs(dz)<37;
     if(!def.out&&!inside){toast("\u{1F3E0} "+def.n+" is an INDOOR item — place it inside "+(man.house?"the house":"the mansion")+"!");return;}
     if(def.out===1&&(man.house?inside:Math.abs(dz)<39)){toast("\u{1F33F} "+def.n+" is a GARDEN item — place it on the lawn "+(man.house?"around the house":"in FRONT of (or behind) the mansion")+"!");return;}
+  }
+  if(def.t==="gcons"){
+    /* placing YOUR console: pick one from your collection — it moves onto the TV stand */
+    if(!CONSOLE.owned.length){toast("\u{1F3AE} You don't own a console yet — grab a FREE box at CoolBlue and unbox it!");return;}
+    const groups=mktGroups("console").slice(0,10);
+    const opts=groups.map((g2,i)=>({label:(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm+" ("+g2.n+")",value:i}));
+    opts.push({label:"❌ Cancel",value:"x"});
+    const pdx=Math.round(dx*10)/10,pdz=Math.round(dz*10)/10,rot=MEDIT.rot;
+    showDest("\u{1F3AE} Which console goes on the TV stand?",opts,v=>{
+      if(typeof v!=="number")return;
+      const grp=groups[v];
+      if(mktTakeStock("console",grp,1)<1){toast("That console is gone!");return;}
+      items.push({t:"gcons",dx:pdx,dz:pdz,r:rot,cm:grp.pm,cc:grp.lab,chx:grp.hex||"#1c1c1e",cbr:grp.br||"",cti:grp.tier||1,cyr:grp.yr||2000});
+      buildMansionFurniture(man);saveGame();
+      toast("\u{1F3AE} "+grp.pm+" is hooked up — walk to it and press T to PLAY!");
+    });
+    return;
   }
   if(MONEY.v<def.p){toast("\u{1F4B0} The "+def.n+" costs $"+fmtMoney(def.p)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
   MONEY.v-=def.p;updateMoneyUI();profileSave();
@@ -6636,6 +6878,7 @@ function saveGame(){
       unopened:DUMP.unopened,owned:DUMP.owned,
       bu:BUTTER.unopened,bo:BUTTER.owned,
       phu:PHONE.unopened,pho:PHONE.owned,
+      cu:CONSOLE.unopened,co:CONSOLE.owned,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
@@ -6653,6 +6896,7 @@ function loadGame(){
     DUMP.unopened=d.unopened||0;DUMP.owned=Array.isArray(d.owned)?d.owned:[];
     BUTTER.unopened=d.bu||0;BUTTER.owned=Array.isArray(d.bo)?d.bo:[];
     PHONE.unopened=d.phu||0;PHONE.owned=Array.isArray(d.pho)?d.pho:[];
+    CONSOLE.unopened=d.cu||0;CONSOLE.owned=Array.isArray(d.co)?d.co:[];
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
@@ -9405,7 +9649,7 @@ function updateHint(){
           if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
           else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
           else if(nearPhoneBuyer()){txt="\u{1F4F1} Phone buyer — press T to sell your phones";showT=true;}
-          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T to grab FREE surprise phone boxes!";showT=true;}
+          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T for FREE phone & \u{1F3AE} console boxes!";showT=true;}
           else{
             const mk=nearMarketPlot();
             if(mk){
@@ -11634,7 +11878,16 @@ const UPDATE_PAGES=[
 <li>The phone buyer has FULL filters that combine: a <b>color</b>, a <b>brand</b> (\u{1F34E} iPhone / Pixel / Galaxy S / Galaxy A) and the exact <b>version</b> — Pro or Pro Max for iPhone, + Plus or Ultra for Galaxy S, a or Pro for Pixel. Sell all your black iPhone Pro Maxes in two clicks!</li>
 <li>\u{1FA91} Long tables now hold up to <b>5 DIFFERENT deals</b> side by side, each with its own price sign — and the new <b>\u{1F6D2} STORE SHELF</b> (in the market editor) has 3 rows with 5 spots each: a 15-deal mega rack!</li>
 <li>✨ <b>GENERATE SHOP</b> (market editor): pick phones / dumplings / butter / food / ALL, and it auto-builds shelves, tables and a display case with your <b>most valuable</b> items — then choose \u{1F4B0} EXPENSIVE (+$20 over worth), ⚖️ NORMAL or \u{1F525} CHEAP (−$20). It replaces your whole shop (it warns you, and old stock returns to you first).</li>
-<li>\u{1F4BE} <b>SAVE / LOAD shop designs</b>: 2 online slots on your account (3rd slot: $2M). Loading restocks the design straight from your collection. ⚠️ Server owners: add the small "shopdesigns" section from FIREBASE-SETUP.md to the database rules.</li>
+<li>\u{1F4BE} <b>SAVE / LOAD shop designs</b>: 2 online slots on your account (3rd slot: $2M). Loading restocks the design straight from your collection. ⚠️ Server owners: add the small "shopdesigns" section from FIREBASE-SETUP.md to the database rules.</li></ul>
+<h4>\u{1F3AE} GAME CONSOLES (CoolBlue)</h4><ul>
+<li>CoolBlue now also hands out <b>FREE console boxes</b>: PlayStation 1-5 (+Pro), Xbox Original to Series X, and Nintendo Switch, Switch Lite, OLED &amp; <b>Switch 2</b> — random colors, \u{1F308} rainbow rarest, new Unbox tab \u{1F3AE} Consoles.</li>
+<li>Place one at home: mansion, family house or build-plot editor → <b>\u{1F3AE} My console + TV</b> (free — it uses a console YOU own). Walk up, press <b>T</b>, and pick a game: \u{1F344} Parkour Mario, \u{1F3CE} Turbo Kart Racers, ⚽ Football Stars &amp; more! In your apartment room, press T to game right from the couch.</li>
+<li>Consoles can be sold at your MARKETING PLOT too, and removing a placed console puts it back in your collection.</li></ul>
+<h4>\u{1F3EA} MARKET EXTRAS</h4><ul>
+<li><b>➕ Empty stands</b> (market editor): type how many store shelves, long tables and display cases you want — they get placed empty in a neat grid, ready to stock.</li>
+<li><b>\u{1F3A8} Building colors</b>: pick a PRIMARY (walls) and SECONDARY (roof + trim) color for your market hall.</li>
+<li>\u{1F9C8} Butter squishies now actually LOOK like butter — a golden stick with a pale top — in your hands and on market tables.</li>
+<li>The little version badge at the bottom of the screen was stuck on v63 forever — it now always shows the real version.</li>
 <li>The ☁️ SKY RESTAURANT menu <b>stays open</b> while you shop now — no more closing and reopening after every bite.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>

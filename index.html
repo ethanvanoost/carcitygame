@@ -7,7 +7,7 @@
 <title>Car City Game</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="favicon.svg">
-<link rel="stylesheet" href="style.css?v=100">
+<link rel="stylesheet" href="style.css?v=101">
 <style>
 /* critical touch-UI styles inlined so the buttons ALWAYS show,
    even if a host (InfinityFree) serves an old cached style.css */
@@ -280,6 +280,7 @@
       <button id="dumpTabD" class="on">&#129375; Dumplings</button>
       <button id="dumpTabB">&#129480; Butter</button>
       <button id="dumpTabP">&#128241; Phones</button>
+      <button id="dumpTabC">&#127918; Consoles</button>
     </div>
     <div id="dumpInfo" style="margin-top:8px"></div>
     <button class="btn warn" id="dumpOpen" style="margin-top:10px;width:100%">&#129375; Open a dumpling!</button>
@@ -393,6 +394,7 @@
     <h2 style="color:#3fa2ff">CoolBlue <span style="color:#ff6a00">&#128241; phones</span></h2>
     <div style="font-size:13px;color:var(--dim)">Every box is a FREE SURPRISE phone &mdash; iPhone, Google Pixel or Samsung Galaxy, in a random color. &#127752; Rainbow is the rarest!</div>
     <button class="btn warn" id="cbBuy" style="width:100%;margin-top:12px">&#128241; Grab a phone box &mdash; FREE!</button>
+    <button class="btn warn" id="cbBuy2" style="width:100%;margin-top:8px">&#127918; Grab a CONSOLE box &mdash; FREE! (PlayStation, Xbox or Switch)</button>
     <div id="cbMsg" style="margin-top:8px;font-size:13px;color:var(--acc2)"></div>
     <button class="btn close" id="cbClose">Done shopping</button>
   </div>
@@ -408,6 +410,21 @@
     <div id="phScreen" style="min-height:330px;margin-top:8px;background:#101826;border-radius:16px;padding:10px;color:#e8edf7;font-size:14px"></div>
     <button class="btn" id="phHome" style="width:100%;margin-top:10px">&#9675; Home</button>
     <button class="btn close" id="phClose">Put the phone away</button>
+  </div>
+</div>
+
+<div class="modal" id="genEmptyModal">
+  <div class="box">
+    <h2>&#10133; Empty stands</h2>
+    <div style="font-size:13px;color:var(--dim)">They get placed EMPTY on your floor &mdash; walk up and press T to stock each one!</div>
+    <div style="margin-top:10px;font-size:14px;color:var(--dim)">&#128722; Store shelves (15 spots each)</div>
+    <input id="geS" type="number" min="0" value="2" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px;margin-top:6px">
+    <div style="margin-top:10px;font-size:14px;color:var(--dim)">&#129681; Long tables (5 spots each)</div>
+    <input id="geT" type="number" min="0" value="4" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px;margin-top:6px">
+    <div style="margin-top:10px;font-size:14px;color:var(--dim)">&#128452; Display cases (1 spot each)</div>
+    <input id="geC" type="number" min="0" value="1" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:15px;margin-top:6px">
+    <button class="btn warn" id="geOk" style="width:100%;margin-top:14px">&#9989; Place them!</button>
+    <button class="btn close" id="geCancel">Cancel</button>
   </div>
 </div>
 
@@ -464,6 +481,7 @@
     <button class="btn" id="meditRotate">&#128260; Rotate</button>
     <button class="btn" id="meditRemove">&#128465; Remove</button>
     <button class="btn" id="meditGen" style="display:none">&#10024; Generate shop</button>
+    <button class="btn" id="meditGenEmpty" style="display:none">&#10133; Empty stands</button>
     <button class="btn" id="meditSaves" style="display:none">&#128190; Save/Load</button>
     <button class="btn" id="meditShop">&#128722; Dumpling shop</button>
     <button class="btn" id="meditOrder">&#127828; Order food</button>
@@ -571,9 +589,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=100"></script>
-<script src="js/world.js?v=100"></script>
-<script src="js/vehicles.js?v=100"></script>
-<script src="js/game.js?v=100"></script>
+<script src="js/core.js?v=101"></script>
+<script src="js/world.js?v=101"></script>
+<script src="js/vehicles.js?v=101"></script>
+<script src="js/game.js?v=101"></script>
 </body>
 </html>
