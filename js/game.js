@@ -778,11 +778,8 @@ function openCoolBlue(){
   $("cbModal").classList.add("open");
 }
 $("cbBuy").onclick=()=>{
-  const price=600+Math.floor(Math.random()*901);   // every box costs $600 - $1,500
-  if(MONEY.v<price){toast("\u{1F4B0} This box costs $"+fmtMoney(price)+" — you only have $"+fmtMoney(MONEY.v)+"!");return;}
-  MONEY.v-=price;updateMoneyUI();
-  PHONE.unopened++;saveGame();
-  $("cbMsg").textContent="\u{1F4E6} Phone box bought for $"+fmtMoney(price)+"! You have "+PHONE.unopened+" to unbox (\u{1F381} Unbox menu). Buy another?";
+  PHONE.unopened++;saveGame();   // phone boxes are FREE!
+  $("cbMsg").textContent="\u{1F4E6} FREE phone box grabbed! You have "+PHONE.unopened+" to unbox (\u{1F381} Unbox menu). Take another?";
 };
 $("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
@@ -2892,9 +2889,17 @@ function profileSave(force){
   }catch(e){}
 }
 /* ---------- dumpling & butter buyers: sell your squishies for money ---------- */
-const SELL={sel:new Set(),kind:"dump"};   // kind: "dump" (dumpling buyer) or "butter" (butter buyer)
-function sellColl(){return SELL.kind==="butter"?BUTTER.owned:DUMP.owned;}
-function sellVal(d){return SELL.kind==="butter"?butterValue(d):dumpValue(d);}
+const SELL={sel:new Set(),kind:"dump"};   // kind: "dump", "butter" or "phone"
+function sellColl(){return SELL.kind==="butter"?BUTTER.owned:SELL.kind==="phone"?PHONE.owned:DUMP.owned;}
+function sellVal(d){return SELL.kind==="butter"?butterValue(d):SELL.kind==="phone"?phoneValue(d):dumpValue(d);}
+function nearPhoneBuyer(){
+  for(let i=phoneBuyers.length-1;i>=0;i--){
+    const b=phoneBuyers[i];
+    if(offScene(b.g)){phoneBuyers.splice(i,1);continue;}
+    if(Math.hypot(player.x-b.x,player.z-b.z)<7)return b;
+  }
+  return null;
+}
 function nearBuyer(){
   for(let i=buyers.length-1;i>=0;i--){
     const b=buyers[i];
@@ -2916,8 +2921,10 @@ function nearButterBuyer(){
 const FILT={color:null,glit:"all",size:"all"};
 function passFilt(d){
   if(FILT.color&&d.color!==FILT.color)return false;
-  if(FILT.glit==="glitter"&&!d.glitter)return false;
-  if(FILT.glit==="normal"&&d.glitter)return false;
+  if(SELL.kind!=="phone"){   // phones have no glitter
+    if(FILT.glit==="glitter"&&!d.glitter)return false;
+    if(FILT.glit==="normal"&&d.glitter)return false;
+  }
   if(SELL.kind==="butter"&&FILT.size!=="all"&&(d.size||"norm")!==FILT.size)return false;
   return true;
 }
@@ -2930,6 +2937,7 @@ function selectShown(){SELL.sel=new Set(shownItems().map(o=>o.i));renderSell();}
 function renderSellChips(){
   const wrap=$("sellColors");wrap.innerHTML="";
   const opts=[["All colors",null,"#5b6b8c"],...DUMP_COLORS.map(c=>[c[0],c[0],c[1]]),["Rainbow","Rainbow",RAINBOW_CSS],["Gold","Gold","#ffd700"]];
+  if(SELL.kind==="phone")opts.push(["Black","Black","#1c1c1e"]);
   opts.forEach(([label,val,bg])=>{
     const b=document.createElement("button");
     b.innerHTML="<span class='swatch' style='background:"+bg+"'></span>"+label;
@@ -2940,8 +2948,9 @@ function renderSellChips(){
 }
 function segOn(ids,onId){ids.forEach(id=>$(id).classList.toggle("on",id===onId));}
 function renderSell(){
-  const coll=sellColl(),butter=SELL.kind==="butter";
+  const coll=sellColl(),butter=SELL.kind==="butter",phone=SELL.kind==="phone";
   $("sellSizeRow").style.display=butter?"":"none";
+  $("sellGlitRow").style.display=phone?"none":"";
   segOn(["fGlitAll","fGlit","fNorm"],FILT.glit==="glitter"?"fGlit":FILT.glit==="normal"?"fNorm":"fGlitAll");
   segOn(["fSzAll","fSzNorm","fSzMed","fSzMega"],FILT.size==="norm"?"fSzNorm":FILT.size==="med"?"fSzMed":FILT.size==="mega"?"fSzMega":"fSzAll");
   renderSellChips();
@@ -2950,7 +2959,8 @@ function renderSell(){
   if(!coll.length){
     const d=document.createElement("div");
     d.style.cssText="color:var(--dim);font-size:13px";
-    d.textContent="You have no "+(butter?"butter squishies":"dumplings")+" — buy them at a MEGA MART and open them first!";
+    d.textContent=phone?"You have no phones — get boxes at a \u{1F4F1} CoolBlue and unbox them first!"
+      :"You have no "+(butter?"butter squishies":"dumplings")+" — buy them at a MEGA MART and open them first!";
     list.appendChild(d);
   }else if(!shown.length){
     const d=document.createElement("div");
@@ -2961,9 +2971,11 @@ function renderSell(){
   chunkedList(list,shown,o=>{
     const d=o.d,i=o.i;
     const b=document.createElement("button");
-    b.className="dumpItem"+(d.glitter?" glitter":"")+(SELL.sel.has(i)?" sel":"");
+    b.className="dumpItem"+((d.glitter||d.color==="Rainbow")?" glitter":"")+(SELL.sel.has(i)?" sel":"");
     b.innerHTML=(SELL.sel.has(i)?"✅ ":"")+"<span class='swatch' style='background:"+d.hex+"'></span>"
-      +(d.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(d):"")+d.color+" — $"+fmtMoney(sellVal(d));
+      +(phone?(d.color==="Rainbow"?"\u{1F308} RAINBOW ":d.color+" ")+d.m
+        :(d.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(d):"")+d.color)
+      +" — $"+fmtMoney(sellVal(d));
     b.onclick=()=>{SELL.sel.has(i)?SELL.sel.delete(i):SELL.sel.add(i);renderSell();};
     return b;
   });
@@ -2972,9 +2984,9 @@ function renderSell(){
   $("sellDo").textContent="\u{1F4B5} Sell "+cnt+" selected — $"+fmtMoney(tot);
 }
 function openSell(kind){
-  SELL.kind=kind==="butter"?"butter":"dump";
-  $("sellTitle").textContent=SELL.kind==="butter"
-    ?"\u{1F9C8} Butter buyer — sell your butter squishies"
+  SELL.kind=kind==="butter"?"butter":kind==="phone"?"phone":"dump";
+  $("sellTitle").textContent=SELL.kind==="butter"?"\u{1F9C8} Butter buyer — sell your butter squishies"
+    :SELL.kind==="phone"?"\u{1F4F1} Phone buyer — sell your phones"
     :"\u{1F95F} Dumpling buyer — sell your dumplings";
   FILT.color=null;FILT.glit="all";FILT.size="all";
   SELL.sel.clear();renderSell();$("sellModal").classList.add("open");
@@ -6347,6 +6359,8 @@ function tryCall(){
     if(by){openSell();return;}
     const bby=nearButterBuyer();
     if(bby){openSell("butter");return;}
+    const pby=nearPhoneBuyer();
+    if(pby){openSell("phone");return;}
     /* CoolBlue: surprise phone boxes! */
     const cb2=nearCoolBlue();
     if(cb2){openCoolBlue();return;}
@@ -8049,6 +8063,8 @@ function drawMap(){
         if(s)dot(s.x,s.z,"#ff5d8f",4);
         const bs=butterSpot(i,j);
         if(bs)dot(bs.x,bs.z,"#f4d35e",4);
+        const ps=phoneBuyerSpot(i,j);
+        if(ps)dot(ps.x,ps.z,"#3fa2ff",4);
       }
     }
     /* gas stations (zoom in a bit) */
@@ -8486,6 +8502,10 @@ function mapEntries(q){
     ["\u{1F4F1} Nearest CoolBlue (phone store)",()=>{
       switchWorld("earth");
       goNearest("\u{1F4F1} Nearest CoolBlue",nearestSpot(cbSpot,CBSP,1488,2190,4),0,10);
+    }],
+    ["\u{1F4F1} Nearest PHONE buyer",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F4F1} Nearest phone buyer",nearestSpot(phoneBuyerSpot,DBSP,370,430,7),0,4);
     }],
     ["\u{1F3EA} Nearest MARKETING PLOT",()=>{
       switchWorld("earth");
@@ -8983,7 +9003,8 @@ function updateHint(){
           const by=nearBuyer();
           if(by){txt="\u{1F95F} Dumpling buyer — press T to sell your dumplings";showT=true;}
           else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
-          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T to buy surprise PHONE boxes ($600-$1,500)!";showT=true;}
+          else if(nearPhoneBuyer()){txt="\u{1F4F1} Phone buyer — press T to sell your phones";showT=true;}
+          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T to grab FREE surprise phone boxes!";showT=true;}
           else{
             const mk=nearMarketPlot();
             if(mk){
@@ -9901,28 +9922,32 @@ const SKY_DUMPS=[
 ];
 function skyCollectionCount(){return SKY_DUMPS.filter(s=>DUMP.owned.some(d=>d.color===s[0])).length;}
 function openSkyRest(){
-  showDest("☁️ SKY RESTAURANT — cloud collection: "+skyCollectionCount()+" / 6",[
-    {label:"☁️ Mystery CLOUD dumpling — $100 (6 DIFFERENT ones to collect!)",value:"cloud"},
-    {label:"\u{1F969} Mountain feast — $60 (+60 food)",value:"feast"},
-    {label:"\u{1F370} Cloud cake — $25 (+35 food)",value:"cake"},
-    {label:"❌ Done — enjoy the view!",value:"cancel"}
-  ],v=>{
-    if(v==="cancel")return;
-    const price=v==="feast"?60:v==="cake"?25:100;
-    if(MONEY.v<price){toast("\u{1F4B0} That costs $"+price+"!");openSkyRest();return;}
-    MONEY.v-=price;updateMoneyUI();
-    if(v==="cloud"){
-      const c=SKY_DUMPS[Math.floor(Math.random()*SKY_DUMPS.length)];
-      DUMP.owned.push({color:c[0],hex:c[1],glitter:Math.random()<0.08});
-      renderDump();saveGame();
-      toast("☁️\u{1F95F} A "+c[0].toUpperCase()+" dumpling! Collection: "+skyCollectionCount()+" / 6"+(skyCollectionCount()>=6?" — COMPLETE!! \u{1F389}":""));
-    }else{
-      MCD.pack.push(v==="feast"?["\u{1F969} Mountain feast",60]:["\u{1F370} Cloud cake",35]);
-      renderPack();saveGame();
-      toast("\u{1F37D} In your backpack — press R to enjoy it with this VIEW!");
-    }
-    openSkyRest();   // the menu stays open so you can keep shopping!
+  /* a real STAY-OPEN menu (no more closing & reopening after every buy) */
+  const title=()=>$("shopTitle").textContent="☁️ SKY RESTAURANT — cloud collection: "+skyCollectionCount()+" / 6";
+  title();
+  const list=$("shopList");list.innerHTML="";
+  const mk=(html,fn)=>{const b=document.createElement("button");b.innerHTML=html;b.onclick=fn;list.appendChild(b);};
+  mk("☁️ Mystery CLOUD dumpling <span style='color:var(--dim)'>$100 — 6 DIFFERENT ones to collect!</span>",()=>{
+    if(MONEY.v<100){toast("\u{1F4B0} That costs $100!");return;}
+    MONEY.v-=100;updateMoneyUI();
+    const c=SKY_DUMPS[Math.floor(Math.random()*SKY_DUMPS.length)];
+    DUMP.owned.push({color:c[0],hex:c[1],glitter:Math.random()<0.08});
+    renderDump();saveGame();title();
+    toast("☁️\u{1F95F} A "+c[0].toUpperCase()+" dumpling! Collection: "+skyCollectionCount()+" / 6"+(skyCollectionCount()>=6?" — COMPLETE!! \u{1F389}":""));
   });
+  mk("\u{1F969} Mountain feast <span style='color:var(--dim)'>$60 — +60 food</span>",()=>{
+    if(MONEY.v<60){toast("\u{1F4B0} That costs $60!");return;}
+    MONEY.v-=60;updateMoneyUI();
+    MCD.pack.push(["\u{1F969} Mountain feast",60]);renderPack();saveGame();
+    toast("\u{1F37D} In your backpack — press R to enjoy it with this VIEW!");
+  });
+  mk("\u{1F370} Cloud cake <span style='color:var(--dim)'>$25 — +35 food</span>",()=>{
+    if(MONEY.v<25){toast("\u{1F4B0} That costs $25!");return;}
+    MONEY.v-=25;updateMoneyUI();
+    MCD.pack.push(["\u{1F370} Cloud cake",35]);renderPack();saveGame();
+    toast("\u{1F37D} In your backpack — press R to enjoy it with this VIEW!");
+  });
+  $("shopModal").classList.add("open");
 }
 /* a REAL friend in your passenger seat doubles all job pay */
 function coopMult(){
@@ -11203,7 +11228,9 @@ const UPDATE_PAGES=[
 <li>The color chips always show how many of that exact combo you own, and impossible combos say so.</li></ul>`},
 {t:"Round 36 — \u{1F4F1} CoolBlue phone stores & the Unbox menu",h:`
 <h4>\u{1F4F1} COOLBLUE — every ~500 m</h4><ul>
-<li>A mid-blue store with orange trim every ~500 m (\u{1F4F1} on the map): walk in, press T, and buy <b>surprise phone boxes for $600 - $1,500</b> — the menu stays open so you can grab a whole stack.</li></ul>
+<li>A mid-blue store with orange trim every ~500 m (\u{1F4F1} on the map): walk in, press T, and grab <b>FREE surprise phone boxes</b> — the menu stays open so you can take a whole stack.</li>
+<li><b>\u{1F4F1} PHONE BUYERS</b> every ~500 m (little blue stands): press T to sell your phones — with the same color filters as the other buyers. New Pro Max / Ultra and \u{1F308} rainbow phones pay the most!</li>
+<li>The ☁️ SKY RESTAURANT menu <b>stays open</b> while you shop now — no more closing and reopening after every bite.</li></ul>
 <h4>\u{1F381} THE UNBOX MENU</h4><ul>
 <li>The Squishies button is now <b>\u{1F381} Unbox</b> with THREE tabs: \u{1F95F} Dumplings, \u{1F9C8} Butter and \u{1F4F1} Phones.</li>
 <li>Unbox one or ALL your phone boxes. You can pull the REAL line-ups: <b>iPhone 4-17</b> (Pro &amp; Pro Max from 11 up — and no iPhone 9, Apple really skipped it; number 10 is the iPhone X!), <b>Google Pixel 1-10</b> (Pro from 6, the smaller cheaper "a" models 3a-9a) and <b>Samsung Galaxy S1-S26</b> (S11-S19 never existed — Samsung jumped from S10 to S20!) plus 29 Galaxy A models, Plus &amp; Ultra included.</li>
