@@ -4331,7 +4331,7 @@ function mktApplyPick(p,kind,idx,ty,grp){
   if(it.o.length>=mktCap(it)){toast("That one is FULL ("+mktCap(it)+" spots) — take something off first!");return;}
   if(mktTotalOffers(d)>=40){toast("Your market is PACKED — 40 deals max across the whole plot!");return;}
   if(kind==="c"){
-    mktTakeStock(ty,grp,1);
+    if(mktTakeStock(ty,grp,1)<1){toast("You don't have that one anymore!");return;}
     it.o.push(mkOffer(ty,grp,1,0,0,0));
     saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
     toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
@@ -4480,8 +4480,9 @@ $("mktOk").onclick=()=>{
   bb=Math.min(99,bb);bf=Math.min(99,bf);
   it.o=it.o||[];
   if(it.o.length>=mktCap(it)||mktTotalOffers(d)>=40){toast("That one is FULL — take something off first!");$("mktModal").classList.remove("open");return;}
-  mktTakeStock(ty,grp,q);
-  it.o.push(mkOffer(ty,grp,q,pr,bb,bf));
+  const got=mktTakeStock(ty,grp,q);   // only what REALLY leaves your collection goes on sale
+  if(got<1){toast("You don't have those anymore!");$("mktModal").classList.remove("open");return;}
+  it.o.push(mkOffer(ty,grp,got,pr,bb,bf));
   $("mktModal").classList.remove("open");
   saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
   toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
@@ -4573,15 +4574,16 @@ function mktDoGenerate(p,cat,adj){
     toast("You own NOTHING in that category — go collect some first! (Your plot is empty now.)");
     return;
   }
-  /* the crown jewel goes in a display case at the entrance */
+  /* the crown jewel goes in a display case at the entrance — taken from YOUR collection */
   const jewel=groups[0];
-  mktTakeStock(jewel.ty,jewel,1);
-  d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
-  /* everything else goes on sale, most valuable first (max 39 deals) */
+  if(mktTakeStock(jewel.ty,jewel,1)>0)
+    d.items.push({k:"c",dx:0,dz:34,r:0,o:[mkOffer(jewel.ty,jewel,1,0,0,0)]});
+  /* everything else goes on sale, most valuable first (max 39 deals) —
+     ONLY what really leaves your collection lands on the tables, never more */
   const sell=groups.map((g2,i)=>({g2,count:g2.n-(i===0?1:0)})).filter(x=>x.count>0).slice(0,39);
   const grid=[];
   for(const gz of[16,0,-16,-32])for(const gx of[-32,-16,0,16,32])grid.push([gx,gz]);
-  let gi=0,slot=0;
+  let gi=0,slot=0,stocked=0;
   while(gi<sell.length&&d.items.length<16){
     const remaining=sell.length-gi;
     const k=remaining>7?"s":"t";                 // lots left → a big shelf, tail → tables
@@ -4591,10 +4593,10 @@ function mktDoGenerate(p,cat,adj){
     for(let c2=0;c2<cap&&gi<sell.length;c2++,gi++){
       const{g2,count}=sell[gi];
       const price=Math.max(1,worth(g2)+adj);
-      mktTakeStock(g2.ty,g2,count);
-      piece.o.push(mkOffer(g2.ty,g2,count,price,0,0));
+      const got=mktTakeStock(g2.ty,g2,count);   // whatever REALLY left your collection
+      if(got>0){piece.o.push(mkOffer(g2.ty,g2,got,price,0,0));stocked+=got;}
     }
-    d.items.push(piece);
+    if(piece.o.length)d.items.push(piece);
   }
   saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
   toast("✨\u{1F3EA} SHOP GENERATED: "+(d.items.length-1)+" stand"+(d.items.length-1===1?"":"s")+" + a display case with your rarest treasure, "
