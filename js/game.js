@@ -3887,6 +3887,7 @@ function nearMarketPlot(){
   return null;
 }
 function mktItemName(it){
+  if(it.ty==="phone")return (it.lab==="Rainbow"?"\u{1F308} RAINBOW ":it.lab+" ")+(it.pm||"phone");
   return (it.gl?"✨ GLITTER ":"")+(it.sz==="mega"?"\u{1F31F} MEGA ":it.sz==="med"?"\u{1F538} MEDIUM ":"")+it.lab
     +(it.ty==="dump"?" dumpling":it.ty==="butter"?" butter squishy":"");
 }
@@ -3896,6 +3897,11 @@ function addMktGood(sg,it,x,y,z,r){
   if(it.ty==="food"){
     const bx=new THREE.Mesh(new THREE.BoxGeometry(r*1.6,r*1.3,r*1.6),new THREE.MeshLambertMaterial({color:0xf4d35e}));
     bx.position.set(x,y+r*0.4,z);sg.add(bx);return;
+  }
+  if(it.ty==="phone"){
+    const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
+    const ph=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.44,0.04),mat);
+    ph.position.set(x,y+0.22,z);ph.rotation.x=-0.35;sg.add(ph);return;
   }
   const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#f2f5f7")});
   if(it.gl&&it.lab!=="Rainbow")mat.emissive=new THREE.Color(it.hex||"#ffffff").multiplyScalar(0.35);
@@ -4164,18 +4170,25 @@ function mktPickType(p,kind,idx){
   showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
     {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
+    {label:"\u{1F4F1} A phone ("+PHONE.owned.length+" owned)",value:"phone"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"❌ Cancel",value:"x"}
   ],ty=>{
     if(ty==="x")return;
-    if(ty==="food")mktPickItem(p,kind,ty,idx);   // food: a simple list
-    else openMktPicker(p,kind,ty,idx);           // squishies: the BOX PICKER!
+    if(ty==="food"||ty==="phone")mktPickItem(p,kind,ty,idx);   // simple list
+    else openMktPicker(p,kind,ty,idx);                          // squishies: the BOX PICKER!
   });
 }
 function mktGroups(ty){
   const map=new Map();
   if(ty==="food"){
     MCD.pack.forEach(f=>{const k=f[0];const e=map.get(k)||{n:0,lab:f[0],fh:f[1],ty};e.n++;map.set(k,e);});
+  }else if(ty==="phone"){
+    PHONE.owned.forEach(ph=>{
+      const k=ph.m+"|"+ph.color;
+      const e=map.get(k)||{n:0,lab:ph.color,hex:ph.hex,pm:ph.m,br:ph.br,tier:ph.tier,yr:ph.yr,ty};
+      e.n++;map.set(k,e);
+    });
   }else{
     const coll=ty==="dump"?DUMP.owned:BUTTER.owned;
     coll.forEach(d2=>{
@@ -4191,6 +4204,18 @@ function mktTakeStock(ty,grp,n){
     let left=n;
     for(let i=MCD.pack.length-1;i>=0&&left>0;i--)if(MCD.pack[i][0]===grp.lab){MCD.pack.splice(i,1);left--;}
     renderPack();
+    return n-left;
+  }
+  if(ty==="phone"){
+    let left=n;
+    for(let i=PHONE.owned.length-1;i>=0&&left>0;i--){
+      const ph=PHONE.owned[i];
+      if(ph.m===grp.pm&&ph.color===grp.lab){
+        if(HOLD.d===ph)HOLD.d=null;
+        PHONE.owned.splice(i,1);left--;
+      }
+    }
+    renderDump();
     return n-left;
   }
   const coll=ty==="dump"?DUMP.owned:BUTTER.owned;
@@ -4209,6 +4234,7 @@ function mktGiveGoods(it,n){
   for(let i=0;i<n;i++){
     if(it.ty==="dump")DUMP.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl});
     else if(it.ty==="butter")BUTTER.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl,size:it.sz||"norm"});
+    else if(it.ty==="phone")PHONE.owned.push({m:it.pm||"iPhone 4",br:it.br||"Apple",tier:it.tier||1,yr:it.yr||2010,color:it.lab,hex:it.hex||"#1c1c1e"});
     else MCD.pack.push([it.lab,it.fh||10]);
   }
   renderDump();renderPack();saveGame();
@@ -4219,7 +4245,8 @@ function mktApplyPick(p,kind,idx,ty,grp){
   if(!it)return;
   if(kind==="c"){
     mktTakeStock(ty,grp,1);
-    Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q:1,p:0,bb:0,bf:0});
+    Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
+      pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q:1,p:0,bb:0,bf:0});
     saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
     toast("\u{1F5C4} On display — everyone can admire it (but nobody can touch)!");
     return;
@@ -4323,7 +4350,8 @@ $("mktOk").onclick=()=>{
   if((bb&&!bf)||(!bb&&bf)){toast("\u{1F381} Bonus: fill BOTH boxes (like 1 + 1) — or leave both empty.");return;}
   bb=Math.min(99,bb);bf=Math.min(99,bf);
   mktTakeStock(ty,grp,q);
-  Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,q,p:pr,bb,bf});
+  Object.assign(it,{ty,lab:grp.lab,hex:grp.hex||"",gl:grp.gl||0,sz:grp.sz||"",fh:grp.fh||0,
+    pm:grp.pm||"",br:grp.br||"",tier:grp.tier||0,yr:grp.yr||0,q,p:pr,bb,bf});
   $("mktModal").classList.remove("open");
   saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
   toast("\u{1FA91} ON SALE: "+q+"× "+(ty==="food"?grp.lab:mktItemName(grp))+" at $"+fmtMoney(pr)+" each"+(bb?" — "+bb+"+"+bf+" FREE deal!":"")+"!");
