@@ -4785,6 +4785,7 @@ function craftEffect(d){
   const t=((d.name||"")+" "+(d.does||"")).toLowerCase();
   if(/fuel|petrol|gasoline|benzine|\bgas\b/.test(t))return{k:"fuel"};
   if(/repair|\bfix\b|damage|mechanic/.test(t))return{k:"repair"};
+  if(/teleport|warp|portal|\bspawn\b|beam/.test(t))return{k:"tp"};
   if(/food|eat|hunger|backpack|snack|meal|sushi|pizza|burger|candy|cake|cookie|drink|soup|fruit|yum/.test(t)){
     const m=t.match(/\+?\s*(\d+)\s*(?:food|hunger)/)||t.match(/(?:food|hunger)\s*\+?\s*(\d+)/)||t.match(/\+\s*(\d+)/);
     const n=Math.max(1,Math.min(100,m?parseInt(m[1],10):25));
@@ -4796,14 +4797,19 @@ function craftEffectLabel(fx){
   if(!fx)return null;
   if(fx.k==="food")return "⚡ It WORKS: eat it for +"+fx.n+" food!";
   if(fx.k==="fuel")return "⚡ It WORKS: use it to FILL your fuel tank!";
+  if(fx.k==="tp")return "⚡ It WORKS: use it to TELEPORT to spawn!";
   return "⚡ It WORKS: use it to REPAIR your car!";
+}
+function craftApply(d,fx){
+  if(fx.k==="food"){HUNGER.v=Math.min(100,HUNGER.v+fx.n);HUNGER.starveT=0;toast("\u{1F60B} You used a "+d.name+" — +"+fx.n+" food!");}
+  else if(fx.k==="fuel"){FUEL.km=FUEL.cap;FUEL.warned=false;toast("⛽ Your "+d.name+" filled the tank to "+FUEL.cap+" km!");}
+  else if(fx.k==="tp"){goSpawn();toast("\u{1F300} Your "+d.name+" teleported you to spawn!");}
+  else{if(typeof DMG!=="undefined")DMG.v=0;toast("\u{1F527} Your "+d.name+" repaired the car — good as new!");}
 }
 function craftUse(d,fx){
   if(!d.stock){toast("You have 0 "+d.name+" — create one first ($"+fmtMoney(CRAFT_COST)+")!");return;}
   d.stock--;
-  if(fx.k==="food"){HUNGER.v=Math.min(100,HUNGER.v+fx.n);HUNGER.starveT=0;toast("\u{1F60B} You used a "+d.name+" — +"+fx.n+" food!");}
-  else if(fx.k==="fuel"){FUEL.km=FUEL.cap;FUEL.warned=false;toast("⛽ Your "+d.name+" filled the tank to "+FUEL.cap+" km!");}
-  else{if(typeof DMG!=="undefined")DMG.v=0;toast("\u{1F527} Your "+d.name+" repaired the car — good as new!");}
+  craftApply(d,fx);
   saveGame();openCraftDesign(d);
 }
 function craftToPack(d,fx){
@@ -4826,9 +4832,25 @@ function craftMake(d){
   const cost=n*CRAFT_COST;
   if(MONEY.v<cost){toast("Creating "+n+"× costs $"+fmtMoney(cost)+" — you only have $"+fmtMoney(Math.max(0,MONEY.v))+"!");return;}
   addMoney(-cost);
-  d.stock=(d.stock||0)+n;d.made=(d.made||0)+n;
-  saveGame();
-  toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — you now have "+d.stock+" to sell at your market!");
+  d.made=(d.made||0)+n;
+  const fx=craftEffect(d);
+  if(fx&&fx.k==="food"){
+    /* food items INSTANTLY do their thing: straight into your backpack! */
+    for(let i=0;i<n;i++)MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);
+    renderPack();saveGame();
+    toast("\u{1F392} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — straight into your BACKPACK (+"+fx.n+" food each)! Eat with the \u{1F392} Food menu or R.");
+  }else if(fx){
+    /* other powers do their thing INSTANTLY too: one activates right now,
+       the rest wait as stock (▶️ USE one whenever you like) */
+    d.stock=(d.stock||0)+n-1;
+    saveGame();
+    toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — one worked right away, "+d.stock+" saved for later!");
+    craftApply(d,fx);
+  }else{
+    d.stock=(d.stock||0)+n;
+    saveGame();
+    toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — you now have "+d.stock+" to sell at your market! (Tip: food / fuel / repair / teleport words give items real POWERS.)");
+  }
   openCraftDesign(d);
 }
 function openCraftDesign(d){
@@ -4981,7 +5003,9 @@ function mktGiveGoods(it,n){
       /* created items: the buyer gets the DESIGN too, so they can craft more */
       let d=craftFind(it.lab);
       if(!d){d={name:it.lab,does:it.does||"nobody knows...",look:it.look||"a mystery",hex:it.hex||craftColorFor(it.lab),stock:0,made:0};CRAFT.designs.push(d);}
-      d.stock=(d.stock||0)+1;
+      const fx=craftEffect(d);
+      if(fx&&fx.k==="food")MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);   // food does its thing instantly
+      else d.stock=(d.stock||0)+1;
     }
     else MCD.pack.push([it.lab,it.fh||10]);
   }
