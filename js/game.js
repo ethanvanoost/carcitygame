@@ -4910,13 +4910,51 @@ function craftNew(){
 function openCraftMenu(){
   const opts=CRAFT.designs.map(d=>({label:"\u{1F9F0} "+d.name+" — you have "+(d.stock||0),value:d}));
   opts.push({label:"➕ NEW item design (copies: $"+fmtMoney(CRAFT_COST)+" each)",value:"new"});
+  if(craftDoList().length)opts.push({label:"▶️ DO — use an item's power right now",value:"do"});
   opts.push({label:"❌ Close",value:"x"});
   showDest("\u{1F9F0} CREATE ITEM — your inventions ("+craftStockTotal()+" ready to sell)",opts,v=>{
     if(v==="new")craftNew();
+    else if(v==="do")openDoMenu();
     else if(v&&v!=="x")openCraftDesign(v);
   });
 }
 $("bCreate").onclick=()=>openCraftMenu();
+/* ▶️ DO: one button that makes your items do their thing — eat your created
+   food from the backpack, fill the tank, repair the car, teleport... */
+function craftDoList(){
+  const opts=[];
+  CRAFT.designs.forEach(d=>{
+    const fx=craftEffect(d);
+    if(!fx)return;
+    if(fx.k==="food"){
+      const packN=MCD.pack.filter(p=>p[0]==="\u{1F9F0} "+d.name).length;
+      if(packN>0)opts.push({label:"\u{1F60B} "+d.name+" — eat one (+"+fx.n+" food, "+packN+" in your backpack)",value:{d,fx,food:true}});
+    }else if(d.stock>0){
+      opts.push({label:"▶️ "+d.name+" — "+craftEffectLabel(fx).replace("⚡ It WORKS: ","")+" ("+d.stock+" left)",value:{d,fx}});
+    }
+  });
+  return opts;
+}
+function openDoMenu(){
+  const opts=craftDoList();
+  if(!opts.length){
+    toast("Nothing to DO yet — create an item with a POWER first (food / fuel / repair / teleport words)!");
+    openCraftMenu();
+    return;
+  }
+  opts.push({label:"❌ Close",value:"x"});
+  showDest("▶️ DO — which item does its thing?",opts,v=>{
+    if(!v||v==="x")return;
+    if(v.food){
+      const i=MCD.pack.findIndex(p2=>p2[0]==="\u{1F9F0} "+v.d.name);
+      if(i<0)return;
+      MCD.pack.splice(i,1);renderPack();
+    }else v.d.stock--;
+    craftApply(v.d,v.fx);
+    saveGame();
+  });
+}
+$("bDo").onclick=()=>openDoMenu();
 function mktPickType(p,kind,idx){
   showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
