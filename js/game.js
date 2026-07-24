@@ -254,11 +254,17 @@ $("musTgl").onclick=()=>{
   $("musTgl").innerHTML="\u{1F3B5} Music "+(SND.music?"ON":"OFF");
   setMusicOn(SND.music);
 };
-/* if the browser blocked audio before the first tap, the next tap heals everything */
-addEventListener("pointerdown",()=>{
+/* DEFAULT game sound (engine, horn, birds…) lives in the WebAudio engine, which
+   browsers only let us start on a user gesture. The radio UI used to be the only
+   thing that started it — now the first tap OR key press while playing wakes it,
+   and also heals music/audio the browser blocked at load. */
+function wakeAudio(){
+  if(S.mode==="game")ensureAudio();
   try{if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();}catch(e){}
   if(SND.music&&musicAudio&&musicAudio.paused&&!musicAudio.error&&radioStation().files.length)musicAudio.play().catch(()=>{});
-},{capture:true});
+}
+addEventListener("pointerdown",wakeAudio,{capture:true});
+addEventListener("keydown",wakeAudio,{capture:true});
 /* spawn / start */
 function goSpawn(){
   endRide(true);

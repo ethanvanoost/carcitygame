@@ -1,5 +1,5 @@
 /* ================= DATA ================= */
-const GAME_V=104;   // the game version — shown in the menu & used by the auto-updater
+const GAME_V=105;   // the game version — shown in the menu & used by the auto-updater
 const $=id=>document.getElementById(id);
 {const vt=document.querySelector("#menu .tag");if(vt)vt.textContent+=" · v"+GAME_V;}
 function rng(seed){let a=seed;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
