@@ -618,7 +618,10 @@ function ribbon(axis,c,a0,a1,w,yOff,mat,uvLen,centerFn){
     const u=pos.getX(i),v=pos.getZ(i),t=mid+v;
     const cc=centerFn?centerFn(t):c;
     let wx,wz;
-    if(axis==="z"){wx=cc+u;wz=t;}else{wx=t;wz=cc+u;}
+    /* the x-axis mapping must be a ROTATION (u mirrored), not a reflection —
+       a reflection flips the triangle winding so the whole road faces DOWN
+       and becomes invisible from above (east–west roads were never visible!) */
+    if(axis==="z"){wx=cc+u;wz=t;}else{wx=t;wz=cc-u;}
     pos.setXYZ(i,wx,terrainH(wx,wz)+yOff,wz);
   }
   if(uvLen){const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setY(i,uv.getY(i)*len/uvLen);}

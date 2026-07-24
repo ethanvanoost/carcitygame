@@ -254,6 +254,11 @@ $("musTgl").onclick=()=>{
   $("musTgl").innerHTML="\u{1F3B5} Music "+(SND.music?"ON":"OFF");
   setMusicOn(SND.music);
 };
+/* if the browser blocked audio before the first tap, the next tap heals everything */
+addEventListener("pointerdown",()=>{
+  try{if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume();}catch(e){}
+  if(SND.music&&musicAudio&&musicAudio.paused&&!musicAudio.error&&radioStation().files.length)musicAudio.play().catch(()=>{});
+},{capture:true});
 /* spawn / start */
 function goSpawn(){
   endRide(true);
@@ -2584,6 +2589,11 @@ function ensureTvVideo(){
     playTvVideo();
     toast("\u{1F4FA} Next up: "+tvVideoName(TV.idx));
   });
+  v.addEventListener("error",()=>{   // a video that won't load skips to the next
+    if(TV.channel!=="3mm")return;
+    TV.idx=(TV.idx+1)%TV3MM.length;
+    setTimeout(playTvVideo,3000);
+  });
   TV.videoEl=v;
   TV.videoTex=new THREE.VideoTexture(v);
   KEEP.add(TV.videoTex);
@@ -2856,6 +2866,8 @@ function updateTv(dt){
       d=Math.min(d,Math.hypot(player.x-t.x,player.z-t.z));
     }
     TV.videoEl.volume=SND.sound?Math.max(0,Math.min(0.75,1.1-d/26)):0;
+    /* the browser blocked autoplay earlier? keep trying — the next tap unblocks it */
+    if(TV.videoEl.paused&&!TV.videoEl.error)TV.videoEl.play().catch(()=>{});
     return;
   }
   if(TV.channel==="off")return;
@@ -5955,8 +5967,10 @@ function openPiano(p){
   reallyOpenPiano(p);
 }
 $("pianoClose").onclick=()=>{PIANO.open=false;$("pianoModal").classList.remove("open");};
-/* ---------- upload a .MID file and the piano PLAYS it, live ---------- */
-function parseMidi(buf){
+/* ---------- upload a .MID file and the piano PLAYS it, live ----------
+   NOTE: named parsePianoMidi — a second "parseMidi" here used to shadow the
+   church organ's parser (function hoisting), which silenced the organ forever. */
+function parsePianoMidi(buf){
   const d=new DataView(buf);
   let p=0;
   function str(n){let s="";for(let i=0;i<n;i++)s+=String.fromCharCode(d.getUint8(p++));return s;}
@@ -6014,7 +6028,7 @@ $("midiFile").addEventListener("change",e=>{
   const rd=new FileReader();
   rd.onload=()=>{
     try{
-      const ev=parseMidi(rd.result);
+      const ev=parsePianoMidi(rd.result);
       if(!ev.length)throw new Error("empty");
       MIDIPLAY.events=ev;MIDIPLAY.idx=0;MIDIPLAY.start=performance.now();MIDIPLAY.on=true;
       $("midiStop").style.display="";
