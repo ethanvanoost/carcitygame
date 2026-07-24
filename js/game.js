@@ -4778,6 +4778,46 @@ function craftColorFor(txt){
 }
 function craftFind(name){return CRAFT.designs.find(d=>d.name===name);}
 function craftStockTotal(){return CRAFT.designs.reduce((s,d)=>s+(d.stock||0),0);}
+/* your typed description really WORKS: the game reads it and gives the item a power.
+   "sushi that gives +80 food" → eat it for +80 hunger (or put it in your backpack).
+   fuel words → refills your tank · repair words → fixes your car's damage */
+function craftEffect(d){
+  const t=((d.name||"")+" "+(d.does||"")).toLowerCase();
+  if(/fuel|petrol|gasoline|benzine|\bgas\b/.test(t))return{k:"fuel"};
+  if(/repair|\bfix\b|damage|mechanic/.test(t))return{k:"repair"};
+  if(/food|eat|hunger|backpack|snack|meal|sushi|pizza|burger|candy|cake|cookie|drink|soup|fruit|yum/.test(t)){
+    const m=t.match(/\+?\s*(\d+)\s*(?:food|hunger)/)||t.match(/(?:food|hunger)\s*\+?\s*(\d+)/)||t.match(/\+\s*(\d+)/);
+    const n=Math.max(1,Math.min(100,m?parseInt(m[1],10):25));
+    return{k:"food",n};
+  }
+  return null;
+}
+function craftEffectLabel(fx){
+  if(!fx)return null;
+  if(fx.k==="food")return "⚡ It WORKS: eat it for +"+fx.n+" food!";
+  if(fx.k==="fuel")return "⚡ It WORKS: use it to FILL your fuel tank!";
+  return "⚡ It WORKS: use it to REPAIR your car!";
+}
+function craftUse(d,fx){
+  if(!d.stock){toast("You have 0 "+d.name+" — create one first ($"+fmtMoney(CRAFT_COST)+")!");return;}
+  d.stock--;
+  if(fx.k==="food"){HUNGER.v=Math.min(100,HUNGER.v+fx.n);HUNGER.starveT=0;toast("\u{1F60B} You used a "+d.name+" — +"+fx.n+" food!");}
+  else if(fx.k==="fuel"){FUEL.km=FUEL.cap;FUEL.warned=false;toast("⛽ Your "+d.name+" filled the tank to "+FUEL.cap+" km!");}
+  else{if(typeof DMG!=="undefined")DMG.v=0;toast("\u{1F527} Your "+d.name+" repaired the car — good as new!");}
+  saveGame();openCraftDesign(d);
+}
+function craftToPack(d,fx){
+  const qs=prompt("How many "+d.name+" go into your backpack? (you have "+d.stock+")",String(Math.min(5,d.stock)));
+  if(qs===null)return;
+  let n=Math.floor(parseInt(qs,10));
+  if(!(n>=1)){toast("Type a normal number, like 5!");return;}
+  n=Math.min(n,d.stock);
+  d.stock-=n;
+  for(let i=0;i<n;i++)MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);
+  renderPack();saveGame();
+  toast("\u{1F392} "+n+"× "+d.name+" packed — eat them with the \u{1F392} Food menu (or R while driving)!");
+  openCraftDesign(d);
+}
 function craftMake(d){
   const qs=prompt("How many "+d.name+" do you want to CREATE at $"+fmtMoney(CRAFT_COST)+" each?\n(so 20 items = $"+fmtMoney(CRAFT_COST*20)+")","1");
   if(qs===null)return;
@@ -4792,15 +4832,27 @@ function craftMake(d){
   openCraftDesign(d);
 }
 function openCraftDesign(d){
-  showDest("\u{1F9F0} "+d.name+" — you have "+(d.stock||0)+" (created "+(d.made||0)+" ever)",[
+  const fx=craftEffect(d);
+  const opts=[
     {label:"ℹ️ It does: "+(d.does||"nobody knows...").slice(0,60),value:"i"},
-    {label:"\u{1F440} It looks: "+(d.look||"a mystery").slice(0,60),value:"i"},
+    {label:"\u{1F440} It looks: "+(d.look||"a mystery").slice(0,60),value:"i"}
+  ];
+  if(fx)opts.push({label:craftEffectLabel(fx),value:"i"});
+  if(fx)opts.push({label:"▶️ USE one now ("+(d.stock||0)+" left)",value:"use"});
+  if(fx&&fx.k==="food")opts.push({label:"\u{1F392} Put some in your BACKPACK (+"+fx.n+" food each)",value:"pack"});
+  opts.push(
     {label:"➕ CREATE more — $"+fmtMoney(CRAFT_COST)+" each",value:"make"},
     {label:"✏️ Change what it does / how it looks",value:"edit"},
     {label:"\u{1F5D1} Forget this design",value:"del"},
     {label:"⬅ Back to the list",value:"back"}
-  ],v=>{
-    if(v==="make")craftMake(d);
+  );
+  showDest("\u{1F9F0} "+d.name+" — you have "+(d.stock||0)+" (created "+(d.made||0)+" ever)",opts,v=>{
+    if(v==="use"&&fx)craftUse(d,fx);
+    else if(v==="pack"&&fx&&fx.k==="food"){
+      if(!d.stock){toast("You have 0 "+d.name+" — create some first!");return;}
+      craftToPack(d,fx);
+    }
+    else if(v==="make")craftMake(d);
     else if(v==="edit"){
       const does=prompt("What does the "+d.name+" DO?",d.does||"");
       if(does!==null&&does.trim())d.does=does.trim().slice(0,90);
@@ -4829,7 +4881,8 @@ function craftNew(){
   const d={name:nm,does:does||"nobody knows...",look:look||"a mystery",hex:craftColorFor(look+" "+nm),stock:0,made:0};
   CRAFT.designs.push(d);
   saveGame();
-  toast("\u{1F9F0} "+nm+" designed! Now create copies — $"+fmtMoney(CRAFT_COST)+" each.");
+  const fx=craftEffect(d);
+  toast("\u{1F9F0} "+nm+" designed!"+(fx?" "+craftEffectLabel(fx):"")+" Now create copies — $"+fmtMoney(CRAFT_COST)+" each.");
   craftMake(d);
 }
 function openCraftMenu(){
