@@ -4331,6 +4331,8 @@ function mkOffer(ty,grp,q,pr,bb,bf){
   if(grp.br)o.br=grp.br;
   if(grp.tier)o.tier=grp.tier;
   if(grp.yr)o.yr=grp.yr;
+  if(grp.does)o.does=String(grp.does).slice(0,60);
+  if(grp.look)o.look=String(grp.look).slice(0,60);
   if(bb&&bf){o.bb=bb;o.bf=bf;}
   return o;
 }
@@ -4345,6 +4347,7 @@ function nearMarketPlot(){
   return null;
 }
 function mktItemName(it){
+  if(it.ty==="custom")return "\u{1F9F0} "+it.lab+(it.does?" ("+it.does+")":"");
   if(it.ty==="phone"||it.ty==="console")return (it.lab==="Rainbow"?"\u{1F308} RAINBOW ":it.lab+" ")+(it.pm||(it.ty==="phone"?"phone":"console"));
   return (it.gl?"✨ GLITTER ":"")+(it.sz==="mega"?"\u{1F31F} MEGA ":it.sz==="med"?"\u{1F538} MEDIUM ":"")+it.lab
     +(it.ty==="dump"?" dumpling":it.ty==="butter"?" butter squishy":"");
@@ -4360,6 +4363,16 @@ function addMktGood(sg,it,x,y,z,r){
     const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
     const ph=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.44,0.04),mat);
     ph.position.set(x,y+0.22,z);ph.rotation.x=-0.35;sg.add(ph);return;
+  }
+  if(it.ty==="custom"){
+    /* a created item: a glowing gift-ish box in the inventor's chosen color */
+    const mat=new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#9b5de5")});
+    mat.emissive=new THREE.Color(it.hex||"#9b5de5").multiplyScalar(0.25);
+    const bx=new THREE.Mesh(new THREE.BoxGeometry(r*1.3,r*1.3,r*1.3),mat);
+    bx.position.set(x,y+r*0.65,z);bx.rotation.y=0.6;sg.add(bx);
+    const lid=new THREE.Mesh(new THREE.BoxGeometry(r*1.45,r*0.22,r*1.45),new THREE.MeshLambertMaterial({color:0xffffff}));
+    lid.position.set(x,y+r*1.3,z);lid.rotation.y=0.6;sg.add(lid);
+    return;
   }
   if(it.ty==="console"){
     const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
@@ -4748,6 +4761,87 @@ function openMyTable(p,i){
     toast("\u{1F5D1} Taken off"+(o&&o.q>0?" — ×"+o.q+" came back to your collection!":"!"));
   });
 }
+/* ---------- \u{1F9F0} CREATE ITEM: invent your OWN items — $1,000 per copy ----------
+   A design is saved forever (name + what it does + how it looks). Copies cost
+   $1,000 each, go on sale at your market plot, and when they're sold out you
+   simply create more from the same design. */
+const CRAFT={designs:[]};   // {name,does,look,hex,stock,made}
+const CRAFT_COST=1000;
+function craftColorFor(txt){
+  const words={red:"#d7263d",blue:"#1b98e0",green:"#8ac926",yellow:"#f4d35e",pink:"#ff5d8f",
+    purple:"#9b5de5",orange:"#ff7f11",white:"#f2f5f7",black:"#22262b",gold:"#ffd75e",
+    silver:"#c8ccd4",brown:"#8a6f4d",rainbow:"#ff5d8f"};
+  const low=(txt||"").toLowerCase();
+  for(const w in words)if(low.includes(w))return words[w];
+  let h=0;for(let i=0;i<low.length;i++)h=(h*31+low.charCodeAt(i))>>>0;
+  return "hsl("+(h%360)+",70%,55%)";
+}
+function craftFind(name){return CRAFT.designs.find(d=>d.name===name);}
+function craftStockTotal(){return CRAFT.designs.reduce((s,d)=>s+(d.stock||0),0);}
+function craftMake(d){
+  const qs=prompt("How many "+d.name+" do you want to CREATE at $"+fmtMoney(CRAFT_COST)+" each?\n(so 20 items = $"+fmtMoney(CRAFT_COST*20)+")","1");
+  if(qs===null)return;
+  const n=Math.floor(parseInt(qs,10));
+  if(!(n>=1)){toast("Type a normal number, like 20!");return;}
+  const cost=n*CRAFT_COST;
+  if(MONEY.v<cost){toast("Creating "+n+"× costs $"+fmtMoney(cost)+" — you only have $"+fmtMoney(Math.max(0,MONEY.v))+"!");return;}
+  addMoney(-cost);
+  d.stock=(d.stock||0)+n;d.made=(d.made||0)+n;
+  saveGame();
+  toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — you now have "+d.stock+" to sell at your market!");
+  openCraftDesign(d);
+}
+function openCraftDesign(d){
+  showDest("\u{1F9F0} "+d.name+" — you have "+(d.stock||0)+" (created "+(d.made||0)+" ever)",[
+    {label:"ℹ️ It does: "+(d.does||"nobody knows...").slice(0,60),value:"i"},
+    {label:"\u{1F440} It looks: "+(d.look||"a mystery").slice(0,60),value:"i"},
+    {label:"➕ CREATE more — $"+fmtMoney(CRAFT_COST)+" each",value:"make"},
+    {label:"✏️ Change what it does / how it looks",value:"edit"},
+    {label:"\u{1F5D1} Forget this design",value:"del"},
+    {label:"⬅ Back to the list",value:"back"}
+  ],v=>{
+    if(v==="make")craftMake(d);
+    else if(v==="edit"){
+      const does=prompt("What does the "+d.name+" DO?",d.does||"");
+      if(does!==null&&does.trim())d.does=does.trim().slice(0,90);
+      const look=prompt("How does the "+d.name+" LOOK?",d.look||"");
+      if(look!==null&&look.trim()){d.look=look.trim().slice(0,90);d.hex=craftColorFor(d.look+" "+d.name);}
+      saveGame();openCraftDesign(d);
+    }else if(v==="del"){
+      showDest("\u{1F5D1} Really forget the "+d.name+"?"+(d.stock?" You still have "+d.stock+" — they disappear too!":" (The design is gone forever.)"),[
+        {label:"✅ Yes, forget it",value:"y"},{label:"❌ No, keep it!",value:"n"}
+      ],a=>{
+        if(a==="y"){CRAFT.designs=CRAFT.designs.filter(x=>x!==d);saveGame();toast("\u{1F5D1} Design forgotten.");openCraftMenu();}
+        else openCraftDesign(d);
+      });
+    }else if(v==="back")openCraftMenu();
+    else if(v==="i")openCraftDesign(d);
+  });
+}
+function craftNew(){
+  const name=prompt("Name your new item! (like: Magic Sword)","");
+  if(name===null)return;
+  const nm=name.trim().slice(0,24);
+  if(!nm){toast("Your item needs a name!");return;}
+  if(craftFind(nm)){toast("You already have a design called "+nm+"!");openCraftDesign(craftFind(nm));return;}
+  const does=(prompt("What does the "+nm+" DO?","")||"").trim().slice(0,90);
+  const look=(prompt("How does the "+nm+" LOOK?","")||"").trim().slice(0,90);
+  const d={name:nm,does:does||"nobody knows...",look:look||"a mystery",hex:craftColorFor(look+" "+nm),stock:0,made:0};
+  CRAFT.designs.push(d);
+  saveGame();
+  toast("\u{1F9F0} "+nm+" designed! Now create copies — $"+fmtMoney(CRAFT_COST)+" each.");
+  craftMake(d);
+}
+function openCraftMenu(){
+  const opts=CRAFT.designs.map(d=>({label:"\u{1F9F0} "+d.name+" — you have "+(d.stock||0),value:d}));
+  opts.push({label:"➕ NEW item design (copies: $"+fmtMoney(CRAFT_COST)+" each)",value:"new"});
+  opts.push({label:"❌ Close",value:"x"});
+  showDest("\u{1F9F0} CREATE ITEM — your inventions ("+craftStockTotal()+" ready to sell)",opts,v=>{
+    if(v==="new")craftNew();
+    else if(v&&v!=="x")openCraftDesign(v);
+  });
+}
+$("bCreate").onclick=()=>openCraftMenu();
 function mktPickType(p,kind,idx){
   showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
@@ -4755,16 +4849,19 @@ function mktPickType(p,kind,idx){
     {label:"\u{1F4F1} A phone ("+PHONE.owned.length+" owned)",value:"phone"},
     {label:"\u{1F3AE} A game console ("+CONSOLE.owned.length+" owned)",value:"console"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
+    {label:"\u{1F9F0} An item YOU created ("+craftStockTotal()+" ready)",value:"custom"},
     {label:"❌ Cancel",value:"x"}
   ],ty=>{
     if(ty==="x")return;
-    if(ty==="food")mktPickItem(p,kind,ty,idx);   // food: a simple list
+    if(ty==="food"||ty==="custom")mktPickItem(p,kind,ty,idx);   // food & created items: a simple list
     else openMktPicker(p,kind,ty,idx);           // squishies, phones & consoles: the BOX PICKER!
   });
 }
 function mktGroups(ty){
   const map=new Map();
-  if(ty==="food"){
+  if(ty==="custom"){
+    CRAFT.designs.forEach(d=>{if(d.stock>0)map.set(d.name,{n:d.stock,lab:d.name,hex:d.hex,does:d.does,look:d.look,ty});});
+  }else if(ty==="food"){
     MCD.pack.forEach(f=>{const k=f[0];const e=map.get(k)||{n:0,lab:f[0],fh:f[1],ty};e.n++;map.set(k,e);});
   }else if(ty==="phone"||ty==="console"){
     (ty==="phone"?PHONE.owned:CONSOLE.owned).forEach(ph=>{
@@ -4783,6 +4880,13 @@ function mktGroups(ty){
   return[...map.values()].sort((a,b)=>b.n-a.n);
 }
 function mktTakeStock(ty,grp,n){
+  if(ty==="custom"){
+    const d=craftFind(grp.lab);
+    if(!d)return 0;
+    const take=Math.min(n,d.stock||0);
+    d.stock-=take;
+    return take;
+  }
   if(ty==="food"){
     let left=n;
     for(let i=MCD.pack.length-1;i>=0&&left>0;i--)if(MCD.pack[i][0]===grp.lab){MCD.pack.splice(i,1);left--;}
@@ -4820,6 +4924,12 @@ function mktGiveGoods(it,n){
     else if(it.ty==="butter")BUTTER.owned.push({color:it.lab,hex:it.hex,glitter:!!it.gl,size:it.sz||"norm"});
     else if(it.ty==="phone")PHONE.owned.push({m:it.pm||"iPhone 4",br:it.br||"Apple",tier:it.tier||1,yr:it.yr||2010,color:it.lab,hex:it.hex||"#1c1c1e"});
     else if(it.ty==="console")CONSOLE.owned.push({m:it.pm||"PlayStation 1",br:it.br||"Sony",tier:it.tier||1,yr:it.yr||2000,color:it.lab,hex:it.hex||"#1c1c1e"});
+    else if(it.ty==="custom"){
+      /* created items: the buyer gets the DESIGN too, so they can craft more */
+      let d=craftFind(it.lab);
+      if(!d){d={name:it.lab,does:it.does||"nobody knows...",look:it.look||"a mystery",hex:it.hex||craftColorFor(it.lab),stock:0,made:0};CRAFT.designs.push(d);}
+      d.stock=(d.stock||0)+1;
+    }
     else MCD.pack.push([it.lab,it.fh||10]);
   }
   renderDump();renderPack();saveGame();
@@ -4887,6 +4997,7 @@ function mkpVariants(){
 }
 /* what an item is WORTH (the buyer price) — shown while stocking, so you can price it right */
 function mkpWorth(g2){
+  if(g2.ty==="custom")return CRAFT_COST;   // a created item cost $1,000 to make
   if(g2.ty==="phone")return phoneValue({tier:g2.tier||0,color:g2.lab});
   if(g2.ty==="console")return consoleValue({tier:g2.tier||0,color:g2.lab});
   if(g2.ty==="butter")return butterValue({color:g2.lab,glitter:!!g2.gl,size:g2.sz||"norm"});
@@ -7140,6 +7251,7 @@ function saveGame(){
       bu:BUTTER.unopened,bo:BUTTER.owned,
       phu:PHONE.unopened,pho:PHONE.owned,
       cu:CONSOLE.unopened,co:CONSOLE.owned,
+      craft:CRAFT.designs,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
@@ -7158,6 +7270,7 @@ function loadGame(){
     BUTTER.unopened=d.bu||0;BUTTER.owned=Array.isArray(d.bo)?d.bo:[];
     PHONE.unopened=d.phu||0;PHONE.owned=Array.isArray(d.pho)?d.pho:[];
     CONSOLE.unopened=d.cu||0;CONSOLE.owned=Array.isArray(d.co)?d.co:[];
+    if(Array.isArray(d.craft))CRAFT.designs=d.craft.filter(x=>x&&typeof x.name==="string");
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
     (d.mfurn||[]).forEach(([k,v])=>{if(Array.isArray(v))MFURN.set(k,v);});
