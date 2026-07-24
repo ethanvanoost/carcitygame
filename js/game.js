@@ -4347,6 +4347,7 @@ function nearMarketPlot(){
   return null;
 }
 function mktItemName(it){
+  if(it.ty==="mc")return (MC_EMOJI[it.lab]||"⛏️")+" "+it.lab.charAt(0).toUpperCase()+it.lab.slice(1)+(it.lab==="diamond"?"":" block");
   if(it.ty==="custom")return "\u{1F9F0} "+it.lab+(it.does?" ("+it.does+")":"");
   if(it.ty==="phone"||it.ty==="console")return (it.lab==="Rainbow"?"\u{1F308} RAINBOW ":it.lab+" ")+(it.pm||(it.ty==="phone"?"phone":"console"));
   return (it.gl?"✨ GLITTER ":"")+(it.sz==="mega"?"\u{1F31F} MEGA ":it.sz==="med"?"\u{1F538} MEDIUM ":"")+it.lab
@@ -4363,6 +4364,15 @@ function addMktGood(sg,it,x,y,z,r){
     const mat=it.lab==="Rainbow"?rainbowMat():new THREE.MeshLambertMaterial({color:new THREE.Color(it.hex||"#1c1c1e")});
     const ph=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.44,0.04),mat);
     ph.position.set(x,y+0.22,z);ph.rotation.x=-0.35;sg.add(ph);return;
+  }
+  if(it.ty==="mc"){
+    /* a minecraft block, in its block color (diamonds get a sparkly tint) */
+    const MC_HEX={wood:"#8a6f4d",stone:"#9a9a9a",coal:"#26262a",iron:"#c8ccd4",gold:"#ffd75e",diamond:"#7fe3ff"};
+    const mat=new THREE.MeshLambertMaterial({color:new THREE.Color(MC_HEX[it.lab]||"#9a9a9a")});
+    if(it.lab==="diamond"||it.lab==="gold")mat.emissive=new THREE.Color(MC_HEX[it.lab]).multiplyScalar(0.3);
+    const bk=new THREE.Mesh(new THREE.BoxGeometry(r*1.2,r*1.2,r*1.2),mat);
+    bk.position.set(x,y+r*0.6,z);sg.add(bk);
+    return;
   }
   if(it.ty==="custom"){
     /* a created item: a glowing gift-ish box in the inventor's chosen color */
@@ -4963,10 +4973,11 @@ function mktPickType(p,kind,idx){
     {label:"\u{1F3AE} A game console ("+CONSOLE.owned.length+" owned)",value:"console"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"\u{1F9F0} An item YOU created ("+craftStockTotal()+" ready)",value:"custom"},
+    {label:"⛏️ Minecraft stuff ("+Object.values(MCINV).reduce((a,b)=>a+b,0)+" mined)",value:"mc"},
     {label:"❌ Cancel",value:"x"}
   ],ty=>{
     if(ty==="x")return;
-    if(ty==="food"||ty==="custom")mktPickItem(p,kind,ty,idx);   // food & created items: a simple list
+    if(ty==="food"||ty==="custom"||ty==="mc")mktPickItem(p,kind,ty,idx);   // food, created & minecraft items: a simple list
     else openMktPicker(p,kind,ty,idx);           // squishies, phones & consoles: the BOX PICKER!
   });
 }
@@ -4974,6 +4985,8 @@ function mktGroups(ty){
   const map=new Map();
   if(ty==="custom"){
     CRAFT.designs.forEach(d=>{if(d.stock>0)map.set(d.name,{n:d.stock,lab:d.name,hex:d.hex,does:d.does,look:d.look,ty});});
+  }else if(ty==="mc"){
+    for(const k in MCINV)if(MCINV[k]>0)map.set(k,{n:MCINV[k],lab:k,ty});
   }else if(ty==="food"){
     MCD.pack.forEach(f=>{const k=f[0];const e=map.get(k)||{n:0,lab:f[0],fh:f[1],ty};e.n++;map.set(k,e);});
   }else if(ty==="phone"||ty==="console"){
@@ -4998,6 +5011,12 @@ function mktTakeStock(ty,grp,n){
     if(!d)return 0;
     const take=Math.min(n,d.stock||0);
     d.stock-=take;
+    return take;
+  }
+  if(ty==="mc"){
+    if(!(grp.lab in MCINV))return 0;
+    const take=Math.min(n,MCINV[grp.lab]);
+    MCINV[grp.lab]-=take;
     return take;
   }
   if(ty==="food"){
@@ -5045,6 +5064,7 @@ function mktGiveGoods(it,n){
       if(fx&&fx.k==="food")MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);   // food does its thing instantly
       else d.stock=(d.stock||0)+1;
     }
+    else if(it.ty==="mc"){if(it.lab in MCINV)MCINV[it.lab]++;}
     else MCD.pack.push([it.lab,it.fh||10]);
   }
   renderDump();renderPack();saveGame();
@@ -5112,6 +5132,7 @@ function mkpVariants(){
 }
 /* what an item is WORTH (the buyer price) — shown while stocking, so you can price it right */
 function mkpWorth(g2){
+  if(g2.ty==="mc")return MC_PRICES[g2.lab]||1;
   if(g2.ty==="custom")return CRAFT_COST;   // a created item cost $1,000 to make
   if(g2.ty==="phone")return phoneValue({tier:g2.tier||0,color:g2.lab});
   if(g2.ty==="console")return consoleValue({tier:g2.tier||0,color:g2.lab});
@@ -5291,12 +5312,13 @@ function mktGenPick(p,sel){
     row("dump","\u{1F95F} Dumplings"),
     row("butter","\u{1F9C8} Butter squishies"),
     row("food","\u{1F354} Food"),
+    row("mc","⛏️ Minecraft items"),
     {label:"\u{1F31F} ALL of it (everything at once)",value:"all"},
     {label:"▶️ CONTINUE"+(sel.size?" — "+sel.size+" kind"+(sel.size>1?"s":"")+" ticked":""),value:"go"},
     {label:"❌ Cancel",value:"x"}
   ],v=>{
     if(v==="x")return;
-    if(v==="all"){mktGenPrice(p,["phone","console","dump","butter","food"]);return;}
+    if(v==="all"){mktGenPrice(p,["phone","console","dump","butter","food","mc"]);return;}
     if(v==="go"){
       if(!sel.size){toast("Tick at least ONE box first!");mktGenPick(p,sel);return;}
       mktGenPrice(p,[...sel]);
