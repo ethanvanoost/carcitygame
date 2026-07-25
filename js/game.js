@@ -5006,24 +5006,15 @@ function craftMake(d){
   if(MONEY.v<cost){toast("Creating "+n+"× costs $"+fmtMoney(cost)+" — you only have $"+fmtMoney(Math.max(0,MONEY.v))+"!");return;}
   addMoney(-cost);
   d.made=(d.made||0)+n;
+  /* nothing activates by itself anymore — every copy waits as stock until
+     YOU press ▶️ USE (or \u{1F392} pack food into your backpack) */
+  d.stock=(d.stock||0)+n;
+  saveGame();
   const fx=craftEffect(d);
-  if(fx&&fx.k==="food"){
-    /* food items INSTANTLY do their thing: straight into your backpack! */
-    for(let i=0;i<n;i++)MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);
-    renderPack();saveGame();
-    toast("\u{1F392} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — straight into your BACKPACK (+"+fx.n+" food each)! Eat with the \u{1F392} Food menu or R.");
-  }else if(fx){
-    /* other powers do their thing INSTANTLY too: one activates right now,
-       the rest wait as stock (▶️ USE one whenever you like) */
-    d.stock=(d.stock||0)+n-1;
-    saveGame();
-    toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — one worked right away, "+d.stock+" saved for later!");
-    craftApply(d,fx);
-  }else{
-    d.stock=(d.stock||0)+n;
-    saveGame();
-    toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — you now have "+d.stock+" to sell at your market! (Tip: food / fuel / repair / teleport words give items real POWERS.)");
-  }
+  toast("\u{1F9F0} Created "+n+"× "+d.name+" for $"+fmtMoney(cost)+" — "+d.stock+" in stock!"
+    +(fx&&fx.k==="food"?" Eat one with ▶️ USE, or \u{1F392} pack some into your backpack (+"+fx.n+" food each)."
+    :fx?" Press ▶️ USE (or the ▶️ Do button) whenever you want one to do its thing."
+    :" Sell them at your market! (Tip: food / fuel / repair / teleport words give items real POWERS.)"));
   openCraftDesign(d);
 }
 function openCraftDesign(d){
@@ -5102,9 +5093,8 @@ function craftDoList(){
     if(fx.k==="food"){
       const packN=MCD.pack.filter(p=>p[0]==="\u{1F9F0} "+d.name).length;
       if(packN>0)opts.push({label:"\u{1F60B} "+d.name+" — eat one (+"+fx.n+" food, "+packN+" in your backpack)",value:{d,fx,food:true}});
-    }else if(d.stock>0){
-      opts.push({label:"▶️ "+d.name+" — "+craftEffectLabel(fx).replace("⚡ It WORKS: ","")+" ("+d.stock+" left)",value:{d,fx}});
     }
+    if(d.stock>0)opts.push({label:"▶️ "+d.name+" — "+craftEffectLabel(fx).replace("⚡ It WORKS: ","")+" ("+d.stock+" in stock)",value:{d,fx}});
   });
   return opts;
 }
@@ -5220,12 +5210,11 @@ function mktGiveGoods(it,n){
     else if(it.ty==="phone")PHONE.owned.push({m:it.pm||"iPhone 4",br:it.br||"Apple",tier:it.tier||1,yr:it.yr||2010,color:it.lab,hex:it.hex||"#1c1c1e"});
     else if(it.ty==="console")CONSOLE.owned.push({m:it.pm||"PlayStation 1",br:it.br||"Sony",tier:it.tier||1,yr:it.yr||2000,color:it.lab,hex:it.hex||"#1c1c1e"});
     else if(it.ty==="custom"){
-      /* created items: the buyer gets the DESIGN too, so they can craft more */
+      /* created items: the buyer gets the DESIGN too, so they can craft more —
+         copies wait as stock, nothing activates until the buyer USES one */
       let d=craftFind(it.lab);
       if(!d){d={name:it.lab,does:it.does||"nobody knows...",look:it.look||"a mystery",hex:it.hex||craftColorFor(it.lab),stock:0,made:0};CRAFT.designs.push(d);}
-      const fx=craftEffect(d);
-      if(fx&&fx.k==="food")MCD.pack.push(["\u{1F9F0} "+d.name,fx.n]);   // food does its thing instantly
-      else d.stock=(d.stock||0)+1;
+      d.stock=(d.stock||0)+1;
     }
     else if(it.ty==="mc"){if(it.lab in MCINV)MCINV[it.lab]++;}
     else MCD.pack.push([it.lab,it.fh||10]);
@@ -12598,7 +12587,9 @@ const UPDATE_PAGES=[
 <li>Every TV has a new <b>Channel 6 — MY VIDEOS</b>: upload an MP4 straight from your computer and it plays on every TV in the game, looping until you change channels. (The video stays on YOUR computer — nothing is uploaded anywhere.)</li></ul>
 <h4>\u{1F4BB} COOLBLUE: TABLETS & COMPUTERS — ALL FREE</h4><ul>
 <li>New in every CoolBlue: <b>\u{1F4BB} Tablets &amp; computers</b> — and you don't get a surprise box, you PICK the exact one: <b>iPad, iPad mini, iPad Air, iPad Pro 11″/13″</b>, <b>Samsung Galaxy Tab A9 / S9 / S10 Ultra</b>, <b>MacBook Neo / Air / Pro 14″ / Pro 16″</b>, <b>iMac</b>, <b>Mac mini</b> and the <b>Samsung Galaxy Book4 (Windows)</b> laptops. ALL FREE!</li>
-<li>They land in \u{1F381} Unbox → \u{1F4F1} Phones with the rest of your devices: hold them, sell them to phone buyers, or put them on your market tables. Random colors — \u{1F308} rainbow is the rarest and worth 4x!</li></ul>`}
+<li>They land in \u{1F381} Unbox → \u{1F4F1} Phones with the rest of your devices: hold them, sell them to phone buyers, or put them on your market tables. Random colors — \u{1F308} rainbow is the rarest and worth 4x!</li></ul>
+<h4>\u{1F9F0} CREATED ITEMS: YOU'RE IN CHARGE</h4><ul>
+<li>Created items <b>don't activate by themselves anymore</b>: every copy you create (or buy at a market) waits as stock. Nothing happens until YOU press <b>▶️ USE</b> (or the ▶️ Do button) — and food only goes into your backpack when you \u{1F392} pack it yourself.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
