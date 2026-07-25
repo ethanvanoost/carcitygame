@@ -666,6 +666,46 @@ function rollConsole(){
   if(color==="Rainbow")pushNews("\u{1F3AE}\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+"!");
   return cs;
 }
+/* ---------- 💻 TABLETS & COMPUTERS: CoolBlue hands these out FREE too ----------
+   No surprise box here — you pick EXACTLY the one you want. They join your
+   device collection (Unbox → 📱 Phones tab), so you can hold them, sell them
+   to phone buyers or put them on your market tables like any other device. */
+const GADGET_MODELS=[
+  {m:"iPad",br:"Apple",tier:6,yr:2022},
+  {m:"iPad mini",br:"Apple",tier:7,yr:2024},
+  {m:"iPad Air",br:"Apple",tier:9,yr:2025},
+  {m:"iPad Pro 11″",br:"Apple",tier:12,yr:2024},
+  {m:"iPad Pro 13″",br:"Apple",tier:14,yr:2024},
+  {m:"Samsung Galaxy Tab A9",br:"Samsung",tier:5,yr:2023},
+  {m:"Samsung Galaxy Tab S9",br:"Samsung",tier:10,yr:2023},
+  {m:"Samsung Galaxy Tab S10 Ultra",br:"Samsung",tier:13,yr:2024},
+  {m:"MacBook Neo",br:"Apple",tier:15,yr:2026},
+  {m:"MacBook Air",br:"Apple",tier:13,yr:2025},
+  {m:"MacBook Pro 14″",br:"Apple",tier:17,yr:2024},
+  {m:"MacBook Pro 16″",br:"Apple",tier:19,yr:2024},
+  {m:"iMac",br:"Apple",tier:16,yr:2024},
+  {m:"Mac mini",br:"Apple",tier:12,yr:2024},
+  {m:"Samsung Galaxy Book4 (Windows)",br:"Samsung",tier:12,yr:2024},
+  {m:"Samsung Galaxy Book4 Ultra (Windows)",br:"Samsung",tier:16,yr:2024}
+];
+function gadgetEmoji(m){return (m.indexOf("iPad")===0||m.indexOf("Samsung Galaxy Tab")===0)?"\u{1F4F2}":m.indexOf("iMac")===0?"\u{1F5A5}":"\u{1F4BB}";}
+function openGadgetShop(){
+  $("cbModal").classList.remove("open");
+  const opts=GADGET_MODELS.map((M,i)=>({label:gadgetEmoji(M.m)+" "+M.m+" — FREE! (worth $"+fmtMoney(phoneValue({tier:M.tier,color:""}))+")",value:i}));
+  opts.push({label:"❌ Cancel",value:"x"});
+  showDest("\u{1F4BB} CoolBlue TABLETS & COMPUTERS — pick one, they're ALL FREE!",opts,v=>{
+    if(typeof v!=="number")return;
+    const M=GADGET_MODELS[v];
+    let color,hex;
+    if(Math.random()<0.015){color="Rainbow";hex=RAINBOW_CSS;}
+    else{const c2=PHONE_COLORS[Math.floor(Math.random()*PHONE_COLORS.length)];color=c2[0];hex=c2[1];}
+    PHONE.owned.push({m:M.m,br:M.br,tier:M.tier,yr:M.yr,color,hex});
+    saveGame();
+    if(color==="Rainbow")pushNews("\u{1F4BB}\u{1F308} BREAKING: "+mpName()+" got a RAINBOW "+M.m+" at CoolBlue!");
+    toast(gadgetEmoji(M.m)+"\u{1F389} A "+color+" "+M.m+" is yours — FREE! Find it in \u{1F381} Unbox → \u{1F4F1} Phones: hold it, sell it, or put it on your market tables.");
+    openGadgetShop();   // the shop stays open so you can grab the whole line-up
+  });
+}
 /* placed consoles at your home: walk up, press T, pick a game! */
 const GCONS=[];
 const GFI={it:null};   // side-channel: which furniture item is being built right now
@@ -1044,6 +1084,7 @@ $("cbBuy2").onclick=()=>{
   CONSOLE.unopened++;saveGame();   // console boxes are FREE too!
   $("cbMsg").textContent="\u{1F3AE} FREE console box grabbed! You have "+CONSOLE.unopened+" to unbox (\u{1F381} Unbox menu, \u{1F3AE} Consoles tab). Take another?";
 };
+$("cbBuy3").onclick=()=>openGadgetShop();
 $("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
 const _starGeo=new THREE.OctahedronGeometry(1,0);
@@ -2585,12 +2626,15 @@ const TV3MM=[
   "Simple Cobblestone Generator! [3MM] - Tainro (720p).mp4"
 ];
 const TV={channel:"news",idx:0,videoEl:null,videoTex:null};
+/* 📼 MY VIDEOS: upload your own MP4 from your computer — it plays on every TV */
+const MYVID={url:null,name:""};
 function tvVideoName(i){return TV3MM[i].replace(" [3MM] - Tainro (720p).mp4","");}
 function ensureTvVideo(){
   if(TV.videoEl)return;
   const v=document.createElement("video");
   v.playsInline=true;v.setAttribute("playsinline","");
   v.addEventListener("ended",()=>{
+    if(TV.channel!=="3mm")return;     // your own MP4s loop instead
     TV.idx=(TV.idx+1)%TV3MM.length;   // when a video ends, the next one plays
     playTvVideo();
     toast("\u{1F4FA} Next up: "+tvVideoName(TV.idx));
@@ -2606,13 +2650,21 @@ function ensureTvVideo(){
 }
 function playTvVideo(){
   ensureTvVideo();
+  TV.videoEl.loop=false;
   TV.videoEl.src="Videos/3MM/"+encodeURIComponent(TV3MM[TV.idx]);
   TV.videoEl.play().catch(()=>{});
 }
 function setTvChannel(ch){
   TV.channel=ch;
-  if(ch!=="3mm"&&TV.videoEl)TV.videoEl.pause();
+  if(ch!=="3mm"&&ch!=="myvid"&&TV.videoEl)TV.videoEl.pause();
   if(ch==="3mm"){ensureTvVideo();newsMat.map=TV.videoTex;newsMat.color.set(0xffffff);playTvVideo();}
+  else if(ch==="myvid"){
+    ensureTvVideo();
+    newsMat.map=TV.videoTex;newsMat.color.set(0xffffff);
+    TV.videoEl.loop=true;                     // your video loops until you switch channels
+    TV.videoEl.src=MYVID.url;
+    TV.videoEl.play().catch(()=>{});
+  }
   else if(ch==="off"){newsMat.map=null;newsMat.color.set(0x05070a);}
   else{newsMat.map=newsTex;newsMat.color.set(0xffffff);}
   if(ch==="soccer"&&SOC.idx<0)startSoccer(0);
@@ -2647,10 +2699,22 @@ function openTvMenu(){
     {label:"⚽ Channel 3 — WORLD CUP soccer (7 matches!)",value:"soccer"},
     {label:"\u{1F525} Channel 4 — The Cozy Fireplace",value:"fire"},
     {label:"\u{1F420} Channel 5 — The Aquarium",value:"aqua"},
+    {label:"\u{1F4FC} Channel 6 — MY VIDEOS (upload your own MP4!)"+(MYVID.url?" · now: "+MYVID.name.slice(0,20):""),value:"myvid"},
     {label:"⏻ Turn the TV OFF",value:"off"},
     {label:"❌ Cancel",value:"cancel"}
   ],v=>{
     if(v==="cancel")return;
+    if(v==="myvid"){
+      const opts=[];
+      if(MYVID.url)opts.push({label:"▶ Play again: "+MYVID.name,value:"play"});
+      opts.push({label:"\u{1F4E4} UPLOAD an MP4 from your computer",value:"up"});
+      opts.push({label:"❌ Cancel",value:"cancel"});
+      showDest("\u{1F4FC} MY VIDEOS — your own MP4 on every TV in the game",opts,a=>{
+        if(a==="play"){setTvChannel("myvid");toast("\u{1F4FC} Now playing: "+MYVID.name+" — it loops until you change channels!");}
+        else if(a==="up")$("tvFile").click();
+      });
+      return;
+    }
     if(v==="3mm"){
       const opts=TV3MM.map((f,i)=>({label:"▶ "+tvVideoName(i),value:i}));
       opts.push({label:"❌ Cancel",value:"cancel"});
@@ -2681,6 +2745,17 @@ function openTvMenu(){
       :"\u{1F420} The aquarium channel — blub blub!");
   });
 }
+/* the hidden MP4 picker: choose a video file and it starts on every TV */
+$("tvFile").addEventListener("change",()=>{
+  const f=$("tvFile").files&&$("tvFile").files[0];
+  $("tvFile").value="";
+  if(!f)return;
+  if(MYVID.url){try{URL.revokeObjectURL(MYVID.url);}catch(e){}}
+  MYVID.url=URL.createObjectURL(f);
+  MYVID.name=f.name.replace(/\.(mp4|webm|mov|m4v|mkv)$/i,"");
+  setTvChannel("myvid");
+  toast("\u{1F4FC}\u{1F4FA} Now playing on every TV: "+MYVID.name+" — it loops until you change channels! (Your video stays on YOUR computer — it isn't uploaded anywhere.)");
+});
 /* ================= ⚽ THE WORLD CUP CHANNEL: 7 generated matches ================= */
 const WC=[
   [["SPAIN","#c60b1e","LAMINE YAMAL"],["PORTUGAL","#0a5c36","RONALDO"]],
@@ -2864,7 +2939,7 @@ function drawAquarium(){
 }
 function updateTv(dt){
   /* video sound follows how close you stand to a TV */
-  if(TV.channel==="3mm"&&TV.videoEl){
+  if((TV.channel==="3mm"||TV.channel==="myvid")&&TV.videoEl){
     let d=1e9;
     for(let i=TVS.length-1;i>=0;i--){
       const t=TVS[i];
@@ -4489,9 +4564,9 @@ function renderMarket(p){
       /* LONG TABLE: up to 5 different offers side by side + stacked price signs */
       offers.forEach((o,oi)=>{
         if(o.ty&&o.q>0)addMktGood(sg,o,rx(-2.8+oi*1.4),ty+1.12,rz(-2.8+oi*1.4),0.24);
-        const bon=(o.bb&&o.bf)?" · "+o.bb+"+"+o.bf+" FREE!":"";
+        const bon=((o.bb&&o.bf)?" · "+o.bb+"+"+o.bf+" FREE!":"")+mktBonusTag(o);
         const l2=mktMakeLabel(o.ty
-          ?(o.q>0?mktItemName(o)+" ×"+o.q+" — $"+fmtMoney(o.p)+bon:mktItemName(o)+" — NO STOCK")
+          ?(o.q>0?mktItemName(o)+" ×"+o.q+" — $"+fmtMoney(mktPriceNow(o))+bon:mktItemName(o)+" — NO STOCK")
           :"(empty spot)",8);
         l2.position.set(tx,ty+2.9+oi*0.75,tz);sg.add(l2);
       });
@@ -4746,11 +4821,31 @@ function mktEditClick(e){
   toast("✅ "+def.n+" placed — stand next to it and press T to "+(def.t==="mcase"?"put something inside!":"stock it!"));
   if(GHOST.lastE)updateGhost(GHOST.lastE);
 }
-/* T next to one of YOUR pieces: add items (table 5, shelf 15, case 1) or take them off */
+/* ---- 🎁 TIMED BONUS deals: a % off that runs on REAL time (like 25% for 1 day) ---- */
+function mktBonusOn(o){return !!(o&&o.dp&&o.du&&Date.now()<o.du);}
+function mktPriceNow(o){return mktBonusOn(o)?Math.max(1,Math.round(o.p*(100-o.dp)/100)):(o.p||0);}
+function mktBonusLeft(o){
+  if(!mktBonusOn(o))return "";
+  const ms=o.du-Date.now();
+  if(ms>=86400000)return Math.round(ms/86400000*10)/10+" days left";
+  if(ms>=3600000)return Math.round(ms/3600000)+" h left";
+  return Math.max(1,Math.round(ms/60000))+" min left";
+}
+function mktBonusTag(o){return mktBonusOn(o)?" \u{1F381} "+o.dp+"% OFF ("+mktBonusLeft(o)+")":"";}
+/* expired timed bonuses quietly clean themselves off MY offers */
+function mktSweepBonuses(d){
+  let ch=false;
+  (d&&d.items||[]).forEach(it=>(it.o||[]).forEach(o=>{
+    if(o.dp&&o.du&&Date.now()>=o.du){delete o.dp;delete o.du;ch=true;}
+  }));
+  return ch;
+}
+/* T next to one of YOUR pieces: add items (table 5, shelf 15, case 1) or manage them */
 function openMyTable(p,i){
   const d=MKT[p.id],it=d.items[i];
   if(!it)return;
   it.o=it.o||[];
+  if(mktSweepBonuses(d))saveMkt();
   const cap=mktCap(it);
   /* empty case/table: jump straight to picking */
   if(!it.o.length){mktPickType(p,it.k==="c"?"c":"t",i);return;}
@@ -4758,17 +4853,85 @@ function openMyTable(p,i){
   const opts=[];
   if(it.o.length<cap)opts.push({label:"➕ Add another item ("+it.o.length+" / "+cap+" spots used)",value:"add"});
   it.o.forEach((o,oi)=>opts.push({
-    label:"\u{1F5D1} "+mktItemName(o)+(it.k==="c"?"":" — ×"+o.q+" at $"+fmtMoney(o.p)+(o.bb?" ("+o.bb+"+"+o.bf+" FREE)":""))+" — take it off",
+    label:"\u{1F6E0} "+mktItemName(o)+(it.k==="c"?"":" — ×"+o.q+" at $"+fmtMoney(mktPriceNow(o))+(o.bb?" ("+o.bb+"+"+o.bf+" FREE)":"")+mktBonusTag(o)),
     value:oi
   }));
   opts.push({label:"❌ Close",value:"x"});
   showDest(name+" ("+it.o.length+" / "+cap+")",opts,v=>{
     if(v==="add"){mktPickType(p,it.k==="c"?"c":"t",i);return;}
     if(typeof v!=="number")return;
-    const o=it.o.splice(v,1)[0];
-    if(o&&o.ty&&o.q>0)mktGiveGoods(o,o.q);
-    saveMkt();saveGame();syncMarket(p.id);renderMarket(p);
-    toast("\u{1F5D1} Taken off"+(o&&o.q>0?" — ×"+o.q+" came back to your collection!":"!"));
+    openMyOffer(p,i,v);
+  });
+}
+/* one offer's own menu: change the price, put a TIMED BONUS on it, or take it off */
+function openMyOffer(p,i,oi){
+  const d=MKT[p.id],it=d&&d.items[i],o=it&&it.o&&it.o[oi];
+  if(!o)return;
+  const done=()=>{saveMkt();saveGame();syncMarket(p.id);renderMarket(p);};
+  const opts=[];
+  if(it.k!=="c"){
+    opts.push({label:"✏️ Change the PRICE (now $"+fmtMoney(o.p)+" each"+(mktBonusOn(o)?" → $"+fmtMoney(mktPriceNow(o))+" with the bonus":"")+")",value:"price"});
+    opts.push({label:mktBonusOn(o)
+      ?"\u{1F381} TIMED BONUS: "+o.dp+"% OFF, "+mktBonusLeft(o)+" — change or stop it"
+      :"\u{1F381} TIMED BONUS — % off for real hours/days (buyers see a countdown!)",value:"bonus"});
+    opts.push({label:"➕ "+(o.bb?"Change the "+o.bb+"+"+o.bf+" FREE deal":"Add a buy-X-get-Y-FREE deal"),value:"free"});
+  }
+  opts.push({label:"\u{1F5D1} Take it off the "+(it.k==="c"?"display case":"table")+(o.q>0?" (×"+o.q+" comes back to you)":""),value:"del"});
+  opts.push({label:"⬅ Back",value:"back"});
+  showDest("\u{1F6E0} "+mktItemName(o)+(it.k==="c"?"":" — ×"+o.q+" in stock"),opts,v=>{
+    if(v==="back"){openMyTable(p,i);return;}
+    if(v==="del"){
+      it.o.splice(oi,1);
+      if(o.ty&&o.q>0)mktGiveGoods(o,o.q);
+      done();
+      toast("\u{1F5D1} Taken off"+(o.q>0?" — ×"+o.q+" came back to your collection!":"!"));
+      return;
+    }
+    if(v==="price"){
+      const s=prompt("New price per item for "+mktItemName(o)+"? (now $"+fmtMoney(o.p)+", worth $"+fmtMoney(mkpWorth(o))+")",String(o.p));
+      if(s===null)return;
+      const pr=Math.floor(parseInt(s,10));
+      if(!(pr>=1)||pr>1000000){toast("Price: type $1 to $1,000,000!");return;}
+      o.p=pr;done();
+      toast("✏️ New price: $"+fmtMoney(pr)+" each"+(mktBonusOn(o)?" (buyers pay $"+fmtMoney(mktPriceNow(o))+" while the "+o.dp+"% bonus runs)":"")+"!");
+      return;
+    }
+    if(v==="free"){
+      const bs=prompt("The deal: buy HOW MANY... (like 2 — or 0 to remove the deal)",String(o.bb||1));
+      if(bs===null)return;
+      let bb=Math.floor(parseInt(bs,10));
+      if(!(bb>=0)){toast("Type a normal number, like 2!");return;}
+      if(bb===0){delete o.bb;delete o.bf;done();toast("➕ FREE deal removed.");return;}
+      const fs2=prompt("...and get HOW MANY for FREE? (like 1)",String(o.bf||1));
+      if(fs2===null)return;
+      const bf=Math.floor(parseInt(fs2,10));
+      if(!(bf>=1)){toast("Type a normal number, like 1!");return;}
+      o.bb=Math.min(99,bb);o.bf=Math.min(99,bf);done();
+      toast("➕ Deal set: every "+o.bb+" bought = "+o.bf+" FREE!");
+      return;
+    }
+    if(v==="bonus"){
+      const pcts=[10,25,50,75].map(pc=>({label:"\u{1F381} "+pc+"% OFF (buyers pay $"+fmtMoney(Math.max(1,Math.round(o.p*(100-pc)/100)))+" instead of $"+fmtMoney(o.p)+")",value:pc}));
+      if(mktBonusOn(o))pcts.push({label:"\u{1F6D1} STOP the bonus — back to the normal price",value:"stop"});
+      pcts.push({label:"❌ Cancel",value:"x"});
+      showDest("\u{1F381} How big is the bonus on "+mktItemName(o)+"?",pcts,pc=>{
+        if(pc==="stop"){delete o.dp;delete o.du;done();toast("\u{1F6D1} Bonus stopped — back to $"+fmtMoney(o.p)+" each.");return;}
+        if(typeof pc!=="number")return;
+        showDest("⏰ How long does the "+pc+"% bonus run? (REAL time — it keeps counting while you play or sleep!)",[
+          {label:"⏰ 1 hour",value:3600000},
+          {label:"⏰ 6 hours",value:21600000},
+          {label:"\u{1F4C5} 1 real day (24 h)",value:86400000},
+          {label:"\u{1F4C5} 3 real days",value:259200000},
+          {label:"\u{1F4C5} A whole week",value:604800000},
+          {label:"❌ Cancel",value:"x"}
+        ],ms=>{
+          if(typeof ms!=="number")return;
+          o.dp=pc;o.du=Date.now()+ms;done();
+          toast("\u{1F381} BONUS ON: "+pc+"% OFF "+mktItemName(o)+" — buyers pay $"+fmtMoney(mktPriceNow(o))+" for the next "+mktBonusLeft(o).replace(" left","")+"!");
+        });
+      });
+      return;
+    }
   });
 }
 /* ---------- \u{1F9F0} CREATE ITEM: invent your OWN items — $1,000 per copy ----------
@@ -5258,7 +5421,7 @@ function openMarketShop(p,rm,onlyPi){
     (it.o||[]).forEach((o,oi)=>{
       if(!o.ty)return;
       opts.push(o.q>0
-        ?{label:"\u{1F6D2} "+mktItemName(o)+" — $"+fmtMoney(o.p)+" each (×"+o.q+" left"+(o.bb?" · "+o.bb+"+"+o.bf+" FREE":"")+")",value:pi+"."+oi}
+        ?{label:"\u{1F6D2} "+mktItemName(o)+" — $"+fmtMoney(mktPriceNow(o))+" each (×"+o.q+" left"+(o.bb?" · "+o.bb+"+"+o.bf+" FREE":"")+mktBonusTag(o)+")",value:pi+"."+oi}
         :{label:"❌ "+mktItemName(o)+" — NO STOCK",value:"x"});
     });
   });
@@ -5275,15 +5438,17 @@ function mktBuyFrom(p,rm,ref){
   const it=rm.d.items[parseInt(seg[0],10)];
   const o=it&&it.o&&it.o[parseInt(seg[1],10)||0];
   if(!o||!o.ty||o.q<=0)return;
-  const deal=o.bb?"\nBONUS: every "+o.bb+" you buy = "+o.bf+" extra for FREE!":"";
-  const qs=prompt("How many "+mktItemName(o)+" do you want to BUY at $"+fmtMoney(o.p)+" each?"+deal+"\n(stock: "+o.q+")","1");
+  const pNow=mktPriceNow(o);
+  const deal=(o.bb?"\nBONUS: every "+o.bb+" you buy = "+o.bf+" extra for FREE!":"")
+    +(mktBonusOn(o)?"\n\u{1F381} TIMED BONUS: "+o.dp+"% OFF right now — $"+fmtMoney(pNow)+" instead of $"+fmtMoney(o.p)+" ("+mktBonusLeft(o)+")!":"");
+  const qs=prompt("How many "+mktItemName(o)+" do you want to BUY at $"+fmtMoney(pNow)+" each?"+deal+"\n(stock: "+o.q+")","1");
   if(qs===null)return;
   let n=Math.floor(parseInt(qs,10));
   if(!(n>=1)){toast("Type a normal number, like 2!");return;}
   if(n>o.q)n=o.q;
   let free=(o.bb&&o.bf)?Math.floor(n/o.bb)*o.bf:0;
   if(n+free>o.q)free=o.q-n;
-  const total=n*o.p;
+  const total=n*pNow;
   (async()=>{
     const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+ref+"|"+(n+free)).slice(0,80)},true);
     if(!ok)return;
@@ -11454,7 +11619,9 @@ function applyQualityUI(){
 ["low","med","high"].forEach(q=>{
   $("q"+q[0].toUpperCase()+q.slice(1)).onclick=()=>{
     SETTINGS.quality=q;saveFx();setQuality(q);applyQualityUI();
-    toast("✨ Graphics: "+(q==="low"?"FAST (no shadows)":q==="high"?"BEAUTIFUL":"NORMAL"));
+    toast("✨ Graphics: "+(q==="low"?"⚡ FAST — 1x pixels, no shadows, short view (best for slow devices)"
+      :q==="high"?"✨ BEAUTIFUL — your screen's FULL pixel density, razor-sharp shadows & a far deeper view!"
+      :"NORMAL — 2x pixels, 2K shadows"));
   };
 });
 setQuality(SETTINGS.quality);applyQualityUI();
@@ -12415,7 +12582,23 @@ const UPDATE_PAGES=[
 <li>Phones come in all the colors — <b>\u{1F308} RAINBOW is the rarest</b> (worth 4x), and new Pro Max / Ultra models are the jackpot pulls.</li></ul>
 <h4>\u{1F4F1} A PHONE THAT WORKS</h4><ul>
 <li>Click a phone in the Unbox menu to <b>hold it</b> — a \u{1F4F1} VIEW PHONE button appears.</li>
-<li>On the screen: \u{1F310} a browser that really searches (opens a new tab), ℹ️ info about your exact model, \u{1F9EE} a working calculator, ⏲️ timers and ⏰ alarms that ring even with the phone in your pocket, ⏱️ a stopwatch and \u{1F550} a clock with the real AND in-game time.</li></ul>`}
+<li>On the screen: \u{1F310} a browser that really searches (opens a new tab), ℹ️ info about your exact model, \u{1F9EE} a working calculator, ⏲️ timers and ⏰ alarms that ring even with the phone in your pocket, ⏱️ a stopwatch and \u{1F550} a clock with the real AND in-game time.</li></ul>`},
+{t:"Round 37 — ✨ Sharper graphics, smoother cars, market bonuses & your own TV channel",h:`
+<h4>✨ GRAPHICS THAT REALLY CHANGE</h4><ul>
+<li>The three settings finally DO something different: <b>⚡ Fast</b> = 1x pixels, no shadows, short view (great on slow devices) · <b>Normal</b> = 2x pixels + 2K shadows · <b>✨ Beautiful</b> = your screen's FULL pixel density (up to 3x!), razor-sharp 4K shadows and a much deeper view distance.</li>
+<li>The whole game renders at up to <b>2x pixels by default</b> now — noticeably crisper on phones and 4K screens.</li></ul>
+<h4>\u{1F697} SMOOTHER, UN-GLITCHED CARS</h4><ul>
+<li>Body shells are much smoother: nearly double the curve points and a rounder bevel — real sheet-metal curves.</li>
+<li>Fixed the classic glitch where <b>headlights, grilles, badges, plates &amp; exhausts sat half-SUNK inside the nose</b> — every detail now sits exactly ON the body surface.</li>
+<li>Rounder tires, rims, brake discs and wheel arches (way more segments).</li></ul>
+<h4>\u{1F3EA} MARKET: EDIT PRICES & TIMED BONUSES</h4><ul>
+<li>Press T at your table and pick a deal — you can now <b>✏️ change its price</b> any time, change the buy-X-get-Y-FREE deal, or take it off.</li>
+<li>New <b>\u{1F381} TIMED BONUS</b>: put 10 / 25 / 50 / 75% OFF on a deal for 1 hour, 6 hours, <b>1 real day</b>, 3 days or a week — REAL time, it keeps counting while you sleep. Buyers see the discount and a countdown on the price signs, and pay the bonus price automatically. When it runs out, the price snaps back.</li></ul>
+<h4>\u{1F4FC} YOUR OWN TV CHANNEL</h4><ul>
+<li>Every TV has a new <b>Channel 6 — MY VIDEOS</b>: upload an MP4 straight from your computer and it plays on every TV in the game, looping until you change channels. (The video stays on YOUR computer — nothing is uploaded anywhere.)</li></ul>
+<h4>\u{1F4BB} COOLBLUE: TABLETS & COMPUTERS — ALL FREE</h4><ul>
+<li>New in every CoolBlue: <b>\u{1F4BB} Tablets &amp; computers</b> — and you don't get a surprise box, you PICK the exact one: <b>iPad, iPad mini, iPad Air, iPad Pro 11″/13″</b>, <b>Samsung Galaxy Tab A9 / S9 / S10 Ultra</b>, <b>MacBook Neo / Air / Pro 14″ / Pro 16″</b>, <b>iMac</b>, <b>Mac mini</b> and the <b>Samsung Galaxy Book4 (Windows)</b> laptops. ALL FREE!</li>
+<li>They land in \u{1F381} Unbox → \u{1F4F1} Phones with the rest of your devices: hold them, sell them to phone buyers, or put them on your market tables. Random colors — \u{1F308} rainbow is the rarest and worth 4x!</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

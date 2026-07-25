@@ -76,21 +76,21 @@ function addWheel(g,x,z,r,w,front,hubM){
   hubM=hubM||hubMat;
   const pivot=new THREE.Group();pivot.position.set(x,r,z);
   const spin=new THREE.Group();pivot.add(spin);
-  const tire=new THREE.Mesh(gCyl(r,r,w,18),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
+  const tire=new THREE.Mesh(gCyl(r,r,w,26),tireMat);tire.rotation.z=Math.PI/2;tire.castShadow=true;spin.add(tire);
   if(w>=0.16){ /* real brakes: a steel disc + a red caliper peeking through the spokes */
-    const disc=new THREE.Mesh(gCyl(r*0.5,r*0.5,w*0.55,14),discMat);disc.rotation.z=Math.PI/2;pivot.add(disc);
+    const disc=new THREE.Mesh(gCyl(r*0.5,r*0.5,w*0.55,18),discMat);disc.rotation.z=Math.PI/2;pivot.add(disc);
     const cal=new THREE.Mesh(gBox(w*0.62,r*0.4,r*0.2),calMat);cal.position.set(0,r*0.16,r*0.42);pivot.add(cal);
   }
   /* real rim: it STICKS OUT of the tire so you can actually see it —
      center cap + six spokes that visibly rotate + a shiny outer ring */
-  const hub=new THREE.Mesh(gCyl(r*0.22,r*0.22,w+0.1,8),hubM);hub.rotation.z=Math.PI/2;spin.add(hub);
+  const hub=new THREE.Mesh(gCyl(r*0.22,r*0.22,w+0.1,12),hubM);hub.rotation.z=Math.PI/2;spin.add(hub);
   for(let i=0;i<3;i++){
     const sp=new THREE.Mesh(gBox(w+0.08,r*1.3,r*0.16),hubM);
     sp.rotation.x=i*Math.PI/3;spin.add(sp);
   }
   const side=x>0?1:(x<0?-1:0);
   (side?[side]:[1,-1]).forEach(s=>{   // cars: outer face — motos/bikes: both sides
-    const ring=new THREE.Mesh(gTor(r*0.66,r*0.08,6,18),hubM);
+    const ring=new THREE.Mesh(gTor(r*0.66,r*0.08,8,26),hubM);
     ring.rotation.y=Math.PI/2;ring.position.x=s*(w/2+0.02);spin.add(ring);
   });
   g.add(pivot);
@@ -132,7 +132,7 @@ function smoothProf(prof){
   if(!pts){
     const P=CAR_PROFILES[prof]||CAR_PROFILES.default;
     const curve=new THREE.SplineCurve(P.map(p=>new THREE.Vector2(p[0],p[1])));
-    pts=curve.getPoints(30).map(v=>[v.x,v.y]);
+    pts=curve.getPoints(56).map(v=>[v.x,v.y]);
     SMOOTHP.set(prof,pts);
   }
   return pts;
@@ -178,7 +178,7 @@ function carShellGeo(prof,len,wid){
     for(const[t,y]of P)sh.lineTo(t*zH,y);
     sh.lineTo(-zH+0.04,0.3);
     sh.closePath();
-    geo=keep(new THREE.ExtrudeGeometry(sh,{depth:d,bevelEnabled:true,bevelThickness:0.1,bevelSize:0.11,bevelSegments:3,steps:1}));
+    geo=keep(new THREE.ExtrudeGeometry(sh,{depth:d,bevelEnabled:true,bevelThickness:0.1,bevelSize:0.11,bevelSegments:5,steps:1}));
     geo.translate(0,0,-d/2);
     SHELLC.set(key,geo);
   }
@@ -231,19 +231,22 @@ function buildVehicleMesh(type,color,top,name,lite){
       deckY:surf(-0.72),deckA:Math.atan(-slp(-0.72)),
       tailY:surf(-(zH-0.25)/zH)};
     const noseTop=surf(1),rearTop=surf(-1);   // exact front & rear face heights
+    /* the shell's bevel bulges ~0.11 past zH — every nose/tail detail sits ON
+       that real surface now instead of half-sunk inside the paint */
+    const nosZ=zH+0.1,tailZ=zH+0.1;
     if(K.nose){
-      const grille=new THREE.Mesh(gBox(1.1,0.16,0.06),darkTrim);grille.position.set(0,Math.min(0.62,noseTop-0.2),zH+0.02);g.add(grille);
+      const grille=new THREE.Mesh(gBox(1.1,0.16,0.06),darkTrim);grille.position.set(0,Math.min(0.62,noseTop-0.2),nosZ);g.add(grille);
     }else{
       /* electric cars: smooth nose with a glowing light bar */
-      const bar=new THREE.Mesh(gBox(K.wid*0.62,0.05,0.05),evBarMat);bar.position.set(0,noseTop-0.06,zH+0.03);g.add(bar);
+      const bar=new THREE.Mesh(gBox(K.wid*0.62,0.05,0.05),evBarMat);bar.position.set(0,noseTop-0.06,nosZ+0.01);g.add(bar);
     }
     g.userData.tails=[];g.userData.beams=[];
     [[-0.72],[0.72]].forEach(p=>{
       const h=new THREE.Mesh(gBox(0.34,0.14,0.08),headMat);
-      h.position.set(p[0],noseTop-0.12,zH+0.03);g.add(h);
+      h.position.set(p[0],noseTop-0.12,nosZ);g.add(h);
       /* tail lights: dim when cruising, BRIGHT red when braking, white in reverse */
       const t=new THREE.Mesh(gBox(0.34,0.14,0.08),new THREE.MeshBasicMaterial({color:0x8a1420}));
-      t.position.set(p[0],rearTop-0.14,-(zH+0.03));g.add(t);
+      t.position.set(p[0],rearTop-0.14,-tailZ);g.add(t);
       g.userData.tails.push(t);
       /* visible headlight BEAMS at night */
       const beam=new THREE.Mesh(gCone(1.5,10,10,1,true),beamMat);
@@ -255,7 +258,7 @@ function buildVehicleMesh(type,color,top,name,lite){
     if(!lite){
       /* side mirrors, license plates & door handles */
       [[-1],[1]].forEach(p=>{const m=new THREE.Mesh(gBox(0.1,0.12,0.24),mat);m.position.set(p[0]*(K.wid/2+0.06),K.cabY+0.08,K.cabZ+K.cabL/2+0.05);g.add(m);});
-      [[zH+0.07,0],[-(zH+0.07),Math.PI]].forEach(p=>{
+      [[zH+0.14,0],[-(zH+0.14),Math.PI]].forEach(p=>{
         const pl=new THREE.Mesh(gBox(0.52,0.15,0.03),plateMat);
         pl.position.set(0,0.4,p[0]);pl.rotation.y=p[1];g.add(pl);});
       [[-1],[1]].forEach(p=>{const dh=new THREE.Mesh(gBox(0.03,0.05,0.3),hubMat);
@@ -273,17 +276,17 @@ function buildVehicleMesh(type,color,top,name,lite){
       }
       /* chrome badge on the nose */
       const badge=new THREE.Mesh(gCyl(0.045,0.045,0.04,10),hubMat);
-      badge.rotation.x=Math.PI/2;badge.position.set(0,Math.min(0.82,noseTop-0.06),zH+0.03);g.add(badge);
+      badge.rotation.x=Math.PI/2;badge.position.set(0,Math.min(0.82,noseTop-0.06),zH+0.12);g.add(badge);
       /* orange turn signals at the front corners + fog lights low in the bumper */
       [[-1],[1]].forEach(p=>{
         const ts=new THREE.Mesh(gBox(0.14,0.08,0.06),indMat);
-        ts.position.set(p[0]*(K.wid/2-0.14),noseTop-0.26,zH+0.02);g.add(ts);
+        ts.position.set(p[0]*(K.wid/2-0.14),noseTop-0.26,nosZ);g.add(ts);
         const fl=new THREE.Mesh(gCyl(0.05,0.05,0.04,8),headMat);
-        fl.rotation.x=Math.PI/2;fl.position.set(p[0]*0.62,K.baseY-0.12,zH+0.02);g.add(fl);
+        fl.rotation.x=Math.PI/2;fl.position.set(p[0]*0.62,K.baseY-0.12,nosZ);g.add(fl);
       });
       /* third brake light at the top of the tail */
       const tbl=new THREE.Mesh(gBox(0.42,0.045,0.03),brakeMat);
-      tbl.position.set(0,rearTop-0.03,-(zH+0.02));g.add(tbl);
+      tbl.position.set(0,rearTop-0.03,-tailZ);g.add(tbl);
       /* fuel filler cap on the rear right flank */
       const cap=new THREE.Mesh(gCyl(0.07,0.07,0.02,10),hubMat);
       cap.rotation.z=Math.PI/2;cap.position.set(K.wid/2+0.035,K.baseY+0.22,-zH*0.55);g.add(cap);
@@ -302,14 +305,14 @@ function buildVehicleMesh(type,color,top,name,lite){
     }
     /* ROUNDED wheel-arch flares that follow the wheel's circle + side skirts */
     [[-1,1],[1,1],[-1,-1],[1,-1]].forEach(p=>{
-      const a=new THREE.Mesh(gTor(K.wheelR+0.13,0.055,8,14,Math.PI),darkTrim);
+      const a=new THREE.Mesh(gTor(K.wheelR+0.13,0.055,8,20,Math.PI),darkTrim);
       a.rotation.y=Math.PI/2;
       a.position.set(p[0]*(K.wid/2+0.02),K.wheelR+0.02,p[1]*wheelZ);g.add(a);});
     [[-1],[1]].forEach(p=>{const sk=new THREE.Mesh(gBox(0.08,0.14,2.6),darkTrim);sk.position.set(p[0]*(K.wid/2+0.035),K.baseY-0.26,-0.1);g.add(sk);});
     /* front splitter + twin exhausts */
     const spl=new THREE.Mesh(gBox(K.wid-0.18,0.08,0.3),darkTrim);spl.position.set(0,K.baseY-0.3,zH-0.02);g.add(spl);
-    [[-0.5],[0.5]].forEach(p=>{const ex=new THREE.Mesh(gCyl(0.07,0.07,0.24,8),hubMat);
-      ex.rotation.x=Math.PI/2;ex.position.set(p[0],K.baseY-0.2,-(zH+0.04));g.add(ex);});
+    [[-0.5],[0.5]].forEach(p=>{const ex=new THREE.Mesh(gCyl(0.07,0.07,0.24,10),hubMat);
+      ex.rotation.x=Math.PI/2;ex.position.set(p[0],K.baseY-0.2,-(zH+0.1));g.add(ex);});
     /* signature details — each one sits EXACTLY on the shell surface */
     if(K.scoop){
       const ts=(zH-0.85)/zH;

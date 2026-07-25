@@ -1,18 +1,27 @@
 /* ================= THREE / SKY ================= */
 const renderer=new THREE.WebGLRenderer({canvas:$("c3d"),antialias:true,powerPreference:"high-performance"});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 /* filmic tone mapping + sRGB output = much richer, more realistic light & colors */
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.12;
-/* graphics quality: low = fast (no shadows), high = extra sharp */
+/* graphics quality — the three settings REALLY differ now:
+   ⚡ fast     = 1x pixels, no shadows, fog pulled in close (great on slow devices)
+   normal     = up to 2x pixels, 2K shadows
+   ✨ beautiful = your screen's FULL pixel density (up to 3x), razor-sharp 4K
+                 shadows and a much deeper view distance */
 function setQuality(q){
-  renderer.setPixelRatio(q==="low"?1:Math.min(devicePixelRatio,q==="high"?1.75:1.5));
+  renderer.setPixelRatio(q==="low"?1:q==="high"?Math.min(devicePixelRatio,3):Math.min(devicePixelRatio,2));
   sun.castShadow=q!=="low";
-  const sz=q==="high"?2048:1024;
+  const sz=q==="high"?4096:2048;
   sun.shadow.mapSize.set(sz,sz);
   if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}
+  if(scene.fog){
+    scene.fog.near=q==="low"?150:q==="high"?280:200;
+    scene.fog.far=q==="low"?520:q==="high"?980:640;
+  }
+  renderer.toneMappingExposure=q==="high"?1.18:1.12;
 }
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x8ec9f0);
