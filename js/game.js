@@ -696,7 +696,12 @@ const COMPUTER_MODELS=[
   gadgetDef("Samsung Galaxy Book4 Ultra (Windows)","Samsung",3000,2024)
 ];
 function gadgetEmoji(m){return (m.indexOf("iPad")===0||m.indexOf("Samsung Galaxy Tab")===0)?"\u{1F4F2}":m.indexOf("iMac")===0?"\u{1F5A5}":"\u{1F4BB}";}
-/* rip the box open right in the store: weighted roll — expensive = rare */
+/* unopened box counters — you open them YOURSELF in \u{1F381} Unbox */
+const TABLET={unopened:0},COMPUTER={unopened:0};
+const _TABSET=new Set(TABLET_MODELS.map(M=>M.m)),_PCSET=new Set(COMPUTER_MODELS.map(M=>M.m));
+function isTabletM(m){return _TABSET.has(m);}
+function isComputerM(m){return _PCSET.has(m);}
+/* weighted roll — expensive = rare */
 function rollGadget(list){
   let tot=0;
   const ws=list.map(M=>{const w=Math.pow(0.5,phoneValue({tier:M.tier,color:""})/1500);tot+=w;return w;});
@@ -711,6 +716,8 @@ function rollGadget(list){
   if(color==="Rainbow")pushNews(gadgetEmoji(M.m)+"\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+" — worth $"+fmtMoney(phoneValue(gd))+"!");
   return gd;
 }
+function rollTablet(){TABLET.unopened--;return rollGadget(TABLET_MODELS);}
+function rollComputer(){COMPUTER.unopened--;return rollGadget(COMPUTER_MODELS);}
 /* placed consoles at your home: walk up, press T, pick a game! */
 const GCONS=[];
 const GFI={it:null};   // side-channel: which furniture item is being built right now
@@ -1089,13 +1096,13 @@ $("cbBuy2").onclick=()=>{
   CONSOLE.unopened++;saveGame();   // console boxes are FREE too!
   $("cbMsg").textContent="\u{1F3AE} FREE console box grabbed! You have "+CONSOLE.unopened+" to unbox (\u{1F381} Unbox menu, \u{1F3AE} Consoles tab). Take another?";
 };
-$("cbBuy3").onclick=()=>{   // 📲 tablet surprise box: it opens right in the store!
-  const gd=rollGadget(TABLET_MODELS);saveGame();
-  $("cbMsg").textContent="\u{1F4F2}\u{1F389} Your FREE tablet box had a "+gd.color+" "+gd.m+" inside — worth $"+fmtMoney(phoneValue(gd))+"! (It's in \u{1F381} Unbox → \u{1F4F1} Phones — sell it at your market if you like.) Take another?";
+$("cbBuy3").onclick=()=>{   // 📲 tablet box — open it yourself in 🎁 Unbox!
+  TABLET.unopened++;saveGame();
+  $("cbMsg").textContent="\u{1F4F2} FREE tablet box grabbed! You have "+TABLET.unopened+" to open (\u{1F381} Unbox menu, \u{1F4F2} Tablets tab). Take another?";
 };
-$("cbBuy4").onclick=()=>{   // 💻 computer surprise box
-  const gd=rollGadget(COMPUTER_MODELS);saveGame();
-  $("cbMsg").textContent=gadgetEmoji(gd.m)+"\u{1F389} Your FREE computer box had a "+gd.color+" "+gd.m+" inside — worth $"+fmtMoney(phoneValue(gd))+"! (It's in \u{1F381} Unbox → \u{1F4F1} Phones — sell it at your market if you like.) Take another?";
+$("cbBuy4").onclick=()=>{   // 💻 computer box
+  COMPUTER.unopened++;saveGame();
+  $("cbMsg").textContent="\u{1F4BB} FREE computer box grabbed! You have "+COMPUTER.unopened+" to open (\u{1F381} Unbox menu, \u{1F4BB} Computers tab). Take another?";
 };
 $("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
@@ -1277,7 +1284,37 @@ function renderPhoneTab(){
     d.textContent="No phones yet — the newest Pro Max & Ultra models are the rarest pulls!";
     list.appendChild(d);
   }
-  chunkedList(list,PHONE.owned,ph=>{
+  chunkedList(list,PHONE.owned.filter(ph=>!isTabletM(ph.m)&&!isComputerM(ph.m)),ph=>{
+    const el=document.createElement("button");
+    el.className="dumpItem"+(ph.color==="Rainbow"?" glitter":"")+(HOLD.d===ph?" held":"");
+    el.innerHTML="<span class='swatch' style='background:"+ph.hex+"'></span>"
+      +(ph.color==="Rainbow"?"\u{1F308} RAINBOW ":ph.color+" ")+ph.m
+      +" <span style='color:var(--dim)'>$"+fmtMoney(phoneValue(ph))+"</span>"
+      +(HOLD.d===ph?" ✋ holding":"");
+    el.onclick=()=>holdPhone(ph);
+    return el;
+  });
+}
+/* the 📲 Tablets and 💻 Computers tabs — boxes from CoolBlue, opened HERE */
+function renderGadgetTab(pc){
+  const C=pc?COMPUTER:TABLET,one=pc?"computer":"tablet",em=pc?"\u{1F4BB}":"\u{1F4F2}";
+  $("dumpInfo").textContent=C.unopened
+    ?"You have "+C.unopened+" unopened "+one+" box"+(C.unopened>1?"es":"")+" — open one!"
+    :"No "+one+" boxes — grab them FREE at a \u{1F4F1} CoolBlue (one every ~500 m)!";
+  $("dumpOpen").textContent=em+" Open a "+one+" box!";
+  $("dumpOpenAll").textContent="\u{1F389} Open ALL "+one+" boxes!";
+  $("dumpOpen").style.display=C.unopened?"":"none";
+  $("dumpDisplay").style.display="none";
+  const owned=PHONE.owned.filter(ph=>(pc?isComputerM:isTabletM)(ph.m));
+  const list=$("dumpList");list.innerHTML="";
+  if(!owned.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent=pc?"No computers yet — the iMac ($4,000) and MacBook Pro 16″ ($4,500) are the jackpot pulls!"
+      :"No tablets yet — the iPad Pro 13″ ($2,400) is the jackpot pull!";
+    list.appendChild(d);
+  }
+  chunkedList(list,owned,ph=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(ph.color==="Rainbow"?" glitter":"")+(HOLD.d===ph?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+ph.hex+"'></span>"
@@ -1319,8 +1356,12 @@ function renderDump(){
   $("dumpTabB").classList.toggle("on",butter);
   $("dumpTabP").classList.toggle("on",SQTAB.v==="phone");
   $("dumpTabC").classList.toggle("on",SQTAB.v==="console");
+  $("dumpTabT").classList.toggle("on",SQTAB.v==="tablet");
+  $("dumpTabPC").classList.toggle("on",SQTAB.v==="computer");
   if(SQTAB.v==="phone"){renderPhoneTab();return;}
   if(SQTAB.v==="console"){renderConsoleTab();return;}
+  if(SQTAB.v==="tablet"){renderGadgetTab(false);return;}
+  if(SQTAB.v==="computer"){renderGadgetTab(true);return;}
   const C=butter?BUTTER:DUMP,one=butter?"butter squishy":"dumpling",many=butter?"butter squishies":"dumplings";
   $("dumpInfo").textContent=C.unopened
     ?"You have "+C.unopened+" unopened "+(C.unopened>1?many:one)+" — open one!"
@@ -1355,6 +1396,8 @@ $("dumpTabD").onclick=()=>{SQTAB.v="dump";renderDump();};
 $("dumpTabB").onclick=()=>{SQTAB.v="butter";renderDump();};
 $("dumpTabP").onclick=()=>{SQTAB.v="phone";renderDump();};
 $("dumpTabC").onclick=()=>{SQTAB.v="console";renderDump();};
+$("dumpTabT").onclick=()=>{SQTAB.v="tablet";renderDump();};
+$("dumpTabPC").onclick=()=>{SQTAB.v="computer";renderDump();};
 $("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 function rollDump(){
@@ -1396,6 +1439,16 @@ function rollButter(){
   return d;
 }
 $("dumpOpen").onclick=()=>{
+  if(SQTAB.v==="tablet"||SQTAB.v==="computer"){
+    const pc=SQTAB.v==="computer",C=pc?COMPUTER:TABLET;
+    if(!C.unopened)return;
+    const gd=pc?rollComputer():rollTablet();
+    const v=phoneValue(gd);
+    if(gd.color==="Rainbow")toast("\u{1F308}"+gadgetEmoji(gd.m)+" NO WAY — a RAINBOW "+gd.m+"!! ($"+fmtMoney(v)+")");
+    else if(v>=3500)toast("\u{1F929}"+gadgetEmoji(gd.m)+" JACKPOT — a "+gd.color+" "+gd.m+"! ($"+fmtMoney(v)+")");
+    else toast(gadgetEmoji(gd.m)+" You unboxed a "+gd.color+" "+gd.m+"! ($"+fmtMoney(v)+")");
+    renderDump();saveGame();return;
+  }
   if(SQTAB.v==="console"){
     if(!CONSOLE.unopened)return;
     const cs=rollConsole();
@@ -1434,12 +1487,13 @@ $("dumpOpen").onclick=()=>{
 let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
   if(OPENALL_BUSY)return;
-  const phone=SQTAB.v==="phone",butter=SQTAB.v==="butter",cons=SQTAB.v==="console";
-  const C=phone?PHONE:cons?CONSOLE:butter?BUTTER:DUMP;
-  const roll=phone?rollPhone:cons?rollConsole:butter?rollButter:rollDump;
-  const val=phone?phoneValue:cons?consoleValue:butter?butterValue:dumpValue;
-  const many=phone?"phone boxes":cons?"console boxes":butter?"butter squishies":"dumplings";
-  if(!C.unopened){toast("No unopened "+many+" — buy them at a \u{1F6D2} MEGA MART!");return;}
+  const phone=SQTAB.v==="phone",butter=SQTAB.v==="butter",cons=SQTAB.v==="console",
+        tab=SQTAB.v==="tablet",pc=SQTAB.v==="computer";
+  const C=phone?PHONE:cons?CONSOLE:tab?TABLET:pc?COMPUTER:butter?BUTTER:DUMP;
+  const roll=phone?rollPhone:cons?rollConsole:tab?rollTablet:pc?rollComputer:butter?rollButter:rollDump;
+  const val=(phone||tab||pc)?phoneValue:cons?consoleValue:butter?butterValue:dumpValue;
+  const many=phone?"phone boxes":cons?"console boxes":tab?"tablet boxes":pc?"computer boxes":butter?"butter squishies":"dumplings";
+  if(!C.unopened){toast("No unopened "+many+" — "+((phone||cons||tab||pc)?"grab them FREE at a \u{1F4F1} CoolBlue!":"buy them at a \u{1F6D2} MEGA MART!"));return;}
   OPENALL_BUSY=true;
   const total=C.unopened;
   let opened=0,glit=0,mega=0,best=null,bestVal=-1;
@@ -1453,12 +1507,51 @@ $("dumpOpenAll").onclick=()=>{
       if(v>bestVal){bestVal=v;best=d;}
     }
     if(C.unopened>0){
-      toast((phone?"\u{1F4F1}":cons?"\u{1F3AE}":butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
+      toast((phone?"\u{1F4F1}":cons?"\u{1F3AE}":tab?"\u{1F4F2}":pc?"\u{1F4BB}":butter?"\u{1F9C8}":"\u{1F95F}")+" Opening "+many+"… "+opened+" / "+total);
       setTimeout(step,0);
     }else{
       OPENALL_BUSY=false;
       toast("\u{1F389} You opened "+opened+" "+many+(glit?" ("+glit+" ✨ GLITTER!)":"")+(mega?" ("+mega+" \u{1F31F} MEGA!!)":"")
-        +" — best pull: "+((phone||cons)?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color)+" ($"+fmtMoney(bestVal)+")!");
+        +" — best pull: "+(best.m?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(best):"")+best.color)+" ($"+fmtMoney(bestVal)+")!");
+      renderDump();saveGame();
+    }
+  })();
+};
+/* 🎁🎉 OPEN ALL BOXES: rips open EVERY unopened box you own — dumplings,
+   butter squishies, phones, consoles, tablets AND computers — in one go */
+$("dumpOpenEvery").onclick=()=>{
+  if(OPENALL_BUSY)return;
+  const cats=[
+    {C:DUMP,roll:rollDump,val:dumpValue,em:"\u{1F95F}",n:"dumplings"},
+    {C:BUTTER,roll:rollButter,val:butterValue,em:"\u{1F9C8}",n:"butter squishies"},
+    {C:PHONE,roll:rollPhone,val:phoneValue,em:"\u{1F4F1}",n:"phones"},
+    {C:CONSOLE,roll:rollConsole,val:consoleValue,em:"\u{1F3AE}",n:"consoles"},
+    {C:TABLET,roll:rollTablet,val:phoneValue,em:"\u{1F4F2}",n:"tablets"},
+    {C:COMPUTER,roll:rollComputer,val:phoneValue,em:"\u{1F4BB}",n:"computers"}
+  ];
+  const total=cats.reduce((s,c)=>s+c.C.unopened,0);
+  if(!total){toast("\u{1F381} No unopened boxes ANYWHERE — get more at a \u{1F6D2} MEGA MART or \u{1F4F1} CoolBlue!");return;}
+  OPENALL_BUSY=true;
+  let opened=0,best=null,bestVal=-1,bestEm="";
+  (function step(){
+    let n=0;
+    while(n<1000){
+      const cat=cats.find(c=>c.C.unopened>0);
+      if(!cat)break;
+      while(cat.C.unopened>0&&n<1000){
+        const d=cat.roll();n++;opened++;
+        const v=cat.val(d);
+        if(v>bestVal){bestVal=v;best=d;bestEm=cat.em;}
+      }
+    }
+    if(cats.some(c=>c.C.unopened>0)){
+      toast("\u{1F381} Opening ALL boxes… "+opened+" / "+total);
+      setTimeout(step,0);
+    }else{
+      OPENALL_BUSY=false;
+      toast("\u{1F381}\u{1F389} ALL "+opened+" boxes opened! Best pull of everything: "+bestEm+" "
+        +(best.m?best.color+" "+best.m:(best.glitter?"✨ GLITTER ":"")+(best.size?butterSizeLabel(best):"")+best.color)
+        +" ($"+fmtMoney(bestVal)+")!");
       renderDump();saveGame();
     }
   })();
@@ -3306,9 +3399,26 @@ function profileSave(force){
   }catch(e){}
 }
 /* ---------- dumpling & butter buyers: sell your squishies for money ---------- */
-const SELL={sel:new Set(),kind:"dump"};   // kind: "dump", "butter", "phone" or "cons"
-function sellColl(){return SELL.kind==="butter"?BUTTER.owned:SELL.kind==="phone"?PHONE.owned:SELL.kind==="cons"?CONSOLE.owned:DUMP.owned;}
-function sellVal(d){return SELL.kind==="butter"?butterValue(d):SELL.kind==="phone"?phoneValue(d):SELL.kind==="cons"?consoleValue(d):dumpValue(d);}
+const SELL={sel:new Set(),kind:"dump"};   // kind: "dump", "butter", "phone", "cons", "tab" or "pc"
+function sellGadKind(){return SELL.kind==="tab"||SELL.kind==="pc";}
+function sellColl(){return SELL.kind==="butter"?BUTTER.owned:(SELL.kind==="phone"||sellGadKind())?PHONE.owned:SELL.kind==="cons"?CONSOLE.owned:DUMP.owned;}
+function sellVal(d){return SELL.kind==="butter"?butterValue(d):(SELL.kind==="phone"||sellGadKind())?phoneValue(d):SELL.kind==="cons"?consoleValue(d):dumpValue(d);}
+function nearTabletBuyer(){
+  for(let i=tabletBuyers.length-1;i>=0;i--){
+    const b=tabletBuyers[i];
+    if(offScene(b.g)){tabletBuyers.splice(i,1);continue;}
+    if(Math.hypot(player.x-b.x,player.z-b.z)<7)return b;
+  }
+  return null;
+}
+function nearComputerBuyer(){
+  for(let i=computerBuyers.length-1;i>=0;i--){
+    const b=computerBuyers[i];
+    if(offScene(b.g)){computerBuyers.splice(i,1);continue;}
+    if(Math.hypot(player.x-b.x,player.z-b.z)<7)return b;
+  }
+  return null;
+}
 function nearConsoleBuyer(){
   for(let i=consoleBuyers.length-1;i>=0;i--){
     const b=consoleBuyers[i];
@@ -3387,8 +3497,12 @@ function phoneVarOpts(brand){
     :null;
 }
 function passFilt(d){
+  /* the tablet/computer buyers only take THEIR devices out of your collection */
+  if(SELL.kind==="tab"&&!isTabletM(d.m))return false;
+  if(SELL.kind==="pc"&&!isComputerM(d.m))return false;
+  if(SELL.kind==="phone"&&(isTabletM(d.m)||isComputerM(d.m)))return false;
   if(FILT.color&&d.color!==FILT.color)return false;
-  if(SELL.kind!=="phone"){   // phones have no glitter
+  if(SELL.kind!=="phone"&&!sellGadKind()){   // phones & gadgets have no glitter
     if(FILT.glit==="glitter"&&!d.glitter)return false;
     if(FILT.glit==="normal"&&d.glitter)return false;
   }
@@ -3406,7 +3520,7 @@ function selectShown(){SELL.sel=new Set(shownItems().map(o=>o.i));renderSell();}
 function renderSellChips(){
   const wrap=$("sellColors");wrap.innerHTML="";
   const opts=[["All colors",null,"#5b6b8c"],...DUMP_COLORS.map(c=>[c[0],c[0],c[1]]),["Rainbow","Rainbow",RAINBOW_CSS],["Gold","Gold","#ffd700"]];
-  if(SELL.kind==="phone"||SELL.kind==="cons")opts.push(["Black","Black","#1c1c1e"]);
+  if(SELL.kind==="phone"||SELL.kind==="cons"||sellGadKind())opts.push(["Black","Black","#1c1c1e"]);
   opts.forEach(([label,val,bg])=>{
     const b=document.createElement("button");
     b.innerHTML="<span class='swatch' style='background:"+bg+"'></span>"+label;
@@ -3417,9 +3531,9 @@ function renderSellChips(){
 }
 function segOn(ids,onId){ids.forEach(id=>$(id).classList.toggle("on",id===onId));}
 function renderSell(){
-  const coll=sellColl(),butter=SELL.kind==="butter",phone=SELL.kind==="phone",cons=SELL.kind==="cons";
+  const coll=sellColl(),butter=SELL.kind==="butter",phone=SELL.kind==="phone",cons=SELL.kind==="cons",gad=sellGadKind();
   $("sellSizeRow").style.display=butter?"":"none";
-  $("sellGlitRow").style.display=(phone||cons)?"none":"";
+  $("sellGlitRow").style.display=(phone||cons||gad)?"none":"";
   /* phones: filter by brand AND the exact version (Pro / Pro Max / + / Ultra / a) */
   $("sellBrandRow").style.display=phone?"":"none";
   if(cons){
@@ -3447,11 +3561,13 @@ function renderSell(){
   renderSellChips();
   const shown=shownItems();
   const list=$("sellList");list.innerHTML="";
-  if(!coll.length){
+  if(!coll.length||(gad&&!shown.length&&!FILT.color)){
     const d=document.createElement("div");
     d.style.cssText="color:var(--dim);font-size:13px";
     d.textContent=phone?"You have no phones — get boxes at a \u{1F4F1} CoolBlue and unbox them first!"
       :cons?"You have no consoles — get FREE boxes at a \u{1F4F1} CoolBlue and unbox them first!"
+      :SELL.kind==="tab"?"You have no tablets — grab FREE \u{1F4F2} tablet boxes at a CoolBlue and open them in \u{1F381} Unbox!"
+      :SELL.kind==="pc"?"You have no computers — grab FREE \u{1F4BB} computer boxes at a CoolBlue and open them in \u{1F381} Unbox!"
       :"You have no "+(butter?"butter squishies":"dumplings")+" — buy them at a MEGA MART and open them first!";
     list.appendChild(d);
   }else if(!shown.length){
@@ -3465,7 +3581,7 @@ function renderSell(){
     const b=document.createElement("button");
     b.className="dumpItem"+((d.glitter||d.color==="Rainbow")?" glitter":"")+(SELL.sel.has(i)?" sel":"");
     b.innerHTML=(SELL.sel.has(i)?"✅ ":"")+"<span class='swatch' style='background:"+d.hex+"'></span>"
-      +((phone||cons)?(d.color==="Rainbow"?"\u{1F308} RAINBOW ":d.color+" ")+d.m
+      +((phone||cons||gad)?(d.color==="Rainbow"?"\u{1F308} RAINBOW ":d.color+" ")+d.m
         :(d.glitter?"✨ GLITTER ":"")+(butter?butterSizeLabel(d):"")+d.color)
       +" — $"+fmtMoney(sellVal(d));
     b.onclick=()=>{SELL.sel.has(i)?SELL.sel.delete(i):SELL.sel.add(i);renderSell();};
@@ -3476,10 +3592,12 @@ function renderSell(){
   $("sellDo").textContent="\u{1F4B5} Sell "+cnt+" selected — $"+fmtMoney(tot);
 }
 function openSell(kind){
-  SELL.kind=kind==="butter"?"butter":kind==="phone"?"phone":kind==="cons"?"cons":"dump";
+  SELL.kind=kind==="butter"?"butter":kind==="phone"?"phone":kind==="cons"?"cons":kind==="tab"?"tab":kind==="pc"?"pc":"dump";
   $("sellTitle").textContent=SELL.kind==="butter"?"\u{1F9C8} Butter buyer — sell your butter squishies"
     :SELL.kind==="phone"?"\u{1F4F1} Phone buyer — sell your phones"
     :SELL.kind==="cons"?"\u{1F3AE} Console buyer — sell your consoles"
+    :SELL.kind==="tab"?"\u{1F4F2} Tablet buyer — sell your iPads & Galaxy Tabs"
+    :SELL.kind==="pc"?"\u{1F4BB} Computer buyer — sell your MacBooks, iMacs & Galaxy Books"
     :"\u{1F95F} Dumpling buyer — sell your dumplings";
   FILT.color=null;FILT.glit="all";FILT.size="all";FILT.brand="all";FILT.pvar="all";
   SELL.sel.clear();renderSell();$("sellModal").classList.add("open");
@@ -7554,6 +7672,7 @@ function saveGame(){
       bu:BUTTER.unopened,bo:BUTTER.owned,
       phu:PHONE.unopened,pho:PHONE.owned,
       cu:CONSOLE.unopened,co:CONSOLE.owned,
+      tbu:TABLET.unopened,pcu:COMPUTER.unopened,
       craft:CRAFT.designs,
       rooms:RENT.list,
       displays:[...DISPLAYS.entries()],
@@ -7573,6 +7692,7 @@ function loadGame(){
     BUTTER.unopened=d.bu||0;BUTTER.owned=Array.isArray(d.bo)?d.bo:[];
     PHONE.unopened=d.phu||0;PHONE.owned=Array.isArray(d.pho)?d.pho:[];
     CONSOLE.unopened=d.cu||0;CONSOLE.owned=Array.isArray(d.co)?d.co:[];
+    TABLET.unopened=d.tbu||0;COMPUTER.unopened=d.pcu||0;
     if(Array.isArray(d.craft))CRAFT.designs=d.craft.filter(x=>x&&typeof x.name==="string");
     RENT.list.push(...(Array.isArray(d.rooms)?d.rooms:[]));
     (d.displays||[]).forEach(([k,v])=>DISPLAYS.set(k,v));
@@ -7685,6 +7805,10 @@ function tryCall(){
     if(pby){openSell("phone");return;}
     const cnb=nearConsoleBuyer();
     if(cnb){openSell("cons");return;}
+    const tbb=nearTabletBuyer();
+    if(tbb){openSell("tab");return;}
+    const pcb=nearComputerBuyer();
+    if(pcb){openSell("pc");return;}
     /* CoolBlue: surprise phone boxes! */
     const cb2=nearCoolBlue();
     if(cb2){openCoolBlue();return;}
@@ -10335,7 +10459,9 @@ function updateHint(){
           else if(nearButterBuyer()){txt="\u{1F9C8} Butter buyer — press T to sell your butter squishies";showT=true;}
           else if(nearPhoneBuyer()){txt="\u{1F4F1} Phone buyer — press T to sell your phones";showT=true;}
           else if(nearConsoleBuyer()){txt="\u{1F3AE} Console buyer — press T to sell your consoles";showT=true;}
-          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T for FREE phone & \u{1F3AE} console boxes!";showT=true;}
+          else if(nearTabletBuyer()){txt="\u{1F4F2} Tablet buyer — press T to sell your iPads & Galaxy Tabs";showT=true;}
+          else if(nearComputerBuyer()){txt="\u{1F4BB} Computer buyer — press T to sell your MacBooks & iMacs";showT=true;}
+          else if(nearCoolBlue()){txt="\u{1F4F1} CoolBlue — press T for FREE phone, \u{1F3AE} console, \u{1F4F2} tablet & \u{1F4BB} computer boxes!";showT=true;}
           else{
             const mk=nearMarketPlot();
             if(mk){
@@ -12600,7 +12726,9 @@ const UPDATE_PAGES=[
 <h4>\u{1F4F2}\u{1F4BB} COOLBLUE: TABLET & COMPUTER BOXES — ALL FREE</h4><ul>
 <li>Two NEW surprise boxes at every CoolBlue, each with its own button: the <b>\u{1F4F2} TABLET box</b> (iPad, iPad mini, iPad Air, iPad Pro 11″/13″, Samsung Galaxy Tab A9 / S9 / S10 Ultra) and the <b>\u{1F4BB} COMPUTER box</b> (MacBook Neo / Air / Pro 14″ / Pro 16″, iMac, Mac mini, Samsung Galaxy Book4 &amp; Book4 Ultra). Both FREE — and they rip open right there in the store!</li>
 <li>You never pick the model — the box decides. Cheap ones are common, the expensive ones are the jackpot: an <b>iMac is worth $4,000</b>, a <b>Mac mini $2,000</b>, a MacBook Pro 16″ even $4,500!</li>
-<li>Random colors — \u{1F308} rainbow is the rarest and worth 4x. They land in \u{1F381} Unbox → \u{1F4F1} Phones with your other devices: hold them, sell them to phone buyers, or sell them at your own MARKETING PLOT.</li></ul>
+<li>Random colors — \u{1F308} rainbow is the rarest and worth 4x. You open the boxes YOURSELF in \u{1F381} Unbox, in two brand-new tabs: <b>\u{1F4F2} Tablets</b> and <b>\u{1F4BB} Computers</b> — each with its own "Open a box" and "Open ALL" buttons.</li>
+<li>New \u{1F381}\u{1F389} <b>OPEN ALL BOXES</b> button in the Unbox menu: one tap opens EVERY unopened box you own — dumplings, butter squishies, phones, consoles, tablets AND computers — and tells you your best pull of everything.</li>
+<li>New buyers at the roadside every ~500 m: the purple <b>\u{1F4F2} TABLET BUYER</b> and the white <b>\u{1F4BB} COMPUTER BUYER</b> — press T to sell your iPads, Galaxy Tabs, MacBooks, iMacs, Mac minis &amp; Galaxy Books for their real worth (the phone buyer sticks to phones now). You can also hold them or sell them at your own MARKETING PLOT.</li></ul>
 <h4>\u{1F9F0} CREATED ITEMS: YOU'RE IN CHARGE</h4><ul>
 <li>Created items <b>don't activate by themselves anymore</b>: every copy you create (or buy at a market) waits as stock. Nothing happens until YOU press <b>▶️ USE</b> (or the ▶️ Do button) — and food only goes into your backpack when you \u{1F392} pack it yourself.</li></ul>`}
 ];
