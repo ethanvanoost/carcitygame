@@ -666,45 +666,50 @@ function rollConsole(){
   if(color==="Rainbow")pushNews("\u{1F3AE}\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+"!");
   return cs;
 }
-/* ---------- 💻 TABLETS & COMPUTERS: CoolBlue hands these out FREE too ----------
-   No surprise box here — you pick EXACTLY the one you want. They join your
-   device collection (Unbox → 📱 Phones tab), so you can hold them, sell them
-   to phone buyers or put them on your market tables like any other device. */
-const GADGET_MODELS=[
-  {m:"iPad",br:"Apple",tier:6,yr:2022},
-  {m:"iPad mini",br:"Apple",tier:7,yr:2024},
-  {m:"iPad Air",br:"Apple",tier:9,yr:2025},
-  {m:"iPad Pro 11″",br:"Apple",tier:12,yr:2024},
-  {m:"iPad Pro 13″",br:"Apple",tier:14,yr:2024},
-  {m:"Samsung Galaxy Tab A9",br:"Samsung",tier:5,yr:2023},
-  {m:"Samsung Galaxy Tab S9",br:"Samsung",tier:10,yr:2023},
-  {m:"Samsung Galaxy Tab S10 Ultra",br:"Samsung",tier:13,yr:2024},
-  {m:"MacBook Neo",br:"Apple",tier:15,yr:2026},
-  {m:"MacBook Air",br:"Apple",tier:13,yr:2025},
-  {m:"MacBook Pro 14″",br:"Apple",tier:17,yr:2024},
-  {m:"MacBook Pro 16″",br:"Apple",tier:19,yr:2024},
-  {m:"iMac",br:"Apple",tier:16,yr:2024},
-  {m:"Mac mini",br:"Apple",tier:12,yr:2024},
-  {m:"Samsung Galaxy Book4 (Windows)",br:"Samsung",tier:12,yr:2024},
-  {m:"Samsung Galaxy Book4 Ultra (Windows)",br:"Samsung",tier:16,yr:2024}
+/* ---------- 📲💻 TABLET & COMPUTER SURPRISE BOXES at CoolBlue ----------
+   Two separate FREE boxes — one for tablets, one for computers. You never
+   pick the model: the box decides, cheap ones common, an iMac ($4,000!) is
+   the jackpot. Random colors (\u{1F308} rainbow rarest, worth 4x). They join
+   your device collection (Unbox → \u{1F4F1} Phones), so you can hold them,
+   sell them to phone buyers, or sell them at your own market. Each model's
+   real worth in $ is set below (tier is derived from it, so the market and
+   the buyers price them exactly right). */
+function gadgetDef(m,br,val,yr){return{m,br,tier:(val-200)/95,yr};}   // phoneValue(tier) === val
+const TABLET_MODELS=[
+  gadgetDef("iPad","Apple",1000,2022),
+  gadgetDef("iPad mini","Apple",800,2024),
+  gadgetDef("iPad Air","Apple",1300,2025),
+  gadgetDef("iPad Pro 11″","Apple",1800,2024),
+  gadgetDef("iPad Pro 13″","Apple",2400,2024),
+  gadgetDef("Samsung Galaxy Tab A9","Samsung",500,2023),
+  gadgetDef("Samsung Galaxy Tab S9","Samsung",1200,2023),
+  gadgetDef("Samsung Galaxy Tab S10 Ultra","Samsung",1800,2024)
+];
+const COMPUTER_MODELS=[
+  gadgetDef("MacBook Neo","Apple",3000,2026),
+  gadgetDef("MacBook Air","Apple",2200,2025),
+  gadgetDef("MacBook Pro 14″","Apple",3500,2024),
+  gadgetDef("MacBook Pro 16″","Apple",4500,2024),
+  gadgetDef("iMac","Apple",4000,2024),
+  gadgetDef("Mac mini","Apple",2000,2024),
+  gadgetDef("Samsung Galaxy Book4 (Windows)","Samsung",1500,2024),
+  gadgetDef("Samsung Galaxy Book4 Ultra (Windows)","Samsung",3000,2024)
 ];
 function gadgetEmoji(m){return (m.indexOf("iPad")===0||m.indexOf("Samsung Galaxy Tab")===0)?"\u{1F4F2}":m.indexOf("iMac")===0?"\u{1F5A5}":"\u{1F4BB}";}
-function openGadgetShop(){
-  $("cbModal").classList.remove("open");
-  const opts=GADGET_MODELS.map((M,i)=>({label:gadgetEmoji(M.m)+" "+M.m+" — FREE! (worth $"+fmtMoney(phoneValue({tier:M.tier,color:""}))+")",value:i}));
-  opts.push({label:"❌ Cancel",value:"x"});
-  showDest("\u{1F4BB} CoolBlue TABLETS & COMPUTERS — pick one, they're ALL FREE!",opts,v=>{
-    if(typeof v!=="number")return;
-    const M=GADGET_MODELS[v];
-    let color,hex;
-    if(Math.random()<0.015){color="Rainbow";hex=RAINBOW_CSS;}
-    else{const c2=PHONE_COLORS[Math.floor(Math.random()*PHONE_COLORS.length)];color=c2[0];hex=c2[1];}
-    PHONE.owned.push({m:M.m,br:M.br,tier:M.tier,yr:M.yr,color,hex});
-    saveGame();
-    if(color==="Rainbow")pushNews("\u{1F4BB}\u{1F308} BREAKING: "+mpName()+" got a RAINBOW "+M.m+" at CoolBlue!");
-    toast(gadgetEmoji(M.m)+"\u{1F389} A "+color+" "+M.m+" is yours — FREE! Find it in \u{1F381} Unbox → \u{1F4F1} Phones: hold it, sell it, or put it on your market tables.");
-    openGadgetShop();   // the shop stays open so you can grab the whole line-up
-  });
+/* rip the box open right in the store: weighted roll — expensive = rare */
+function rollGadget(list){
+  let tot=0;
+  const ws=list.map(M=>{const w=Math.pow(0.5,phoneValue({tier:M.tier,color:""})/1500);tot+=w;return w;});
+  let r2=Math.random()*tot,mi=0;
+  for(;mi<ws.length-1&&r2>ws[mi];r2-=ws[mi],mi++);
+  const M=list[mi];
+  let color,hex;
+  if(Math.random()<0.015){color="Rainbow";hex=RAINBOW_CSS;}
+  else{const c2=PHONE_COLORS[Math.floor(Math.random()*PHONE_COLORS.length)];color=c2[0];hex=c2[1];}
+  const gd={m:M.m,br:M.br,tier:M.tier,yr:M.yr,color,hex};
+  PHONE.owned.push(gd);
+  if(color==="Rainbow")pushNews(gadgetEmoji(M.m)+"\u{1F308} BREAKING: "+mpName()+" unboxed a RAINBOW "+M.m+" — worth $"+fmtMoney(phoneValue(gd))+"!");
+  return gd;
 }
 /* placed consoles at your home: walk up, press T, pick a game! */
 const GCONS=[];
@@ -1084,7 +1089,14 @@ $("cbBuy2").onclick=()=>{
   CONSOLE.unopened++;saveGame();   // console boxes are FREE too!
   $("cbMsg").textContent="\u{1F3AE} FREE console box grabbed! You have "+CONSOLE.unopened+" to unbox (\u{1F381} Unbox menu, \u{1F3AE} Consoles tab). Take another?";
 };
-$("cbBuy3").onclick=()=>openGadgetShop();
+$("cbBuy3").onclick=()=>{   // 📲 tablet surprise box: it opens right in the store!
+  const gd=rollGadget(TABLET_MODELS);saveGame();
+  $("cbMsg").textContent="\u{1F4F2}\u{1F389} Your FREE tablet box had a "+gd.color+" "+gd.m+" inside — worth $"+fmtMoney(phoneValue(gd))+"! (It's in \u{1F381} Unbox → \u{1F4F1} Phones — sell it at your market if you like.) Take another?";
+};
+$("cbBuy4").onclick=()=>{   // 💻 computer surprise box
+  const gd=rollGadget(COMPUTER_MODELS);saveGame();
+  $("cbMsg").textContent=gadgetEmoji(gd.m)+"\u{1F389} Your FREE computer box had a "+gd.color+" "+gd.m+" inside — worth $"+fmtMoney(phoneValue(gd))+"! (It's in \u{1F381} Unbox → \u{1F4F1} Phones — sell it at your market if you like.) Take another?";
+};
 $("cbClose").onclick=()=>$("cbModal").classList.remove("open");
 /* little white stars sprinkled on every glitter dumpling */
 const _starGeo=new THREE.OctahedronGeometry(1,0);
@@ -12585,9 +12597,10 @@ const UPDATE_PAGES=[
 <li>New <b>\u{1F381} TIMED BONUS</b>: put 10 / 25 / 50 / 75% OFF on a deal for 1 hour, 6 hours, <b>1 real day</b>, 3 days or a week — REAL time, it keeps counting while you sleep. Buyers see the discount and a countdown on the price signs, and pay the bonus price automatically. When it runs out, the price snaps back.</li></ul>
 <h4>\u{1F4FC} YOUR OWN TV CHANNEL</h4><ul>
 <li>Every TV has a new <b>Channel 6 — MY VIDEOS</b>: upload an MP4 straight from your computer and it plays on every TV in the game, looping until you change channels. (The video stays on YOUR computer — nothing is uploaded anywhere.)</li></ul>
-<h4>\u{1F4BB} COOLBLUE: TABLETS & COMPUTERS — ALL FREE</h4><ul>
-<li>New in every CoolBlue: <b>\u{1F4BB} Tablets &amp; computers</b> — and you don't get a surprise box, you PICK the exact one: <b>iPad, iPad mini, iPad Air, iPad Pro 11″/13″</b>, <b>Samsung Galaxy Tab A9 / S9 / S10 Ultra</b>, <b>MacBook Neo / Air / Pro 14″ / Pro 16″</b>, <b>iMac</b>, <b>Mac mini</b> and the <b>Samsung Galaxy Book4 (Windows)</b> laptops. ALL FREE!</li>
-<li>They land in \u{1F381} Unbox → \u{1F4F1} Phones with the rest of your devices: hold them, sell them to phone buyers, or put them on your market tables. Random colors — \u{1F308} rainbow is the rarest and worth 4x!</li></ul>
+<h4>\u{1F4F2}\u{1F4BB} COOLBLUE: TABLET & COMPUTER BOXES — ALL FREE</h4><ul>
+<li>Two NEW surprise boxes at every CoolBlue, each with its own button: the <b>\u{1F4F2} TABLET box</b> (iPad, iPad mini, iPad Air, iPad Pro 11″/13″, Samsung Galaxy Tab A9 / S9 / S10 Ultra) and the <b>\u{1F4BB} COMPUTER box</b> (MacBook Neo / Air / Pro 14″ / Pro 16″, iMac, Mac mini, Samsung Galaxy Book4 &amp; Book4 Ultra). Both FREE — and they rip open right there in the store!</li>
+<li>You never pick the model — the box decides. Cheap ones are common, the expensive ones are the jackpot: an <b>iMac is worth $4,000</b>, a <b>Mac mini $2,000</b>, a MacBook Pro 16″ even $4,500!</li>
+<li>Random colors — \u{1F308} rainbow is the rarest and worth 4x. They land in \u{1F381} Unbox → \u{1F4F1} Phones with your other devices: hold them, sell them to phone buyers, or sell them at your own MARKETING PLOT.</li></ul>
 <h4>\u{1F9F0} CREATED ITEMS: YOU'RE IN CHARGE</h4><ul>
 <li>Created items <b>don't activate by themselves anymore</b>: every copy you create (or buy at a market) waits as stock. Nothing happens until YOU press <b>▶️ USE</b> (or the ▶️ Do button) — and food only goes into your backpack when you \u{1F392} pack it yourself.</li></ul>`}
 ];
