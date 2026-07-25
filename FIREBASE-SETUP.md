@@ -328,7 +328,7 @@ upgrades itself** — you only need a normal Google account (a Gmail login works
 
 5. Go to the **Data** tab and copy the database URL shown at the top. It looks like:
    `https://vc4-servers-default-rtdb.europe-west1.firebasedatabase.app`
-6. Open `js/game.js`, find this line near the "servers tab" comment:
+6. Open `js/game-worlds.js` (the game code is split into js/game-*.js parts), find this line near the "servers tab" comment:
 
    ```js
    const SERVER_API="https://vc4-servers.YOUR-PROJECT.firebasedatabase.app";
