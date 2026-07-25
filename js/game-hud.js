@@ -260,6 +260,10 @@ function drawMap(){
         if(ps)dot(ps.x,ps.z,"#3fa2ff",4);
         const cbs2=consoleBuyerSpot(i,j);
         if(cbs2)dot(cbs2.x,cbs2.z,"#8ac926",4);
+        const tbs=tabletBuyerSpot(i,j);
+        if(tbs)dot(tbs.x,tbs.z,"#9b5de5",4);
+        const pcs=computerBuyerSpot(i,j);
+        if(pcs)dot(pcs.x,pcs.z,"#e8e8ec",4);
       }
     }
     /* gas stations (zoom in a bit) */
@@ -705,6 +709,14 @@ function mapEntries(q){
     ["\u{1F3AE} Nearest CONSOLE buyer",()=>{
       switchWorld("earth");
       goNearest("\u{1F3AE} Nearest console buyer",nearestSpot(consoleBuyerSpot,DBSP,120,280,7),0,4);
+    }],
+    ["\u{1F4F2} Nearest TABLET buyer",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F4F2} Nearest tablet buyer",nearestSpot(tabletBuyerSpot,DBSP,490,90,7),0,4);
+    }],
+    ["\u{1F4BB} Nearest COMPUTER buyer",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F4BB} Nearest computer buyer",nearestSpot(computerBuyerSpot,DBSP,230,610,7),0,4);
     }],
     ["\u{1F3EA} Nearest MARKETING PLOT",()=>{
       switchWorld("earth");

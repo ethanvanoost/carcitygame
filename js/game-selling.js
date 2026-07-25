@@ -82,6 +82,28 @@ function consBrandPass(m,brand){
   if(brand==="nin")return m.indexOf("Nintendo")===0;
   return true;
 }
+/* shared tablet/computer filters: pick EXACTLY the kind — iPad vs Galaxy Tab,
+   MacBook vs iMac/Mac mini vs Galaxy Book (used by the buyers AND the market picker) */
+function gadBrandPass(m,brand){
+  m=m||"";
+  if(brand==="ipad")return m.indexOf("iPad")===0;
+  if(brand==="stab")return m.indexOf("Samsung Galaxy Tab")===0;
+  if(brand==="mb")return m.indexOf("MacBook")===0;
+  if(brand==="mac")return m==="iMac"||m==="Mac mini";
+  if(brand==="sbook")return m.indexOf("Samsung Galaxy Book")===0;
+  return true;
+}
+function gadBrandRow(wrap,pc,cur,setFn){
+  wrap.style.display="";wrap.innerHTML="";
+  (pc?[["all","All computers"],["mb","\u{1F34E} MacBook"],["mac","\u{1F5A5} iMac & Mac mini"],["sbook","Samsung Galaxy Book"]]
+     :[["all","All tablets"],["ipad","\u{1F34E} iPad"],["stab","Samsung Galaxy Tab"]]).forEach(([v,l])=>{
+    const b=document.createElement("button");
+    b.textContent=l;
+    if(cur===v)b.className="on";
+    b.onclick=()=>setFn(v);
+    wrap.appendChild(b);
+  });
+}
 function consBrandRow(wrap,cur,setFn){
   wrap.style.display="";wrap.innerHTML="";
   [["all","All consoles"],["ps","\u{1F3AE} PlayStation"],["xbox","Xbox"],["nin","Nintendo"]].forEach(([v,l])=>{
@@ -111,6 +133,7 @@ function passFilt(d){
   if(SELL.kind==="butter"&&FILT.size!=="all"&&(d.size||"norm")!==FILT.size)return false;
   if(SELL.kind==="phone"&&!phoneFiltPass(d.m,FILT.brand,FILT.pvar))return false;
   if(SELL.kind==="cons"&&!consBrandPass(d.m,FILT.brand))return false;
+  if(sellGadKind()&&!gadBrandPass(d.m,FILT.brand))return false;
   return true;
 }
 function shownItems(){
@@ -141,6 +164,9 @@ function renderSell(){
   if(cons){
     /* consoles: filter by TYPE (PlayStation / Xbox / Nintendo) + the color chips */
     consBrandRow($("sellVarRow"),FILT.brand,v=>{FILT.brand=v;selectShown();});
+  }else if(gad){
+    /* tablets & computers: filter by KIND — iPad / Galaxy Tab, MacBook / iMac / Galaxy Book */
+    gadBrandRow($("sellVarRow"),SELL.kind==="pc",FILT.brand,v=>{FILT.brand=v;selectShown();});
   }
   if(phone){
     segOn(["fBrAll","fBrI","fBrP","fBrS","fBrA"],
@@ -157,7 +183,7 @@ function renderSell(){
         vw.appendChild(b);
       });
     }else vw.style.display="none";
-  }else if(!cons)$("sellVarRow").style.display="none";
+  }else if(!cons&&!gad)$("sellVarRow").style.display="none";
   segOn(["fGlitAll","fGlit","fNorm"],FILT.glit==="glitter"?"fGlit":FILT.glit==="normal"?"fNorm":"fGlitAll");
   segOn(["fSzAll","fSzNorm","fSzMed","fSzMega"],FILT.size==="norm"?"fSzNorm":FILT.size==="med"?"fSzMed":FILT.size==="mega"?"fSzMega":"fSzAll");
   renderSellChips();

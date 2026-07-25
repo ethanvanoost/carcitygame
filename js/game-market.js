@@ -250,6 +250,7 @@ async function syncMarket(id){
 setTimeout(()=>{
   RENT.list.forEach(rm=>{if(String(rm.id).startsWith("K:")&&MKT[rm.id])syncMarket(rm.id);});
 },15000);
+function soldPath(id){return "/sold/"+mpWorldKey()+"/"+fbKey(id);}
 async function fetchMarketFresh(id){
   const g2=await fbGet(claimPath(id));
   if(g2.ok&&g2.data&&!g2.data.free&&g2.data.t!==myToken()){
@@ -257,6 +258,22 @@ async function fetchMarketFresh(id){
     if(typeof g2.data.mkt==="string"){try{const q=JSON.parse(g2.data.mkt);if(q&&typeof q==="object")d=q;}catch(e){}}
     d.items=Array.isArray(d.items)?d.items:[];
     mktMigrate(d);
+    /* the SOLD ledger: purchases the owner hasn't processed yet get subtracted
+       from the stock everyone sees — so bought stock is GONE immediately, even
+       while the owner is offline (entries older than the owner's last sync are
+       already baked into the data, so only newer ones count) */
+    const baseTs=(typeof g2.data.ts==="number")?g2.data.ts:0;
+    try{
+      const sl=await fbGet(soldPath(id));
+      if(sl.ok&&sl.data)for(const sk of Object.keys(sl.data)){
+        const e=sl.data[sk];
+        if(!e||typeof e.n!=="number"||typeof e.ts!=="number"||e.ts<=baseTs)continue;
+        const seg=String(e.r||"").split(".");
+        const it2=d.items[parseInt(seg[0],10)];
+        const o2=it2&&it2.o&&it2.o[parseInt(seg[1],10)||0];
+        if(o2&&o2.ty)o2.q=Math.max(0,(o2.q||0)-Math.max(1,Math.floor(e.n)));
+      }
+    }catch(e){}
     MKTR.set(id,{n:g2.data.n||"a player",d});
     return MKTR.get(id);
   }
@@ -751,7 +768,9 @@ function mktPickType(p,kind,idx){
   showDest(kind==="t"?"\u{1FA91} Long table — what do you want to SELL?":"\u{1F5C4} Display case — what do you want to SHOW?",[
     {label:"\u{1F95F} A dumpling ("+DUMP.owned.length+" owned)",value:"dump"},
     {label:"\u{1F9C8} A butter squishy ("+BUTTER.owned.length+" owned)",value:"butter"},
-    {label:"\u{1F4F1} A phone ("+PHONE.owned.length+" owned)",value:"phone"},
+    {label:"\u{1F4F1} A phone ("+PHONE.owned.filter(ph=>!isTabletM(ph.m)&&!isComputerM(ph.m)).length+" owned)",value:"phone"},
+    {label:"\u{1F4F2} A tablet ("+PHONE.owned.filter(ph=>isTabletM(ph.m)).length+" owned)",value:"tab"},
+    {label:"\u{1F4BB} A computer ("+PHONE.owned.filter(ph=>isComputerM(ph.m)).length+" owned)",value:"pc"},
     {label:"\u{1F3AE} A game console ("+CONSOLE.owned.length+" owned)",value:"console"},
     {label:"\u{1F354} Food from your backpack ("+MCD.pack.length+" packed)",value:"food"},
     {label:"\u{1F9F0} An item YOU created ("+craftStockTotal()+" ready)",value:"custom"},
@@ -883,9 +902,23 @@ const MKP={p:null,kind:"t",ty:"dump",idx:0,gl:0,sz:"norm",brand:"all",pvar:"all"
 function mkpVariants(){
   const map=new Map();
   if(MKP.ty==="phone"){
-    /* phones: group by exact model + color, filtered by brand & version */
+    /* phones: group by exact model + color, filtered by brand & version
+       (tablets & computers have their OWN picker categories) */
     PHONE.owned.forEach(ph=>{
+      if(isTabletM(ph.m)||isComputerM(ph.m))return;
       if(!phoneFiltPass(ph.m,MKP.brand,MKP.pvar))return;
+      const k=ph.m+"|"+ph.color;
+      const e=map.get(k)||{lab:ph.color,hex:ph.hex,pm:ph.m,br:ph.br,tier:ph.tier,yr:ph.yr,n:0,ty:"phone"};
+      e.n++;map.set(k,e);
+    });
+    return map;
+  }
+  if(MKP.ty==="tab"||MKP.ty==="pc"){
+    /* tablets & computers: group by exact model + color, filtered by KIND */
+    const pc=MKP.ty==="pc";
+    PHONE.owned.forEach(ph=>{
+      if(!(pc?isComputerM:isTabletM)(ph.m))return;
+      if(!gadBrandPass(ph.m,MKP.brand))return;
       const k=ph.m+"|"+ph.color;
       const e=map.get(k)||{lab:ph.color,hex:ph.hex,pm:ph.m,br:ph.br,tier:ph.tier,yr:ph.yr,n:0,ty:"phone"};
       e.n++;map.set(k,e);
@@ -922,14 +955,17 @@ function mkpWorth(g2){
   return 0;
 }
 function renderMkp(){
-  const butter=MKP.ty==="butter",phone=MKP.ty==="phone",cons=MKP.ty==="console";
+  const butter=MKP.ty==="butter",phone=MKP.ty==="phone",cons=MKP.ty==="console",gad=MKP.ty==="tab"||MKP.ty==="pc";
   $("mkpTitle").textContent=phone?"\u{1F4F1} Pick your phone"
     :cons?"\u{1F3AE} Pick your console"
+    :MKP.ty==="tab"?"\u{1F4F2} Pick your tablet"
+    :MKP.ty==="pc"?"\u{1F4BB} Pick your computer"
     :(butter?"\u{1F9C8}":"\u{1F95F}")+" Pick your "+(butter?"butter squishy":"dumpling");
-  $("mkpGlitRow").style.display=(phone||cons)?"none":"";
+  $("mkpGlitRow").style.display=(phone||cons||gad)?"none":"";
   $("mkpSizeRow").style.display=butter?"":"none";
   $("mkpBrandRow").style.display=phone?"":"none";
   if(cons)consBrandRow($("mkpVarRow"),MKP.brand,v=>{MKP.brand=v;MKP.color=null;renderMkp();});
+  else if(gad)gadBrandRow($("mkpVarRow"),MKP.ty==="pc",MKP.brand,v=>{MKP.brand=v;MKP.color=null;renderMkp();});
   $("mkpGlitOn").classList.toggle("on",MKP.gl===1);
   $("mkpGlitOff").classList.toggle("on",MKP.gl===0);
   $("mkpSzN").classList.toggle("on",MKP.sz==="norm");
@@ -949,7 +985,7 @@ function renderMkp(){
         vw.appendChild(b);
       });
     }else vw.style.display="none";
-  }else if(!cons)$("mkpVarRow").style.display="none";
+  }else if(!cons&&!gad)$("mkpVarRow").style.display="none";
   const vars=mkpVariants();
   if(MKP.color&&!vars.has(MKP.color))MKP.color=null;   // that combo ran out — unpick it
   const wrap=$("mkpColors");wrap.innerHTML="";
@@ -962,7 +998,7 @@ function renderMkp(){
   [...vars.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,24).forEach(([key,g2])=>{
     const b=document.createElement("button");
     b.innerHTML="<span class='swatch' style='background:"+g2.hex+"'></span>"
-      +((phone||cons)?(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm:g2.lab)+" ("+g2.n+")"
+      +((phone||cons||gad)?(g2.lab==="Rainbow"?"\u{1F308} RAINBOW ":g2.lab+" ")+g2.pm:g2.lab)+" ("+g2.n+")"
       +" <span style='color:var(--acc2)'>$"+fmtMoney(mkpWorth(g2))+"</span>";
     if(MKP.color===key)b.style.cssText="border-color:var(--acc2);color:var(--acc2);font-weight:700";
     b.onclick=()=>{MKP.color=key;renderMkp();};
@@ -971,7 +1007,7 @@ function renderMkp(){
   const sel=MKP.color?vars.get(MKP.color):null;
   $("mkpCount").textContent=sel
     ?"Your pick: "+mktItemName(sel)+" — you have "+sel.n+", worth $"+fmtMoney(mkpWorth(sel))+" each"
-    :"\u{1F446} Now pick "+(phone?"a phone!":cons?"a console!":"a color!");
+    :"\u{1F446} Now pick "+(phone?"a phone!":cons?"a console!":MKP.ty==="tab"?"a tablet!":MKP.ty==="pc"?"a computer!":"a color!");
 }
 function openMktPicker(p,kind,ty,idx){
   MKP.p=p;MKP.kind=kind;MKP.ty=ty;MKP.idx=idx;MKP.gl=0;MKP.sz="norm";MKP.brand="all";MKP.pvar="all";MKP.color=null;
@@ -993,7 +1029,8 @@ $("mkpOk").onclick=()=>{
   const grp=MKP.color?mkpVariants().get(MKP.color):null;
   if(!grp||!grp.n){toast("\u{1F446} Pick a color first — with boxes you actually own!");return;}
   $("mktPickModal").classList.remove("open");
-  mktApplyPick(MKP.p,MKP.kind,MKP.idx,MKP.ty,grp);
+  /* tablets & computers live in the phone/device collection — the offer type stays "phone" */
+  mktApplyPick(MKP.p,MKP.kind,MKP.idx,(MKP.ty==="tab"||MKP.ty==="pc")?"phone":MKP.ty,grp);
 };
 /* the STOCK THE TABLE window: amount, price and the <field> + <field> FREE bonus */
 const MKTM={p:null,idx:0,ty:null,grp:null};
@@ -1071,6 +1108,10 @@ function mktBuyFrom(p,rm,ref){
     const ok=await sendMoney(owner,total,{d:("MKT|"+p.id+"|"+ref+"|"+(n+free)).slice(0,80)},true);
     if(!ok)return;
     o.q-=n+free;
+    /* record it in the SOLD ledger too — the 5-second live refresh (and every
+       other player) now sees the stock really GONE, not magically back */
+    fbPut(soldPath(p.id)+"/s"+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36),
+      {r:String(ref).slice(0,20),n:n+free,ts:Date.now()});
     mktGiveGoods(o,n+free);
     renderMarket(p);
     toast("\u{1F6D2}\u{1F389} You bought "+n+(free?" (+"+free+" FREE!)":"")+"× "+mktItemName(o)+" for $"+fmtMoney(total)+" — "+owner+" got your money!");

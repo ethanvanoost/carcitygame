@@ -108,6 +108,21 @@
         }
       }
     },
+    "sold": {
+      "$world": {
+        "$prop": {
+          ".read": true,
+          "$id": {
+            ".write": "!data.exists() || !newData.exists()",
+            ".validate": "newData.hasChildren(['r','n','ts'])",
+            "r": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "n": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 9999" },
+            "ts": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
     "shopdesigns": {
       "$name": {
         ".read": true,

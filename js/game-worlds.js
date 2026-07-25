@@ -657,7 +657,20 @@ async function checkPayments(){
         const off=pit&&pit.o&&pit.o[parseInt(seg[1],10)||0];
         if(off&&off.ty){
           off.q=Math.max(0,(off.q||0)-n2);
+          const cutoff=Date.now();
           saveMkt();syncMarket(mid);
+          /* the sale is baked into the synced data now — clean the consumed
+             SOLD-ledger entries so they don't get subtracted twice */
+          (async()=>{
+            try{
+              const sp="/sold/"+mpWorldKey()+"/"+fbKey(mid);
+              const sl=await fbGet(sp);
+              if(sl.ok&&sl.data)for(const sk of Object.keys(sl.data)){
+                const e=sl.data[sk];
+                if(e&&typeof e.ts==="number"&&e.ts<=cutoff)fbPut(sp+"/"+sk,null);
+              }
+            }catch(e){}
+          })();
           const mp2=marketPlots.find(q=>q.id===mid);
           if(mp2)renderMarket(mp2);
           toast("\u{1F3EA}\u{1F4B0} "+(p.from||"A player")+" bought "+n2+"× "+mktItemName(off)+" at your market — $"+fmtMoney(Math.floor(p.amt))+" for you!");
