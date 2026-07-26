@@ -897,7 +897,7 @@ $("dumpOpen").onclick=()=>{
   else toast(glitter?"✨\u{1F95F} WOW — a RARE GLITTER "+color+" dumpling!!":"\u{1F95F} You got a "+color+" dumpling!");
   renderDump();saveGame();
 };
-/* open EVERY unopened dumpling at once — in batches of 1000 so the page
+/* open EVERY unopened dumpling at once — in batches of 100 so the page
    never freezes, with one big summary at the end */
 let OPENALL_BUSY=false;
 $("dumpOpenAll").onclick=()=>{
@@ -914,7 +914,7 @@ $("dumpOpenAll").onclick=()=>{
   let opened=0,glit=0,mega=0,best=null,bestVal=-1;
   (function step(){
     let n=0;
-    while(C.unopened>0&&n<1000){
+    while(C.unopened>0&&n<100){
       const d=roll();n++;opened++;
       if(d.glitter)glit++;
       if(d.size==="mega")mega++;
@@ -950,10 +950,10 @@ $("dumpOpenEvery").onclick=()=>{
   let opened=0,best=null,bestVal=-1,bestEm="";
   (function step(){
     let n=0;
-    while(n<1000){
+    while(n<100){
       const cat=cats.find(c=>c.C.unopened>0);
       if(!cat)break;
-      while(cat.C.unopened>0&&n<1000){
+      while(cat.C.unopened>0&&n<100){
         const d=cat.roll();n++;opened++;
         const v=cat.val(d);
         if(v>bestVal){bestVal=v;best=d;bestEm=cat.em;}
