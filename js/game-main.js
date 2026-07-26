@@ -609,7 +609,12 @@ const UPDATE_PAGES=[
 <li>The market stand picker got the same upgrade: <b>\u{1F4F2} A tablet</b> and <b>\u{1F4BB} A computer</b> are their own categories now with the same kind filters — no more digging through your phones.</li>
 <li>\u{1F41B} FIXED: <b>market stock never went down</b> for buyers when the seller was offline — the shelves magically refilled every 5 seconds. Purchases now land in a shared SOLD ledger, so bought stock is GONE instantly for everyone, and the owner's stock count catches up the moment they collect the payment. ⚠️ Server owners: publish the updated firebase-rules.json (new "sold" section, also in FIREBASE-SETUP.md).</li></ul>
 <h4>\u{1F9F0} CREATED ITEMS: YOU'RE IN CHARGE</h4><ul>
-<li>Created items <b>don't activate by themselves anymore</b>: every copy you create (or buy at a market) waits as stock. Nothing happens until YOU press <b>▶️ USE</b> (or the ▶️ Do button) — and food only goes into your backpack when you \u{1F392} pack it yourself.</li></ul>`}
+<li>Created items <b>don't activate by themselves anymore</b>: every copy you create (or buy at a market) waits as stock. Nothing happens until YOU press <b>▶️ USE</b> (or the ▶️ Do button) — and food only goes into your backpack when you \u{1F392} pack it yourself.</li></ul>
+<h4>\u{1F50E} v118: SEARCH EVERYTHING + THE ⭐ ALL TAB</h4><ul>
+<li>Every \u{1F381} Unbox tab has a <b>\u{1F50E} search bar</b> now — type "rainbow imac" or "glitter gold" and only the matching items show.</li>
+<li>New <b>⭐ All</b> tab in Unbox: your WHOLE collection — dumplings, butter squishies, phones, consoles, tablets AND computers — in one list, perfect for searching across everything.</li>
+<li>The <b>buyers got the same \u{1F50E} search bar</b>: at any dumpling / butter / phone / console / tablet / computer buyer, search an item and it gets selected for you — combine it with the filters!</li>
+<li>New \u{26A1} <b>Open 1000 at a time</b> button in the Unbox menu: like OPEN ALL BOXES but it rips through 1000 boxes per batch instead of 100 — way faster on huge piles, but you need a fast computer or it will crash.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

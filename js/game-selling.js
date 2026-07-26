@@ -55,7 +55,7 @@ function nearButterBuyer(){
 }
 /* filters COMBINE: a color AND glitter AND (at the butter buyer) a size —
    the list only shows what matches, and matching items get auto-selected */
-const FILT={color:null,glit:"all",size:"all",brand:"all",pvar:"all"};
+const FILT={color:null,glit:"all",size:"all",brand:"all",pvar:"all",q:""};
 /* shared phone filters: brand + exact version (used by the buyer AND the market picker) */
 function phoneFiltPass(m,brand,pvar){
   m=m||"";
@@ -134,7 +134,13 @@ function passFilt(d){
   if(SELL.kind==="phone"&&!phoneFiltPass(d.m,FILT.brand,FILT.pvar))return false;
   if(SELL.kind==="cons"&&!consBrandPass(d.m,FILT.brand))return false;
   if(sellGadKind()&&!gadBrandPass(d.m,FILT.brand))return false;
+  if(FILT.q&&!qMatch(FILT.q,sellSearchText(d)))return false;   // 🔎 the search bar
   return true;
+}
+/* what the 🔎 search bar matches against — color + model (or size for butter) */
+function sellSearchText(d){
+  if(d.m)return d.color+" "+d.m;
+  return (d.glitter?"glitter ":"")+(d.size?butterSizeLabel(d):"")+d.color;
 }
 function shownItems(){
   const out=[];
@@ -228,8 +234,10 @@ function openSell(kind){
     :SELL.kind==="pc"?"\u{1F4BB} Computer buyer — sell your MacBooks, iMacs & Galaxy Books"
     :"\u{1F95F} Dumpling buyer — sell your dumplings";
   FILT.color=null;FILT.glit="all";FILT.size="all";FILT.brand="all";FILT.pvar="all";
+  FILT.q="";$("sellSearch").value="";
   SELL.sel.clear();renderSell();$("sellModal").classList.add("open");
 }
+$("sellSearch").oninput=()=>{FILT.q=$("sellSearch").value.trim().toLowerCase();selectShown();};
 $("fBrAll").onclick=()=>{FILT.brand="all";FILT.pvar="all";selectShown();};
 $("fBrI").onclick=()=>{FILT.brand="iphone";FILT.pvar="all";selectShown();};
 $("fBrP").onclick=()=>{FILT.brand="pixel";FILT.pvar="all";selectShown();};

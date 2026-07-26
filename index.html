@@ -279,6 +279,7 @@
   <div class="box">
     <h2>&#127873; Unbox</h2>
     <div class="seg mini">
+      <button id="dumpTabAll">&#11088; All</button>
       <button id="dumpTabD" class="on">&#129375; Dumplings</button>
       <button id="dumpTabB">&#129480; Butter</button>
       <button id="dumpTabP">&#128241; Phones</button>
@@ -290,7 +291,9 @@
     <button class="btn warn" id="dumpOpen" style="margin-top:10px;width:100%">&#129375; Open a dumpling!</button>
     <button class="btn warn" id="dumpOpenAll" style="margin-top:6px;width:100%">&#127882; Open ALL dumplings!</button>
     <button class="btn warn" id="dumpOpenEvery" style="margin-top:6px;width:100%">&#127873;&#127882; OPEN ALL BOXES &mdash; everything at once!</button>
+    <button class="btn warn" id="dumpOpenTurbo" style="margin-top:6px;width:100%">&#9889; Open 1000 at a time (you need a fast computer or it will crash)</button>
     <div style="font-size:12px;color:var(--dim);margin-top:8px">Click one to hold it in your hands (click again to put it away).</div>
+    <input id="dumpSearch" maxlength="40" placeholder="&#128269; Search your items... (like &quot;rainbow imac&quot;)" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:8px">
     <div id="dumpList"></div>
     <button class="btn" id="dumpDisplay" style="margin-top:10px;width:100%">&#127984; Display your dumplings at your mansion</button>
     <button class="btn close" id="dumpClose">Close</button>
@@ -332,6 +335,7 @@
       <button id="fBrA">Galaxy A</button>
     </div>
     <div class="seg mini" id="sellVarRow" style="display:none"></div>
+    <input id="sellSearch" maxlength="40" placeholder="&#128269; Search an item... (like &quot;rainbow imac&quot;)" style="width:100%;background:#1a2233;border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;margin-top:8px">
     <div id="sellColors"></div>
     <div class="seg mini">
       <button id="selAll">&#9989; Select all shown</button>
@@ -607,24 +611,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<script src="js/core.js?v=117"></script>
-<script src="js/world.js?v=117"></script>
-<script src="js/vehicles.js?v=117"></script>
-<script src="js/game-input.js?v=117"></script>
-<script src="js/game-devices.js?v=117"></script>
-<script src="js/game-minecraft.js?v=117"></script>
-<script src="js/game-audio.js?v=117"></script>
-<script src="js/game-tv.js?v=117"></script>
-<script src="js/game-selling.js?v=117"></script>
-<script src="js/game-jobs.js?v=117"></script>
-<script src="js/game-market.js?v=117"></script>
-<script src="js/game-mansion.js?v=117"></script>
-<script src="js/game-worlds.js?v=117"></script>
-<script src="js/game-places.js?v=117"></script>
-<script src="js/game-physics.js?v=117"></script>
-<script src="js/game-hud.js?v=117"></script>
-<script src="js/game-extras.js?v=117"></script>
-<script src="js/game-settings.js?v=117"></script>
-<script src="js/game-main.js?v=117"></script>
+<script src="js/core.js?v=118"></script>
+<script src="js/world.js?v=118"></script>
+<script src="js/vehicles.js?v=118"></script>
+<script src="js/game-input.js?v=118"></script>
+<script src="js/game-devices.js?v=118"></script>
+<script src="js/game-minecraft.js?v=118"></script>
+<script src="js/game-audio.js?v=118"></script>
+<script src="js/game-tv.js?v=118"></script>
+<script src="js/game-selling.js?v=118"></script>
+<script src="js/game-jobs.js?v=118"></script>
+<script src="js/game-market.js?v=118"></script>
+<script src="js/game-mansion.js?v=118"></script>
+<script src="js/game-worlds.js?v=118"></script>
+<script src="js/game-places.js?v=118"></script>
+<script src="js/game-physics.js?v=118"></script>
+<script src="js/game-hud.js?v=118"></script>
+<script src="js/game-extras.js?v=118"></script>
+<script src="js/game-settings.js?v=118"></script>
+<script src="js/game-main.js?v=118"></script>
 </body>
 </html>

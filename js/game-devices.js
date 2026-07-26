@@ -684,6 +684,27 @@ function chunkedList(list,items,makeEl,chunk=1000){
   })();
 }
 const SQTAB={v:"dump"};   // which Unbox tab is open: dumplings, butter or phones
+/* 🔎 search — every word you type must appear somewhere in the item's label */
+function qMatch(q,label){
+  if(!q)return true;
+  label=label.toLowerCase();
+  return q.split(/\s+/).every(w=>label.indexOf(w)>=0);
+}
+function unboxQ(){return $("dumpSearch").value.trim().toLowerCase();}
+/* filter a tab's items by the search bar; shows a hint when nothing matches */
+function unboxFilter(list,arr,txt){
+  const q=unboxQ();
+  if(!q)return arr;
+  const out=arr.filter(d=>qMatch(q,txt(d)));
+  if(arr.length&&!out.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent="\u{1F50E} Nothing here matches “"+$("dumpSearch").value.trim()+"” — try the ⭐ All tab!";
+    list.appendChild(d);
+  }
+  return out;
+}
+function gadSearchText(d){return d.color+" "+d.m;}
 function renderPhoneTab(){
   $("dumpInfo").textContent=PHONE.unopened
     ?"You have "+PHONE.unopened+" unopened phone box"+(PHONE.unopened>1?"es":"")+" — unbox one!"
@@ -699,7 +720,7 @@ function renderPhoneTab(){
     d.textContent="No phones yet — the newest Pro Max & Ultra models are the rarest pulls!";
     list.appendChild(d);
   }
-  chunkedList(list,PHONE.owned.filter(ph=>!isTabletM(ph.m)&&!isComputerM(ph.m)),ph=>{
+  chunkedList(list,unboxFilter(list,PHONE.owned.filter(ph=>!isTabletM(ph.m)&&!isComputerM(ph.m)),gadSearchText),ph=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(ph.color==="Rainbow"?" glitter":"")+(HOLD.d===ph?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+ph.hex+"'></span>"
@@ -729,7 +750,7 @@ function renderGadgetTab(pc){
       :"No tablets yet — the iPad Pro 13″ ($2,400) is the jackpot pull!";
     list.appendChild(d);
   }
-  chunkedList(list,owned,ph=>{
+  chunkedList(list,unboxFilter(list,owned,gadSearchText),ph=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(ph.color==="Rainbow"?" glitter":"")+(HOLD.d===ph?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+ph.hex+"'></span>"
@@ -755,7 +776,7 @@ function renderConsoleTab(){
     d.textContent="No consoles yet — place one at your home (mansion editor: \u{1F3AE} My console + TV) and PLAY!";
     list.appendChild(d);
   }
-  chunkedList(list,CONSOLE.owned,cs=>{
+  chunkedList(list,unboxFilter(list,CONSOLE.owned,gadSearchText),cs=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(cs.color==="Rainbow"?" glitter":"");
     el.innerHTML="<span class='swatch' style='background:"+cs.hex+"'></span>"
@@ -765,14 +786,51 @@ function renderConsoleTab(){
     return el;
   });
 }
+/* ⭐ the ALL tab: every category in ONE list — made for the 🔎 search bar */
+function renderAllTab(){
+  const totalUn=DUMP.unopened+BUTTER.unopened+PHONE.unopened+CONSOLE.unopened+TABLET.unopened+COMPUTER.unopened;
+  $("dumpInfo").textContent=totalUn
+    ?"You have "+totalUn+" unopened box"+(totalUn>1?"es":"")+" across all categories — OPEN ALL BOXES rips through every one!"
+    :"Everything you own in one list — type in the \u{1F50E} search bar to find any item!";
+  $("dumpOpen").style.display="none";
+  $("dumpOpenAll").style.display="none";
+  $("dumpDisplay").style.display="none";
+  const items=[];
+  DUMP.owned.forEach(d=>items.push({em:"\u{1F95F}",txt:(d.glitter?"✨ GLITTER ":"")+d.color+" dumpling",s:(d.glitter?"glitter ":"")+d.color+" dumpling",v:dumpValue(d),d,click:()=>holdDump(d)}));
+  BUTTER.owned.forEach(d=>items.push({em:"\u{1F9C8}",txt:(d.glitter?"✨ GLITTER ":"")+butterSizeLabel(d)+d.color+" butter squishy",s:(d.glitter?"glitter ":"")+butterSizeLabel(d)+d.color+" butter squishy",v:butterValue(d),d,click:()=>holdDump(d)}));
+  PHONE.owned.forEach(ph=>{
+    const em=isComputerM(ph.m)?gadgetEmoji(ph.m):isTabletM(ph.m)?"\u{1F4F2}":"\u{1F4F1}";
+    items.push({em,txt:(ph.color==="Rainbow"?"\u{1F308} RAINBOW ":ph.color+" ")+ph.m,s:ph.color+" "+ph.m,v:phoneValue(ph),d:ph,click:()=>holdPhone(ph)});
+  });
+  CONSOLE.owned.forEach(cs=>items.push({em:"\u{1F3AE}",txt:(cs.color==="Rainbow"?"\u{1F308} RAINBOW ":cs.color+" ")+cs.m,s:cs.color+" "+cs.m,v:consoleValue(cs),d:cs,
+    click:()=>toast("\u{1F3AE} "+cs.m+" ("+cs.yr+") — place it at your home with the mansion editor, or sell it at your market!")}));
+  const list=$("dumpList");list.innerHTML="";
+  if(!items.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px";
+    d.textContent="You own nothing yet — grab boxes at a \u{1F6D2} MEGA MART or \u{1F4F1} CoolBlue and open them!";
+    list.appendChild(d);
+  }
+  chunkedList(list,unboxFilter(list,items,o=>o.s),o=>{
+    const el=document.createElement("button");
+    el.className="dumpItem"+((o.d.glitter||o.d.color==="Rainbow")?" glitter":"")+(HOLD.d===o.d?" held":"");
+    el.innerHTML=o.em+" <span class='swatch' style='background:"+o.d.hex+"'></span>"+o.txt
+      +" <span style='color:var(--dim)'>$"+fmtMoney(o.v)+"</span>"+(HOLD.d===o.d?" ✋ holding":"");
+    el.onclick=o.click;
+    return el;
+  });
+}
 function renderDump(){
   const butter=SQTAB.v==="butter";
+  $("dumpTabAll").classList.toggle("on",SQTAB.v==="all");
+  $("dumpOpenAll").style.display="";
   $("dumpTabD").classList.toggle("on",SQTAB.v==="dump");
   $("dumpTabB").classList.toggle("on",butter);
   $("dumpTabP").classList.toggle("on",SQTAB.v==="phone");
   $("dumpTabC").classList.toggle("on",SQTAB.v==="console");
   $("dumpTabT").classList.toggle("on",SQTAB.v==="tablet");
   $("dumpTabPC").classList.toggle("on",SQTAB.v==="computer");
+  if(SQTAB.v==="all"){renderAllTab();return;}
   if(SQTAB.v==="phone"){renderPhoneTab();return;}
   if(SQTAB.v==="console"){renderConsoleTab();return;}
   if(SQTAB.v==="tablet"){renderGadgetTab(false);return;}
@@ -792,7 +850,7 @@ function renderDump(){
       :"Your collection is empty.";
     list.appendChild(d);
   }
-  chunkedList(list,C.owned,d=>{
+  chunkedList(list,unboxFilter(list,C.owned,d=>(d.glitter?"glitter ":"")+(butter?butterSizeLabel(d):"")+d.color+" "+one),d=>{
     const el=document.createElement("button");
     el.className="dumpItem"+(d.glitter?" glitter":"")+(HOLD.d===d?" held":"");
     el.innerHTML="<span class='swatch' style='background:"+d.hex+"'></span>"
@@ -807,13 +865,15 @@ function renderDump(){
   $("dumpDisplay").textContent=m&&DISPLAYS.has(m.id)?"\u{1F3F0} Remove the dumpling display":"\u{1F3F0} Display your dumplings at your mansion";
   $("dumpOpen").style.display=C.unopened?"":"none";
 }
+$("dumpTabAll").onclick=()=>{SQTAB.v="all";renderDump();};
+$("dumpSearch").oninput=()=>renderDump();
 $("dumpTabD").onclick=()=>{SQTAB.v="dump";renderDump();};
 $("dumpTabB").onclick=()=>{SQTAB.v="butter";renderDump();};
 $("dumpTabP").onclick=()=>{SQTAB.v="phone";renderDump();};
 $("dumpTabC").onclick=()=>{SQTAB.v="console";renderDump();};
 $("dumpTabT").onclick=()=>{SQTAB.v="tablet";renderDump();};
 $("dumpTabPC").onclick=()=>{SQTAB.v="computer";renderDump();};
-$("bDump").onclick=()=>{renderDump();$("dumpModal").classList.toggle("open");};
+$("bDump").onclick=()=>{$("dumpSearch").value="";renderDump();$("dumpModal").classList.toggle("open");};
 $("dumpClose").onclick=()=>$("dumpModal").classList.remove("open");
 function rollDump(){
   DUMP.unopened--;
@@ -933,8 +993,10 @@ $("dumpOpenAll").onclick=()=>{
   })();
 };
 /* 🎁🎉 OPEN ALL BOXES: rips open EVERY unopened box you own — dumplings,
-   butter squishies, phones, consoles, tablets AND computers — in one go */
-$("dumpOpenEvery").onclick=()=>{
+   butter squishies, phones, consoles, tablets AND computers — in one go.
+   batch = boxes per breath: 100 is safe everywhere, 1000 is TURBO mode
+   for fast computers (bigger batches block the page longer per step) */
+function openEveryBox(batch){
   if(OPENALL_BUSY)return;
   const cats=[
     {C:DUMP,roll:rollDump,val:dumpValue,em:"\u{1F95F}",n:"dumplings"},
@@ -950,10 +1012,10 @@ $("dumpOpenEvery").onclick=()=>{
   let opened=0,best=null,bestVal=-1,bestEm="";
   (function step(){
     let n=0;
-    while(n<100){
+    while(n<batch){
       const cat=cats.find(c=>c.C.unopened>0);
       if(!cat)break;
-      while(cat.C.unopened>0&&n<100){
+      while(cat.C.unopened>0&&n<batch){
         const d=cat.roll();n++;opened++;
         const v=cat.val(d);
         if(v>bestVal){bestVal=v;best=d;bestEm=cat.em;}
@@ -970,7 +1032,9 @@ $("dumpOpenEvery").onclick=()=>{
       renderDump();saveGame();
     }
   })();
-};
+}
+$("dumpOpenEvery").onclick=()=>openEveryBox(100);
+$("dumpOpenTurbo").onclick=()=>openEveryBox(1000);
 $("dumpDisplay").onclick=()=>{
   const m=nearMansion();
   if(!m){toast("\u{1F3F0} Go to your MEGA MANSION first — there's one every ~2 km (see the map)!");return;}
