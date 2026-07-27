@@ -1086,7 +1086,7 @@ function apartment(x,z,rand,parent,baseY){
   const esign=new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.5),shopSignMat("EXIT"));
   esign.position.set(ex,RY+1.9,ez+0.4);parent.add(esign);
   roomExits.push({g:parent,x:ex,z:ez,y:RY,id,outX:x-1,outZ:z+d/2+2,outY:baseY});
-  hotelDesks.push({g:parent,x:dx,z:dz+1,id,y:baseY,room:{x,z,ry:RY}});
+  hotelDesks.push({g:parent,x:dx,z:dz+1,id,y:baseY,room:{x,z,ry:RY},signMesh:sign});
   regShell(parent,x,z,w/2,d/2,baseY,[{x:x-1,z:z+d/2,r:1.8}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   return rec;
@@ -1395,7 +1395,7 @@ function mansion(x,z,rand,parent,baseY){
   const rsign=new THREE.Mesh(new THREE.PlaneGeometry(5,1),shopSignMat("RECEPTION · $2M"));
   rsign.position.set(dx,dy+2.8,dz-0.6);parent.add(rsign);
   const rp=makePerson(0.92);rp.position.set(dx,dy,dz-1.4);parent.add(rp);
-  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},mansion:true});
+  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},mansion:true,signMesh:rsign});
   /* every mansion has a GARDEN in front: lawn, hedges, a stone path & flowers */
   {
     /* two lawn strips: front (with the reception) and back — the block leaves ~11 m each */
@@ -1566,7 +1566,7 @@ function familyHouse(x,z,rand,parent,baseY){
   const rsign=new THREE.Mesh(new THREE.PlaneGeometry(5.4,1),shopSignMat("RECEPTION · $500K"));
   rsign.position.set(dx,dy+2.8,dz-0.6);parent.add(rsign);
   const rp=makePerson(0.92);rp.position.set(dx,dy,dz-1.4);parent.add(rp);
-  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},house:true});
+  hotelDesks.push({g:parent,x:dx,z:dz+1.2,id,y:dy,room:{x,z,ry:baseY},house:true,signMesh:rsign});
   regShell(parent,x,z,w/2,d/2,baseY,[{x:x,z:z+d/2,r:2.6}]);
   const rec=regBuilding(x,z,w,d,parts,baseY);rec.walkThru=true;
   const man={g:parent,x,z,id,baseY,house:true,tableG:null,furnG:null};

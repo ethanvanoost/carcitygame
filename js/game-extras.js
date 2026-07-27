@@ -264,6 +264,8 @@ function nearPlotSign(){
 }
 function openPlotBuy(p){
   if(rentedAt(p.id)){toast("\u{1F3D7} This plot is already YOURS — step inside the fence and press T to BUILD!");return;}
+  const owner=claimedName(p.id);
+  if(owner){toast("\u{1F6CF} "+owner+"'s Room — this plot is privately owned!");return;}
   showDest("\u{1F3D7} Empty building plot — build your OWN house here!",[
     {label:"\u{1F4B0} BUY THE PLOT — $"+fmtMoney(PLOT_PRICE)+" (walls, windows, doors, roofs & all furniture!)",value:"buy"},
     {label:"❌ Not now",value:"cancel"}

@@ -614,7 +614,12 @@ const UPDATE_PAGES=[
 <li>Every \u{1F381} Unbox tab has a <b>\u{1F50E} search bar</b> now — type "rainbow imac" or "glitter gold" and only the matching items show.</li>
 <li>New <b>⭐ All</b> tab in Unbox: your WHOLE collection — dumplings, butter squishies, phones, consoles, tablets AND computers — in one list, perfect for searching across everything.</li>
 <li>The <b>buyers got the same \u{1F50E} search bar</b>: at any dumpling / butter / phone / console / tablet / computer buyer, search an item and it gets selected for you — combine it with the filters!</li>
-<li>New \u{26A1} <b>Open 1000 at a time</b> button in the Unbox menu: like OPEN ALL BOXES but it rips through 1000 boxes per batch instead of 100 — way faster on huge piles, but you need a fast computer or it will crash.</li></ul>`}
+<li>New \u{26A1} <b>Open 1000 at a time</b> button in the Unbox menu: like OPEN ALL BOXES but it rips through 1000 boxes per batch instead of 100 — way faster on huge piles, but you need a fast computer or it will crash.</li></ul>
+<h4>\u{2728} v119: THE LUXURY UPDATE</h4><ul>
+<li>The ⚡ Actions button is now a <b>☰ rollable menu</b> that rolls out from the LEFT side of the screen — with its own \u{1F50E} search bar, so you find any button instantly.</li>
+<li>\u{1F6CF} Bought &amp; rented places <b>stop saying FOR SALE</b>: apartments, mega mansions, family houses and building plots that belong to someone now show a golden <b>"&lt;player&gt;'s Room"</b> plaque on their sign, in the walk-up text AND at the reception.</li>
+<li>New \u{1F6CF} <b>ROOMS</b> button on the \u{1F5FA} map: see EVERY player's rooms on the server — grouped per player, with a \u{1F50E} search bar — and teleport or route straight to any of them.</li>
+<li>\u{2728} The whole game got a LUXURY polish: golden accents, deeper glass panels, slim gold scrollbars and a richer look on every menu.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){

@@ -516,14 +516,76 @@ async function fetchClaim(id){
 }
 function releaseClaim(id){
   if(!SERVER_READY)return;
+  CLAIMCACHE.delete(id);
   fbPut(claimPath(id),{t:myToken(),n:mpName(),ts:Date.now(),free:true});
 }
+/* 🛏 who owns this place? Returns the OTHER player's name, or null if it's
+   free or yours. Kicks off a background fetch the first time it's asked. */
+function claimedName(id){
+  if(typeof rentedAt==="function"&&rentedAt(id))return null;
+  if(!CLAIMCACHE.has(id)){if(SERVER_READY)fetchClaim(id);return null;}
+  const d=CLAIMCACHE.get(id);
+  return (d&&d.n&&!d.free&&d.t!==myToken())?d.n:null;
+}
+/* luxury owner signs: bought/rented places stop saying FOR SALE and show
+   a golden "<player>'s Room" plaque instead */
+const OWNSIGNS=new Map();
+function ownerSignMat(name){
+  if(OWNSIGNS.has(name))return OWNSIGNS.get(name);
+  const cv=document.createElement("canvas");cv.width=512;cv.height=128;
+  const c=cv.getContext("2d");
+  const grd=c.createLinearGradient(0,0,0,128);
+  grd.addColorStop(0,"#161d30");grd.addColorStop(1,"#0a0d16");
+  c.fillStyle=grd;c.fillRect(0,0,512,128);
+  c.strokeStyle="#d4af37";c.lineWidth=6;c.strokeRect(5,5,502,118);
+  c.strokeStyle="rgba(212,175,55,.35)";c.lineWidth=2;c.strokeRect(13,13,486,102);
+  c.fillStyle="#ffd76a";c.font="bold 42px Segoe UI";c.textAlign="center";
+  let label="\u{1F6CF} "+name+"'s Room";
+  while(c.measureText(label).width>470&&name.length>3){name=name.slice(0,-1);label="\u{1F6CF} "+name+"…'s Room";}
+  c.fillText(label,256,60);
+  c.fillStyle="#8b96ad";c.font="22px Segoe UI";c.fillText("· privately owned ·",256,100);
+  const m=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(cv)),side:THREE.DoubleSide}));
+  OWNSIGNS.set(name,m);return m;
+}
+function applyOwnerSign(id,mesh){
+  let name=null;
+  if(typeof rentedAt==="function"&&rentedAt(id))name=mpName();
+  else{
+    if(!CLAIMCACHE.has(id)){if(SERVER_READY)fetchClaim(id);return;}
+    const d=CLAIMCACHE.get(id);
+    if(d&&d.n&&!d.free)name=d.n;
+  }
+  if(name){
+    if(!mesh.userData.origMat)mesh.userData.origMat=mesh.material;
+    if(mesh.userData.ownName!==name){mesh.material=ownerSignMat(name);mesh.userData.ownName=name;}
+    mesh.visible=true;
+  }else if(mesh.userData.origMat&&mesh.userData.ownName){
+    mesh.material=mesh.userData.origMat;mesh.userData.ownName=null;
+  }
+}
+/* every few seconds, dress the signs near the player with their owner names */
+setInterval(()=>{
+  if(typeof player==="undefined"||typeof S==="undefined"||S.world!=="earth")return;
+  if(typeof hotelDesks!=="undefined")hotelDesks.forEach(dk=>{
+    if(dk.signMesh&&Math.hypot(dk.x-player.x,dk.z-player.z)<400)applyOwnerSign(dk.id,dk.signMesh);
+  });
+  if(typeof plots!=="undefined")plots.forEach(p=>{
+    if(p.sgMesh&&Math.hypot(p.x-player.x,p.z-player.z)<400)applyOwnerSign(p.id,p.sgMesh);
+  });
+},3000);
 function mkRentEntry(dk,mode,rate){
   return{id:dk.id,x:dk.room.x,z:dk.room.z,ry:dk.room.ry,mode,rate,
     label:(dk.mansion?"\u{1F3F0} MEGA MANSION at (":dk.house?"\u{1F3E1} FAMILY HOUSE at (":"\u{1F6CE}️ Room at (")+Math.round(dk.room.x)+", "+Math.round(dk.room.z)+")"
       +(mode==="rent"?" · $"+fmtMoney(rate)+"/day":"")};
 }
 function openPropertyDesk(dk){
+  const owner=claimedName(dk.id);
+  if(owner){
+    showDest("\u{1F6CF} "+owner+"'s Room — this "+(dk.mansion?"MEGA MANSION":dk.house?"family house":"room")+" is privately owned",[
+      {label:"❌ OK — I'll find my own place",value:"x"}
+    ],()=>{});
+    return;
+  }
   const buy=dk.mansion?MANSION_PRICE:dk.house?HOUSE_PRICE:APT_PRICE,rate=dk.mansion?MANSION_RENT:dk.house?HOUSE_RENT:APT_RENT;
   showDest(dk.mansion?"\u{1F3F0} MEGA MANSION — buy or rent?":dk.house?"\u{1F3E1} FAMILY HOUSE — buy or rent?":"\u{1F6CE}️ Apartment room — buy or rent?",[
     {label:"\u{1F4B0} BUY — $"+fmtMoney(buy)+" (yours forever)",value:"own"},

@@ -485,8 +485,19 @@ function toggleMap(){
   m.classList.add("open");drawMap();renderMapList();
 }
 $("bMap").onclick=toggleMap;
-/* the topbar is now one "Actions" button that unfolds all the others */
-$("bActions").onclick=()=>$("topbar").classList.toggle("open");
+/* ☰ the rollable menu: rolls out from the LEFT, with its own search bar */
+$("bActions").onclick=()=>{
+  const opening=!$("topbar").classList.contains("open");
+  if(opening){$("actSearch").value="";filterActMenu();}
+  $("topbar").classList.toggle("open");
+};
+function filterActMenu(){
+  const q=$("actSearch").value.trim().toLowerCase();
+  $("actionsMenu").querySelectorAll("button").forEach(b=>{
+    b.style.display=(!q||qMatch(q,b.textContent))?"":"none";
+  });
+}
+$("actSearch").oninput=filterActMenu;
 $("actionsMenu").addEventListener("click",e=>{
   if(e.target.closest("button"))$("topbar").classList.remove("open");
 });
@@ -579,6 +590,7 @@ function mapEntries(q){
     else toast("Hmm, none found — try again from another spot!");
   }
   const specials=[
+    ["\u{1F6CF} ROOMS — every player's rooms (who owns what!)",()=>openRoomsBrowser(),"warn"],
     ["\u{1F354} Nearest McDrive",()=>{
       switchWorld("earth");
       goNearest("\u{1F354} Nearest McDrive",nearestSpot(mcdSpot,MCSP,46,90,6),0,-16);
@@ -837,6 +849,73 @@ function renderMapList(){
   });
 }
 $("mapSearch").addEventListener("input",renderMapList);
+/* ---------- 🛏 ROOMS browser: every bought/rented place on this server ---------- */
+const PROOMS={data:null};
+function roomKindInfo(key){
+  const m=/^([MHPK]?)_?(-?\d+)_(-?\d+)$/.exec(key);
+  if(!m)return null;
+  const t=m[1];
+  return{x:+m[2],z:+m[3],
+    em:t==="M"?"\u{1F3F0}":t==="H"?"\u{1F3E1}":t==="P"?"\u{1F3D7}":t==="K"?"\u{1F3EA}":"\u{1F6CE}️",
+    ty:t==="M"?"Mega mansion":t==="H"?"Family house":t==="P"?"Building plot":t==="K"?"Marketing plot":"Apartment room"};
+}
+async function openRoomsBrowser(){
+  $("mapModal").classList.remove("open");
+  $("proomsSearch").value="";
+  $("proomsList").innerHTML="<div style='color:var(--dim);font-size:13px;padding:6px'>Loading rooms…</div>";
+  $("proomsModal").classList.add("open");
+  const out=[];
+  if(SERVER_READY){
+    const g=await fbGet("/claims/"+mpWorldKey());
+    if(g.ok&&g.data)for(const k in g.data){
+      const d=g.data[k];
+      if(!d||d.free||!d.n)continue;
+      const info=roomKindInfo(k);
+      if(info)out.push({n:d.n,ts:d.ts||0,x:info.x,z:info.z,em:info.em,ty:info.ty});
+    }
+  }else{
+    /* offline: at least show your OWN rooms */
+    RENT.list.forEach(rm=>{
+      const info=roomKindInfo(fbKey(rm.id));
+      if(info)out.push({n:mpName(),ts:0,x:info.x,z:info.z,em:info.em,ty:info.ty});
+    });
+  }
+  PROOMS.data=out;renderProoms();
+}
+function renderProoms(){
+  const q=$("proomsSearch").value.trim().toLowerCase();
+  const list=$("proomsList");list.innerHTML="";
+  let rooms=PROOMS.data||[];
+  if(q)rooms=rooms.filter(r=>qMatch(q,r.n+" "+r.ty+" "+Math.round(r.x)+" "+Math.round(r.z)));
+  if(!rooms.length){
+    const d=document.createElement("div");
+    d.style.cssText="color:var(--dim);font-size:13px;padding:6px";
+    d.textContent=q?"No rooms match “"+$("proomsSearch").value.trim()+"” — try a player name or a place type!"
+      :"Nobody owns a room on this server yet — be the FIRST: buy an apartment, mansion, family house or plot!";
+    list.appendChild(d);return;
+  }
+  const by=new Map();
+  rooms.forEach(r=>{if(!by.has(r.n))by.set(r.n,[]);by.get(r.n).push(r);});
+  [...by.keys()].sort((a,b)=>a.localeCompare(b)).forEach(n=>{
+    const rs=by.get(n);
+    const h=document.createElement("div");
+    h.style.cssText="margin-top:10px;font-weight:800;color:var(--gold2,#ffd76a);font-size:13px;letter-spacing:.5px;border-bottom:1px solid rgba(212,175,55,.25);padding-bottom:3px";
+    h.textContent="\u{1F464} "+n+" — "+rs.length+" room"+(rs.length>1?"s":"");
+    list.appendChild(h);
+    rs.forEach(r=>{
+      const b=document.createElement("button");
+      b.className="btn";b.style.cssText="width:100%;text-align:left;margin-top:5px;font-size:13px";
+      b.innerHTML=r.em+" <b>"+n+"'s Room</b> <span style='color:var(--dim)'>— "+r.ty+" at ("+Math.round(r.x)+", "+Math.round(r.z)+")</span>";
+      b.onclick=()=>{
+        $("proomsModal").classList.remove("open");
+        chooseDest(r.em+" "+n+"'s Room — "+r.ty,r.x,r.z,true);
+      };
+      list.appendChild(b);
+    });
+  });
+}
+$("proomsSearch").oninput=renderProoms;
+$("proomsClose").onclick=()=>$("proomsModal").classList.remove("open");
 /* ---------- destination chooser: teleport instantly, or set a route ---------- */
 function chooseDest(label,x,z,toEarth){
   showDest(label,[
@@ -1185,14 +1264,17 @@ function updateHint(){
     else if(MEDIT.on){txt="\u{1F6E0} EDITING your mansion — click the floor/lawn to place items · R = rotate · T = done";showT=true;}
     else if(player.onFoot&&S.world==="earth"){
       const dk=nearFurn(hotelDesks,3.2),bd=nearFurn(hotelBeds,2.8),ch=nearFurn(chairs,2.2),ex=nearFurn(roomExits,2.2),pn=nearFurn(pianos,4.5);
-      if(dk){txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day")
-        :dk.house?(rentedAt(dk.id)?"\u{1F3E1} Your FAMILY HOUSE — welcome home! (T inside = edit)":"\u{1F3E1} FAMILY HOUSE with garden — press T: BUY $"+fmtMoney(HOUSE_PRICE)+" or RENT $"+fmtMoney(HOUSE_RENT)+"/day")
-        :(rentedAt(dk.id)?"Reception — press T to go up to your room":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
+      if(dk){const owner=claimedName(dk.id);
+        txt=dk.mansion?(rentedAt(dk.id)?"\u{1F3F0} Your MEGA MANSION — welcome home! (T inside = edit)":owner?"\u{1F6CF} "+owner+"'s Room — this MEGA MANSION is privately owned":"\u{1F3F0} MEGA MANSION — press T: BUY $"+fmtMoney(MANSION_PRICE)+" or RENT $"+fmtMoney(MANSION_RENT)+"/day")
+        :dk.house?(rentedAt(dk.id)?"\u{1F3E1} Your FAMILY HOUSE — welcome home! (T inside = edit)":owner?"\u{1F6CF} "+owner+"'s Room — this family house is privately owned":"\u{1F3E1} FAMILY HOUSE with garden — press T: BUY $"+fmtMoney(HOUSE_PRICE)+" or RENT $"+fmtMoney(HOUSE_RENT)+"/day")
+        :(rentedAt(dk.id)?"Reception — press T to go up to your room":owner?"\u{1F6CF} "+owner+"'s Room — this apartment is privately owned":"Reception — press T: BUY $"+fmtMoney(APT_PRICE)+" or RENT $"+fmtMoney(APT_RENT)+"/day");showT=true;}
       else if(ex){txt="EXIT — press T to go back to the street";showT=true;}
       else if(ORDER.active&&ORDER.stage==="waiting"&&Math.hypot(player.x-ORDER.x,player.z-ORDER.z)<6){txt="\u{1F6F5} Your "+ORDER.label+" — press T to pay $"+fmtMoney(ORDER.cost)+" & take it!";showT=true;}
       else if(nearTv()){txt="\u{1F4FA} The TV — press T to pick a channel (Minecraft, news, fireplace...)";showT=true;}
       else if(myRoomHere()){txt="\u{1F6F5} Your room — press T to ORDER FOOD to your door!";showT=true;}
-      else if(nearPlotSign()&&!rentedAt(nearPlotSign().id)){txt="\u{1F3D7} Empty plot FOR SALE — press T to buy it ($50K) and BUILD YOUR OWN HOUSE!";showT=true;}
+      else if(nearPlotSign()&&!rentedAt(nearPlotSign().id)){
+        const po=claimedName(nearPlotSign().id);
+        txt=po?"\u{1F6CF} "+po+"'s Room — this plot is privately owned":"\u{1F3D7} Empty plot FOR SALE — press T to buy it ($50K) and BUILD YOUR OWN HOUSE!";showT=!po;}
       else if(ROD.owned&&FISHING.state==="bite"){txt="❗\u{1F3A3} BITE!! PRESS T NOW!!";showT=true;}
       else if(ROD.owned&&FISHING.state==="wait"){txt="\u{1F3A3} Line's in the water... wait for the ❗";}
       else if(ROD.owned&&FISHING.state==="idle"&&atWaterEdge()){txt="\u{1F3A3} Water ahead — press T to cast your line!";showT=true;}
