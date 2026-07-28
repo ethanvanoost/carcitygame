@@ -619,7 +619,27 @@ const UPDATE_PAGES=[
 <li>The ⚡ Actions button is now a <b>☰ rollable menu</b> that rolls out from the LEFT side of the screen — with its own \u{1F50E} search bar, so you find any button instantly.</li>
 <li>\u{1F6CF} Bought &amp; rented places <b>stop saying FOR SALE</b>: apartments, mega mansions, family houses and building plots that belong to someone now show a golden <b>"&lt;player&gt;'s Room"</b> plaque on their sign, in the walk-up text AND at the reception.</li>
 <li>New \u{1F6CF} <b>ROOMS</b> button on the \u{1F5FA} map: see EVERY player's rooms on the server — grouped per player, with a \u{1F50E} search bar — and teleport or route straight to any of them.</li>
-<li>\u{2728} The whole game got a LUXURY polish: golden accents, deeper glass panels, slim gold scrollbars and a richer look on every menu.</li></ul>`}
+<li>\u{2728} The whole game got a LUXURY polish: golden accents, deeper glass panels, slim gold scrollbars and a richer look on every menu.</li></ul>`},
+{t:"Round 38 — ⚓🛶🚋🚇 The HARBOR, the CANAL, the TRAM & the METRO",h:`
+<h4>\u{2693} v120: REAL HARBORS</h4><ul>
+<li>Big <b>cargo harbors</b> where the land meets the deep sea (every ~2.6 km along the coast): a concrete quay you can walk AND drive onto, two orange gantry cranes, stacked containers, a warehouse and a big ⚓ HARBOR sign.</li>
+<li>A chunky blue <b>\u{1F6A2} CARGO BOAT</b> is moored at every harbor (plus a speedboat) — press <b>F</b> to sail it!</li>
+<li><b>LOAD &amp; UNLOAD cargo</b>: sail to the dock, press <b>T</b> to load up to 24 crates (they visibly stack in the cargo bay!), sail to a DIFFERENT harbor and press T to unload — <b>the farther you ship, the more you earn</b>. Your cargo is saved, even if you close the game.</li>
+<li>Every harbor shows as a ⚓ dot on the \u{1F5FA} map, with a new <b>\u{2693} Nearest HARBOR</b> button.</li></ul>
+<h4>\u{1F6F6} THE CANAL</h4><ul>
+<li>Calm <b>canals</b> now wind east-west through the land every ~1.8 km — dug just below the water, with soft grassy banks. You can just drive (or fall) in anywhere!</li>
+<li><b>Little arched stone bridges</b>: every road, highway and railway that crosses a canal rises over a small bridge with stone parapets — and your boat floats right under the arch.</li>
+<li>Small boats are <b>moored along the canal</b> between the bridges — press F and float the whole canal from bridge to bridge.</li>
+<li>The canal is drawn in blue on the \u{1F5FA} map &amp; minimap, and there's a <b>\u{1F6F6} Nearest CANAL</b> button.</li></ul>
+<h4>\u{1F68B} THE TRAM</h4><ul>
+<li>Every 6th east-west street is a <b>tram street</b>: real rails in the asphalt, overhead wire poles, and red-and-cream trams gliding up and down on the shared clock — every player sees them at the same spot!</li>
+<li><b>Tram stops every 420 m</b> with a red shelter, bench and \u{1F68B} TRAM sign. When the tram waits at a stop, press <b>F</b> to hop on — it drives itself (you RIDE it, you don't drive it), and F hops off again.</li>
+<li>Tram streets show as an orange line on the map, live trams as moving dots, plus a <b>\u{1F68B} Nearest TRAM stop</b> button.</li></ul>
+<h4>\u{1F687} THE METRO</h4><ul>
+<li>A silver <b>METRO</b> races along an <b>elevated viaduct</b> on pillars, high above the city, every ~1.9 km running north-south.</li>
+<li><b>Stations every 960 m</b>: a platform at track height with a purple roof, a glowing \u{1F687} METRO sign and a long ramp you can walk OR DRIVE up (yes, you can park your car on the platform, we won't judge).</li>
+<li>Press <b>F</b> when the metro stops at the platform to ride it — and F again to get off at the next station... or between stations, if you're brave enough for the jump!</li>
+<li>The viaduct is drawn in purple on the map with station dots and a <b>\u{1F687} Nearest METRO station</b> button — and live metros move on the map in real time.</li></ul>`}
 ];
 let updPage=0;
 function renderUpdate(){
@@ -658,6 +678,7 @@ function frame(now){
   else if(player.inBus)speedMS=Math.abs(player.bus.speed);
   else if(player.inHeli)speedMS=updateHeli(dt);
   else if(RIDE.on)speedMS=updateRide(dt);
+  else if(player.transit)speedMS=player.transit.spd||0;
   else if(player.boat)speedMS=updateBoat(dt);
   else if(player.drive){
     const mcdBusy=player.drive===myVehicle&&MCD.phase!=="idle";
@@ -686,6 +707,7 @@ function frame(now){
     updateTrafficLights();updateGates(dt);
     updateCrowd(dt);updateMuseums(dt);
     updateFerries(dt);updateIslands(dt);updateOrder(dt);
+    updateTransit(dt);
     updateVolcanoes(dt);updateBirds(dt);
     if(HELI.active&&!player.inHeli&&HELI.mesh)HELI.mesh.userData.rotor.rotation.y+=dt*1.5;
     water.position.x=player.x;water.position.z=player.z;   // the sea follows you

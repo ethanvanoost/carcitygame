@@ -800,7 +800,8 @@ function saveGame(){
       mfurn:[...MFURN.entries()].filter(([k])=>RENT.list.some(r2=>r2.id===k)),
       world:{name:WORLD.name,ox:WORLD.ox,oz:WORLD.oz},km:S.km,
       own:[...OWN],paint:PAINT,fuel:FUEL.km,prent:PRENT.on?1:0,hrent:HRENT.on?1:0,
-      mcInv:MCINV,mcTools:MCTOOLS,dmg:Math.round(typeof DMG!=="undefined"?DMG.v:0)
+      mcInv:MCINV,mcTools:MCTOOLS,dmg:Math.round(typeof DMG!=="undefined"?DMG.v:0),
+      cg:(typeof CARGO!=="undefined"&&CARGO.n>0)?{n:CARGO.n,x:Math.round(CARGO.x),z:Math.round(CARGO.z)}:0
     }));
   }catch(e){}
 }
@@ -828,6 +829,7 @@ function loadGame(){
     if(d.mcInv&&typeof d.mcInv==="object")for(const k in MCINV)if(typeof d.mcInv[k]==="number")MCINV[k]=Math.max(0,Math.floor(d.mcInv[k]));
     if(d.mcTools&&typeof d.mcTools==="object")for(const k in MCTOOLS)if(d.mcTools[k])MCTOOLS[k]=1;
     if(typeof d.dmg==="number")window.__dmgLoad=Math.max(0,Math.min(100,d.dmg));   // applied when DMG is created below
+    if(d.cg&&typeof d.cg==="object")window.__cargoLoad=d.cg;                        // applied when CARGO is created (game-transit.js)
   }catch(e){}
 }
 loadGame();loadWorlds();if(WORLD.name)addWorld(WORLD.name);applyWorldUI();renderWorldList();updateMoneyUI();profileLoad();
@@ -859,6 +861,8 @@ function nearTerminal(){
   return Math.hypot(player.x-a.term.x,player.z-a.term.z)<55?a:null;
 }
 function tryCall(){
+  /* ⚓ sailing a boat: T at a harbor dock loads & unloads cargo */
+  if(player.boat){harborAction();return;}
   if(!player.onFoot&&!player.drive)return;
   /* mansion editor open: T closes it */
   if(MEDIT.on){closeMansionEdit();return;}

@@ -224,6 +224,64 @@ function nearestRocketPad(x,z){
 }
 /* the sea: big soft patches of open water (never downtown / airports) */
 function seaAt(x,z){return sstep(0.64,0.76,fbm(x/1500+71.3,z/1500+42.7));}
+/* ---- 🛶 CANALS: calm waterways every ~1.8 km running east-west, dug just
+   below the water plane so a small boat can float — every road, highway and
+   railway that crosses them rises over a little arched bridge ---- */
+const CANSP=1800,CANW=7;
+function canalZ(k,x){return k*CANSP+810+40*Math.sin(x/300+k*2.1);}
+function canalKNear(z){return Math.round((z-810)/CANSP);}
+function canalDist(x,z){return Math.abs(z-canalZ(canalKNear(z),x));}
+/* ---- 🚋 TRAM streets: every 6th east-west grid road (720 m) carries tram
+   rails with stops every 420 m — the tram glides along on the shared clock ---- */
+const TRAMSP=720,TRAM_STOP=420,TRAM_CELL=1260;
+function tramZ(n){return n*TRAMSP+270;}
+function tramKNear(z){return Math.round((z-270)/TRAMSP);}
+/* ---- 🚇 the METRO: an elevated viaduct every ~1.9 km running north-south,
+   stations every 960 m with a platform + ramp — ride it, don't drive it ---- */
+const METSP=1920,MET_STSP=960,MET_CELL=2880;
+function metroX(m){return m*METSP+390;}
+function metroKNear(x){return Math.round((x-390)/METSP);}
+const _metYC=new Map();
+function metroYRaw(m,zi){
+  const key=m+":"+zi;
+  let v=_metYC.get(key);
+  if(v!==undefined)return v;
+  /* the track bed hugs the (clamped) terrain 7 m up, sampled on a 60 m grid */
+  v=Math.max(0.6,Math.min(16,baseH(metroX(m),zi*60)))+7;
+  if(_metYC.size>40000)_metYC.clear();
+  _metYC.set(key,v);
+  return v;
+}
+function metroY(m,z){
+  const zi=Math.floor(z/60),f=(z-zi*60)/60,u=f*f*(3-2*f);
+  const a=metroYRaw(m,zi),b=metroYRaw(m,zi+1);
+  return a+(b-a)*u;
+}
+/* ---- ⚓ HARBORS: big cargo docks where the land meets the deep sea ---- */
+const HBSP=2600;
+const HARBORS=[];
+const _hbCache=new Map();
+function harborSpot(i,j){
+  const key=i+","+j;
+  if(_hbCache.has(key))return _hbCache.get(key);
+  let s=null;
+  const bx=i*HBSP+700,bz=j*HBSP+1900;
+  outer:
+  for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]){
+    for(let t=0;t<=560;t+=40){
+      const px=bx+dx*t,pz=bz+dz*t;
+      if(baseH(px,pz)<-2.4&&seaAt(px,pz)>0.4&&baseH(px+dx*90,pz+dz*90)<-2.2){
+        const lx=px-dx*50,lz=pz-dz*50;
+        if(baseH(lx,lz)>0.2&&seaAt(lx,lz)<0.35){
+          if(rocketPadDist(px,pz)>180&&stuntDist(px,pz)>180)s={x:px,z:pz,dx,dz};
+          break outer;
+        }
+      }
+    }
+  }
+  _hbCache.set(key,s);
+  return s;
+}
 /* ---- FERRY ISLANDS: real islands out in the deep sea, one candidate every ~2.2 km ---- */
 const ISP=2200;
 const _islCache=new Map();
@@ -313,6 +371,13 @@ function baseH_(x,z){
         if(vh>h)h=vh;
       }
     }
+  }
+  /* 🛶 canals: a dug channel below the water plane, with soft grassy banks */
+  const cd=canalDist(x,z);
+  if(cd<CANW+4){
+    const t=1-sstep(CANW-2,CANW+4,cd);
+    const ch=h*(1-t)+t*-3.4;
+    if(ch<h)h=ch;
   }
   h*=1-flatMask(x,z);
   return h;
@@ -408,7 +473,7 @@ function gradeAt(x,z){
     /* roads never climb over the peaks (tunnels instead) and never sink
        into the sea (they become causeways just above the water) */
     if(t>16)t=16;
-    if(t<-1)t=0.6;
+    if(t<-1)t=canalDist(tx,tz)<CANW+4?2.6:0.6;   // canals get little BRIDGES, the sea gets causeways
     const m=1-sstep(h0,h1,d);
     wsum+=m;tsum+=m*t;if(m>M)M=m;
   }
@@ -550,6 +615,10 @@ const water=new THREE.Mesh(new THREE.PlaneGeometry(3200,3200),waterMat);
 water.rotation.x=-Math.PI/2;water.position.y=-1.25;scene.add(water);
 /* ---- tunnels: grey tubes where roads pass through mountains ---- */
 const tunnelMat=keep(new THREE.MeshLambertMaterial({color:0x555b64,side:THREE.DoubleSide}));
+/* ---- 🚇 metro viaduct + 🛶 canal bridge stonework ---- */
+const viaductMat=keep(new THREE.MeshLambertMaterial({color:0x9aa0a8}));
+const stoneMat=keep(new THREE.MeshLambertMaterial({color:0xb8ab94}));
+const archMat=keep(new THREE.MeshLambertMaterial({color:0x8f8677,side:THREE.DoubleSide}));
 /* ---- Earth seen from the moon ---- */
 const earthBall=(function(){
   const cv=document.createElement("canvas");cv.width=128;cv.height=64;
@@ -3041,6 +3110,29 @@ function makeBoatMesh(col){
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1.1),darkTrim);pole.position.set(0,1.4,-2.35);g.add(pole);
   return g;
 }
+/* ---- ⚓ the CARGO BOAT: a chunky little freighter with a real cargo bay ---- */
+function makeCargoBoatMesh(col){
+  const g=new THREE.Group();
+  const hullM=new THREE.MeshPhongMaterial({color:col,shininess:45});
+  const hull=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(4.2,1.4,11),hullM));hull.position.y=0.7;g.add(hull);
+  const bow=new THREE.Mesh(new THREE.ConeGeometry(2.1,3,4),hullM);
+  bow.rotation.x=Math.PI/2;bow.rotation.y=Math.PI/4;bow.scale.set(1,1,0.5);bow.position.set(0,0.7,6.9);g.add(bow);
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(4,0.16,10.6),new THREE.MeshLambertMaterial({color:0x7d838c}));deck.position.y=1.45;g.add(deck);
+  /* raised cargo bay walls so the crates sit IN the boat */
+  const wallM=new THREE.MeshLambertMaterial({color:0x5a616b});
+  [[-1.9,0],[1.9,0]].forEach(p=>{const w=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.7,7),wallM);w.position.set(p[0],1.85,-0.6);g.add(w);});
+  [[0,2.9],[0,-4.1]].forEach(p=>{const w=new THREE.Mesh(new THREE.BoxGeometry(3.98,0.7,0.18),wallM);w.position.set(p[0],1.85,p[1]);g.add(w);});
+  /* wheelhouse at the stern */
+  const cab=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(2.6,1.8,1.8),new THREE.MeshLambertMaterial({color:0xf4f7fb})));
+  cab.position.set(0,2.4,-4.9);g.add(cab);
+  const cabGlass=new THREE.Mesh(new THREE.BoxGeometry(2.66,0.7,1.86),glassMat);cabGlass.position.set(0,2.85,-4.9);g.add(cabGlass);
+  const fun=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.3,1.1,8),new THREE.MeshLambertMaterial({color:0xd7263d}));
+  fun.position.set(0.8,3.8,-4.9);g.add(fun);
+  const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,2.4),poleMat);mast.position.set(0,2.6,4.6);g.add(mast);
+  const flag=new THREE.Mesh(new THREE.PlaneGeometry(0.7,0.44),new THREE.MeshBasicMaterial({color:0x3fd0ff,side:THREE.DoubleSide}));
+  flag.position.set(0.36,3.6,4.6);g.add(flag);
+  return g;
+}
 /* ---- ⛏️ MINECRAFT chunks: blocky grass, trees to chop, ores to mine ---- */
 const mcThings=[];   // every mineable thing currently in the world
 const MC_ORES=[
@@ -3230,6 +3322,145 @@ function buildChunk(cx,cz){
     bm.rotation.y=h2i(i,j)*6.28;
     g.add(bm);
     boats.push({g:bm,x:sp.x,z:sp.z});
+  }
+  /* --- 🛶 the CANAL: little moored boats + arched stone bridges --- */
+  {
+    const ck=canalKNear(oz);
+    for(let k=ck-1;k<=ck+1;k++){
+      const cAtOx=canalZ(k,ox);
+      if(cAtOx<z0-60||cAtOx>z1+60)continue;
+      /* small canal boats every ~480 m, moored between the bridges */
+      for(let i=Math.floor((x0-140)/480);i<=Math.ceil((x1+140)/480);i++){
+        const bx2=i*480+240+Math.round((h2i(i,k*7+3)-0.5)*120);
+        if(bx2<x0||bx2>=x1)continue;
+        const bz3=canalZ(k,bx2);
+        if(bz3<z0||bz3>=z1)continue;
+        if(nearGridLine(bx2)<26)continue;               // never under a bridge
+        if(baseH(bx2,bz3)>-1.6)continue;                 // the canal must really be dug here
+        const bm=makeBoatMesh(COLORS[Math.floor(h2i(i*11+2,k*5+1)*COLORS.length)]);
+        bm.position.set(bx2,-1.05,bz3);
+        bm.rotation.y=(h2i(i,k)<0.5?1:-1)*Math.PI/2;     // moored along the canal
+        g.add(bm);
+        boats.push({g:bm,x:bx2,z:bz3});
+      }
+      /* little arched bridges where each grid road crosses the canal */
+      for(const lx of roadLinesIn(x0,x1)){
+        const bz4=canalZ(k,lx);
+        if(bz4<z0||bz4>=z1)continue;
+        if(baseH(lx+30,bz4)>-1.6&&baseH(lx-30,bz4)>-1.6)continue;   // canal flattened away here
+        const by=terrainH(lx,bz4);
+        if(by<1.6)continue;                              // no bridge hump = no dressing
+        /* the arch the boat sails through */
+        const ag=new THREE.CylinderGeometry(3.5,3.5,14,14,1,true);
+        ag.rotateZ(Math.PI/2);                           // tube lies along the canal (x)
+        const arch=new THREE.Mesh(ag,archMat);
+        arch.position.set(lx,-0.85,bz4);g.add(arch);
+        /* stone parapets along the road on top of the hump */
+        [-8.4,8.4].forEach(o=>{
+          const par=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(0.5,0.9,17),stoneMat));
+          par.position.set(lx+o,by+0.55,bz4);g.add(par);
+        });
+        [[-8.4,-8.5],[8.4,-8.5],[-8.4,8.5],[8.4,8.5]].forEach(p=>{
+          const pil=new THREE.Mesh(new THREE.BoxGeometry(0.9,1.3,0.9),stoneMat);
+          pil.position.set(lx+p[0],by+0.65,bz4+p[1]);g.add(pil);
+        });
+      }
+    }
+  }
+  /* --- 🚋 TRAM streets: rails in the road + stops with a yellow shelter --- */
+  {
+    const tn=tramKNear(oz);
+    for(let n=tn-1;n<=tn+1;n++){
+      const tz=tramZ(n);
+      if(tz<z0-20||tz>=z1+20)continue;
+      if(tz>=z0&&tz<z1){
+        g.add(ribbon("x",tz-1.1,x0,x1,0.24,0.30,railMat,0));
+        g.add(ribbon("x",tz+1.1,x0,x1,0.24,0.30,railMat,0));
+        /* overhead wire poles every 60 m on the north sidewalk */
+        for(let px=Math.ceil((x0+6)/60)*60;px<x1-4;px+=60){
+          if(inAirport(px,tz)||baseH(px,tz+9.4)<-1)continue;
+          const py2=terrainH(px,tz+9.4);
+          const p=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.11,5.4),poleMat);
+          p.position.set(px,py2+2.7,tz+9.4);g.add(p);
+          const brace=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,8.6),poleMat);
+          brace.rotation.z=Math.PI/2;brace.position.set(px,py2+5.2,tz+5.2);brace.rotation.y=Math.PI/2;g.add(brace);
+        }
+      }
+      /* tram stops every 420 m */
+      for(let q=Math.floor((x0-40)/TRAM_STOP);q<=Math.ceil((x1+40)/TRAM_STOP);q++){
+        const sx=q*TRAM_STOP+90;
+        if(sx<x0||sx>=x1)continue;
+        if(inAirport(sx,tz)||baseH(sx,tz+10)<-1||baseH(sx,tz+10)>15)continue;
+        const sy=terrainH(sx,tz+10);
+        const back=new THREE.Mesh(new THREE.BoxGeometry(4,2.2,0.15),new THREE.MeshLambertMaterial({color:0x8a2e2e}));
+        back.position.set(sx,sy+1.3,tz+10.8);g.add(back);
+        const rf=new THREE.Mesh(new THREE.BoxGeometry(4.4,0.15,2),new THREE.MeshLambertMaterial({color:0xe0a72e}));
+        rf.position.set(sx,sy+2.5,tz+10);g.add(rf);
+        const bench=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.15,0.5),new THREE.MeshLambertMaterial({color:0x8a6f4d}));
+        bench.position.set(sx,sy+0.6,tz+10.4);g.add(bench);
+        const cv2=document.createElement("canvas");cv2.width=128;cv2.height=64;
+        const c2=cv2.getContext("2d");c2.fillStyle="#8a2e2e";c2.fillRect(0,0,128,64);
+        c2.fillStyle="#ffd75e";c2.font="bold 30px Segoe UI";c2.textAlign="center";c2.fillText("\u{1F68B} TRAM",64,42);
+        const sg=new THREE.Mesh(new THREE.PlaneGeometry(1.8,0.9),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv2)}));
+        sg.position.set(sx-2.6,sy+2.4,tz+9.6);g.add(sg);
+        const sp2=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,2.4),poleMat);sp2.position.set(sx-2.6,sy+1.2,tz+9.6);g.add(sp2);
+      }
+    }
+  }
+  /* --- 🚇 the METRO viaduct: a grey deck on pillars, stations every 960 m --- */
+  {
+    const mv=metroKNear(ox);
+    for(let m=mv-1;m<=mv+1;m++){
+      const mx=metroX(m);
+      if(mx<x0-8||mx>=x1+8)continue;
+      for(let z=Math.ceil(z0/12)*12;z<z1;z+=12){
+        const ya=metroY(m,z),yb=metroY(m,z+12),ym=(ya+yb)/2;
+        const seg=new THREE.Mesh(new THREE.BoxGeometry(6.4,0.6,12.6),viaductMat);
+        seg.position.set(mx,ym,z+6);
+        seg.rotation.x=-Math.atan2(yb-ya,12);
+        seg.receiveShadow=true;g.add(seg);
+        /* low guard lips so the train looks held in */
+        [-3.0,3.0].forEach(o=>{
+          const lip=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.7,12.6),viaductMat);
+          lip.position.set(mx+o,ym+0.5,z+6);lip.rotation.x=seg.rotation.x;g.add(lip);
+        });
+        if(z%24===0){
+          const gy2=Math.min(ym,terrainH(mx,z+6));
+          const hgt=Math.max(1,ym-0.2-gy2+1.4);
+          const pil=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.9,hgt,10),viaductMat);
+          pil.position.set(mx,ym-0.2-hgt/2,z+6);g.add(pil);
+        }
+      }
+      /* metro stations: platform at track height + a long walk/drive-up ramp */
+      for(let s=Math.floor((z0-60)/MET_STSP);s<=Math.ceil((z1+60)/MET_STSP);s++){
+        const sz=s*MET_STSP+150;
+        if(sz<z0||sz>=z1)continue;
+        if(inAirport(mx,sz))continue;
+        const ty=metroY(m,sz),gy3=terrainH(mx+8,sz);
+        const plat=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6.4,0.8,34),new THREE.MeshLambertMaterial({color:0xb9b2a6})));
+        plat.position.set(mx+6.4,ty-0.1,sz);g.add(plat);
+        platforms.push({g,x:mx+6.4,z:sz,w:6.4,d:34,top:ty+0.3,gy:gy3});
+        const roof=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6.4,0.3,26),new THREE.MeshLambertMaterial({color:0x5e60ce})));
+        roof.position.set(mx+6.4,ty+4.4,sz);g.add(roof);
+        for(let zz=-10;zz<=10;zz+=10){
+          const p=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.14,4.2),poleMat);
+          p.position.set(mx+8.6,ty+2.3,sz+zz);g.add(p);
+        }
+        const cv3=document.createElement("canvas");cv3.width=256;cv3.height=64;
+        const c3=cv3.getContext("2d");c3.fillStyle="#2b2d64";c3.fillRect(0,0,256,64);
+        c3.fillStyle="#7fe0ff";c3.font="bold 34px Segoe UI";c3.textAlign="center";c3.fillText("\u{1F687} METRO "+m+"·"+s,128,44);
+        const sg3=new THREE.Mesh(new THREE.PlaneGeometry(6,1.5),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv3)}));
+        sg3.position.set(mx+6.4,ty+5.4,sz);g.add(sg3);
+        /* the access ramp beside the platform */
+        const rampLen=Math.max(18,(ty+0.3-gy3)*4);
+        const rz0=sz+17,rz1=sz+17+rampLen;
+        const rmesh=new THREE.Mesh(new THREE.BoxGeometry(6,0.4,rampLen+1),viaductMat);
+        rmesh.position.set(mx+6.4,(ty+0.3+gy3)/2-0.1,(rz0+rz1)/2);
+        rmesh.rotation.x=Math.atan2(ty+0.3-gy3,rampLen);
+        rmesh.receiveShadow=true;g.add(rmesh);
+        decks.push({g,x:mx+6.4,z:(rz0+rz1)/2,hw:0.1,hd:0.1,tops:[gy3],ramp:{x:mx+6.4,z0:rz0,z1:rz1,y0:ty+0.3,y1:gy3}});
+      }
+    }
   }
   /* --- tunnels: where a road was cut through a mountain, cover it with a tube.
      Samples sit on an ABSOLUTE 12 m grid so tube pieces from neighbouring
@@ -4271,6 +4502,97 @@ function buildPortal(i,j){
   PORTALS.push({g,x:p.x,z:p.z,y:y});
   scene.add(g);return g;
 }
+/* ================= ⚓ THE HARBOR: quay, cranes, containers & cargo boats ================= */
+function buildHarbor(i,j){
+  const g=new THREE.Group();scene.add(g);
+  const s=harborSpot(i,j);
+  if(!s)return g;
+  const ux=s.dx,uz=s.dz,along=ux!==0?"x":"z";
+  /* the quay: a big concrete deck reaching from the shore out over the water */
+  const qx=s.x-ux*10,qz=s.z-uz*10;                     // quay center, slightly toward land
+  const qw=along==="x"?70:34,qd=along==="x"?34:70;      // long side follows the shore direction
+  const deckM=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(qw,1.6,qd),new THREE.MeshLambertMaterial({color:0x8d939c})));
+  deckM.position.set(qx,0.3,qz);g.add(deckM);
+  decks.push({g,x:qx,z:qz,hw:qw/2,hd:qd/2,tops:[1.1],ramp:null});
+  /* concrete pilings so it doesn't float */
+  for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){
+    const p=new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.9,6),new THREE.MeshLambertMaterial({color:0x6f7580}));
+    p.position.set(qx+a*(qw/2-3),-2,qz+b*(qd/2-3));g.add(p);
+  }
+  /* bollards along the water edge */
+  for(let t=-28;t<=28;t+=14){
+    const bx=along==="x"?qx+t:qx+ux*(qw/2-1),bz=along==="x"?qz+uz*(qd/2-1):qz+t;
+    const bol=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.28,0.8,8),new THREE.MeshLambertMaterial({color:0x2f3542}));
+    bol.position.set(bx,1.5,bz);g.add(bol);
+  }
+  /* container stacks in cheerful colors */
+  const CCOLS=[0xd7263d,0x1d6fd1,0x27ae60,0xe67e22,0x2ec4b6,0xffd75e];
+  const rr=rng(i*373+j*911+7);
+  for(let c=0;c<7;c++){
+    const t=-24+c*8,high=1+Math.floor(rr()*2.4);
+    for(let f=0;f<high;f++){
+      const box=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(6,2.4,2.6),new THREE.MeshLambertMaterial({color:CCOLS[Math.floor(rr()*CCOLS.length)]})));
+      const bx=along==="x"?qx+t:qx-ux*(qw/2-8),bz=along==="x"?qz-uz*(qd/2-8):qz+t;
+      box.position.set(bx,2.3+f*2.4,bz);
+      if(along==="z")box.rotation.y=Math.PI/2;
+      g.add(box);
+    }
+  }
+  /* two big gantry cranes */
+  for(const t of[-16,16]){
+    const cg=new THREE.Group();
+    const cx2=along==="x"?qx+t:qx,cz2=along==="x"?qz:qz+t;
+    const craneM=new THREE.MeshLambertMaterial({color:0xe67e22});
+    [[-4,0],[4,0]].forEach(p=>{
+      const leg=new THREE.Mesh(new THREE.BoxGeometry(0.7,14,0.7),craneM);
+      leg.position.set(along==="x"?cx2+p[0]:cx2,8.1,along==="x"?cz2:cz2+p[0]);cg.add(leg);
+    });
+    const beam=new THREE.Mesh(new THREE.BoxGeometry(along==="x"?11:1,1,along==="x"?1:11),craneM);
+    beam.position.set(cx2,15.1,cz2);cg.add(beam);
+    const jib=new THREE.Mesh(new THREE.BoxGeometry(along==="x"?1:16,0.8,along==="x"?16:1),craneM);
+    jib.position.set(cx2+ux*6,14.6,cz2+uz*6);cg.add(jib);
+    const cable=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,6),poleMat);
+    cable.position.set(cx2+ux*11,11.2,cz2+uz*11);cg.add(cable);
+    const hook=new THREE.Mesh(new THREE.BoxGeometry(1.6,1,1.6),new THREE.MeshLambertMaterial({color:0x2f3542}));
+    hook.position.set(cx2+ux*11,7.9,cz2+uz*11);cg.add(hook);
+    g.add(cg);
+  }
+  /* the warehouse + the big HARBOR sign */
+  const wh=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(along==="x"?26:12,7,along==="x"?12:26),new THREE.MeshLambertMaterial({color:0x9c5b3c})));
+  wh.position.set(along==="x"?qx-18:qx-ux*(qw/2+9),3.5,along==="x"?qz-uz*(qd/2+9):qz-18);
+  g.add(wh);
+  const wroof=new THREE.Mesh(new THREE.BoxGeometry(along==="x"?27:13.6,0.5,along==="x"?13.6:27),new THREE.MeshLambertMaterial({color:0x3d444d}));
+  wroof.position.set(wh.position.x,7.2,wh.position.z);g.add(wroof);
+  const cv=document.createElement("canvas");cv.width=512;cv.height=128;
+  const c=cv.getContext("2d");c.fillStyle="#0d2b45";c.fillRect(0,0,512,128);
+  c.fillStyle="#7fe0ff";c.font="bold 56px Segoe UI";c.textAlign="center";
+  c.fillText("⚓ HARBOR "+String.fromCharCode(65+(((i*5+j)%26)+26)%26)+Math.abs((i+j)%10),256,84);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(20,5),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),side:THREE.DoubleSide}));
+  sign.position.set(wh.position.x,10.4,wh.position.z);g.add(sign);
+  /* loose crates waiting on the quay */
+  for(let c2=0;c2<5;c2++){
+    const crate=shadowBox(new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,1.2),new THREE.MeshLambertMaterial({color:0x8a6f4d})));
+    crate.position.set(qx+(rr()-0.5)*qw*0.5,1.75,qz+(rr()-0.5)*qd*0.5);
+    crate.rotation.y=rr()*3;g.add(crate);
+  }
+  /* the boats: a big CARGO BOAT + a speedboat moored at the dock edge */
+  const dockX=qx+ux*(along==="x"?0:qw/2+7),dockZ=qz+uz*(along==="x"?qd/2+7:0);
+  const cb=makeCargoBoatMesh(0x1d4e89);
+  const cbx=along==="x"?qx-10:dockX,cbz=along==="x"?dockZ:qz-10;
+  cb.position.set(cbx,-1.05,cbz);
+  cb.rotation.y=along==="x"?Math.PI/2:0;
+  g.add(cb);
+  boats.push({g:cb,x:cbx,z:cbz,cargo:true});
+  const sb=makeBoatMesh(0xffd75e);
+  const sbx=along==="x"?qx+14:dockX,sbz=along==="x"?dockZ:qz+14;
+  sb.position.set(sbx,-1.05,sbz);
+  sb.rotation.y=along==="x"?Math.PI/2:0;
+  g.add(sb);
+  boats.push({g:sb,x:sbx,z:sbz});
+  /* register for cargo loading (T at the dock) & the map */
+  HARBORS.push({g,x:dockX,z:dockZ,qx,qz,i,j});
+  return g;
+}
 function updateLandmarks(px,pz){
   const need=new Set();
   /* build at most ONE new landmark per frame — this runs every frame, so a
@@ -4308,7 +4630,8 @@ function updateLandmarks(px,pz){
   /* the new city places */
   const lmDefs=[["rtrk",RTSP,4800,3400,buildRaceTrack],["ent",ENSP,2000,4200,buildEnt],
     ["civ",CVSP2,3700,1300,buildCivic],["offr",ORSP,900,2600,buildOffroad],
-    ["indu",INSP,5200,700,buildIndu],["port",TPSP,30,2430,buildPortal]];
+    ["indu",INSP,5200,700,buildIndu],["port",TPSP,30,2430,buildPortal],
+    ["harb",HBSP,700,1900,buildHarbor]];
   for(const[tag,cell,ox2,oz2,fn]of lmDefs){
     const ci=Math.round((px-ox2)/cell),cj=Math.round((pz-oz2)/cell);
     for(let i=ci-1;i<=ci+1;i++)for(let j=cj-1;j<=cj+1;j++){

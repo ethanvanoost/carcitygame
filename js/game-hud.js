@@ -6,6 +6,7 @@ function camTargetInfo(){
   if(player.inRocket)return{x:rocket.x,y:rocket.y+9,z:rocket.z,yaw:rocket.yaw||0,d:46,h:16};
   if(player.inHeli)return{x:HELI.x,y:HELI.y+3,z:HELI.z,yaw:HELI.yaw,d:17,h:7};
   if(player.boat)return{x:player.boat.x,y:0.6,z:player.boat.z,yaw:player.boat.yaw,d:14,h:5.5};
+  if(player.transit){const t=player.transit;return{x:t.x,y:t.y+2.5,z:t.z,yaw:t.yaw,d:t.kind==="metro"?24:18,h:t.kind==="metro"?9:7};}
   if(RIDE.on){
     const o=MP.others.get(RIDE.key);
     if(o)return{x:o.x,y:o.y+1,z:o.z,yaw:o.yaw,d:13,h:5};
@@ -57,9 +58,12 @@ function mapColor(x,z){
   if(Math.hypot(x+340,z-260)<60)return "#2f8f46";
   if(Math.abs(x-MHX)<20||Math.abs(z-MHZ)<20)return "#23262c";   // the MEGA HIGHWAY
   if(Math.abs(x-170)<12||Math.abs(z+170)<12)return "#30343b";
+  if(Math.abs(z-tramZ(tramKNear(z)))<2.6)return "#c96f2e";        // 🚋 tram rails in the street
   if(nearGridLine(x)<8||nearGridLine(z)<8)return "#3b3f46";
   if(Math.abs(x-curveXC(x,z))<7||Math.abs(z-curveZC(x,z))<7)return "#464b53";
   if(nearestRail(x,z).d<5)return "#6b7280";
+  if(Math.abs(x-metroX(metroKNear(x)))<3)return "#7b6bd8";        // 🚇 the metro viaduct
+  if(canalDist(x,z)<CANW+1&&baseH(x,z)<-1.4)return "#2478b8";     // 🛶 the canal
   const h=baseH(x,z);
   if(h>-1.4&&h<2.4&&seaAt(x,z)>0.55)return "#e6d9a8";  // island beaches
   if(h<-2.5)return "#1d6f9e";                          // the sea
@@ -417,6 +421,30 @@ function drawMap(){
     trains.forEach(t=>dot(railC(t.k,t.z),t.z,"#c0392b",4));
     buses.forEach(b=>{const p=b.controlled?{x:b.x,z:b.z}:busPos(b);dot(p.x,p.z,"#e67e22",4);});
     planes.forEach(p=>dot(p.x,p.z,"#9b5de5",4));
+    /* ⚓ every HARBOR in view (with its anchor), 🚇 metro stations, plus the LIVE trams & metros */
+    {
+      const sc2=mapView.scale,halfW=cv.width/2/sc2,halfH=cv.height/2/sc2;
+      const hi0=Math.floor((mapView.cx-halfW-700)/HBSP),hi1=Math.ceil((mapView.cx+halfW-700)/HBSP);
+      const hj0=Math.floor((mapView.cz-halfH-1900)/HBSP),hj1=Math.ceil((mapView.cz+halfH-1900)/HBSP);
+      for(let i=hi0;i<=hi1;i++)for(let j=hj0;j<=hj1;j++){
+        const s=harborSpot(i,j);
+        if(!s)continue;
+        dot(s.x,s.z,"#0d5c8f",6);
+        const px=(s.x-mapView.cx)*sc2+cv.width/2,py=-(s.z-mapView.cz)*sc2+cv.height/2;
+        if(px>-20&&py>-20&&px<cv.width+20&&py<cv.height+20){
+          c.fillStyle="#7fe0ff";c.font="bold 11px Segoe UI";c.textAlign="center";c.fillText("⚓",px,py-9);
+        }
+      }
+      if(sc2>=0.09){
+        const mi0=Math.floor((mapView.cx-halfW-390)/METSP),mi1=Math.ceil((mapView.cx+halfW-390)/METSP);
+        const sj0=Math.floor((mapView.cz-halfH-150)/MET_STSP),sj1=Math.ceil((mapView.cz+halfH-150)/MET_STSP);
+        for(let m=mi0;m<=mi1;m++)for(let s2=sj0;s2<=sj1;s2++)dot(metroX(m),s2*MET_STSP+150,"#5e60ce",4);
+      }
+      if(typeof TRAMS!=="undefined"){
+        TRAMS.forEach(t=>dot(t.x,t.z,"#e0a72e",4));
+        METROS.forEach(t=>dot(t.x,t.z,"#8f7bff",4));
+      }
+    }
   }
   /* active route: blue line */
   if(NAV.on){
@@ -616,6 +644,22 @@ function mapEntries(q){
     ["\u{1F3D7} Nearest building PLOT for sale",()=>{
       switchWorld("earth");
       goNearest("\u{1F3D7} Nearest building plot ($50K)",nearestSpot(plotSpot,PLSP,430,1150,4),0,16);
+    }],
+    ["\u{2693} Nearest HARBOR (\u{1F6A2} cargo boats!)",()=>{
+      switchWorld("earth");
+      goNearest("\u{2693} The HARBOR — sail the cargo boat, T at the dock to LOAD & UNLOAD!",nearestSpot(harborSpot,HBSP,700,1900,4),-20,-20);
+    }],
+    ["\u{1F6F6} Nearest CANAL (little bridges!)",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F6F6} The canal — hop in a small boat and float under the bridges!",nearestSpot((i,j)=>({x:i*CANSP,z:canalZ(j,i*CANSP)}),CANSP,0,810,3),0,CANW+7);
+    }],
+    ["\u{1F68B} Nearest TRAM stop",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F68B} The tram stop — press F when the tram waits there!",nearestSpot((i,j)=>({x:i*TRAMSP+90,z:tramZ(j)}),TRAMSP,90,270,3),0,10);
+    }],
+    ["\u{1F687} Nearest METRO station",()=>{
+      switchWorld("earth");
+      goNearest("\u{1F687} The METRO station — walk up the ramp, F when it stops!",nearestSpot((i,j)=>({x:metroX(i),z:j*METSP+150}),METSP,390,150,3),8,0);
     }],
     ["\u{1F3D6} Nearest BEACH (\u{1F6A4} speedboats!)",()=>{
       switchWorld("earth");
@@ -990,6 +1034,7 @@ function drawMiniBg(){
   }
 }
 function playerYaw(){
+  if(player.transit)return player.transit.yaw;
   if(player.drive)return player.drive.yaw;
   if(player.inBus)return player.bus.yaw;
   if(player.inPlane)return player.planeRef.yaw;
@@ -1105,6 +1150,7 @@ function teleportTo(x,z){
   }
   SIT.on=false;
   if(player.boat){player.boat=null;player.onFoot=true;player.mesh.visible=true;}
+  if(player.transit){player.transit=null;player.onFoot=true;player.mesh.visible=true;}
   player.inTrain=player.inPlane=player.inBus=false;player.train=null;player.planeRef=null;player.bus=null;
   player.x=x;player.z=z;player.vy=0;
   if(player.drive){player.drive.x=x;player.drive.z=z;player.drive.speed=0;player.drive.vy=0;player.drive.grounded=true;}
@@ -1119,6 +1165,7 @@ function switchWorld(w){
   /* leaving mid McDrive-order? the order is off — normal driving comes back */
   MCD.phase="idle";MCD.target=null;MCD.cd=8;
   if(player.boat){player.boat=null;player.onFoot=true;player.mesh.visible=true;}
+  if(typeof clearTransit==="function")clearTransit();   // trams & metros only run on Earth
   if(player.inHeli){player.inHeli=false;player.onFoot=true;}
   if(HELI.mesh)HELI.mesh.visible=w==="earth"&&HELI.active;
   /* the whole streamed world is rebuilt for the new planet */
@@ -1258,6 +1305,17 @@ function updateHint(){
     const o=MP.others.get(RIDE.key);
     txt="\u{1F698} Riding along with "+(o?o.name:"a friend")+" — press F to hop out";showF=true;
   }
+  else if(player.transit){
+    txt=player.transit.dock>=0
+      ?(player.transit.kind==="tram"?"\u{1F68B} The tram waits at the stop — press F to hop off!":"\u{1F687} The metro is at a station — press F to step onto the platform!")
+      :(player.transit.kind==="tram"?"\u{1F68B} Riding the tram — it stops at every \u{1F68F} stop":"\u{1F687} Riding the metro above the city — next station coming up!");
+    showF=true;
+  }
+  else if(player.boat){
+    const hb=nearHarborDock(30);
+    if(hb){txt=CARGO.n>0?"\u{2693} Harbor dock — press T to UNLOAD your "+CARGO.n+" crates!":"\u{2693} Harbor dock — press T to LOAD cargo crates!";showT=true;}
+    else txt=(player.boat.rec&&player.boat.rec.cargo?"\u{1F6A2} Cargo boat":"\u{1F6A4} Sailing")+(CARGO.n>0?" — \u{1F4E6} "+CARGO.n+" crates aboard, deliver them to another ⚓ harbor!":" — W/S throttle · A/D steer · F = go ashore");
+  }
   else{
     if(CAVE.in){txt=BOSS.on?"\u{1F5FF}⚔️ CAVE BOSS ("+BOSS.hp+" / "+BOSS.max+") — get close and press T to SWING!":"\u{1F573}️ In the cave — grab the $1,000 crystals · press T for the cave menu (boss fight!)";showT=true;}
     else if(SIT.on){txt="Sitting \u{1FA91} — press T or walk to stand up";showT=true;}
@@ -1350,6 +1408,14 @@ function updateHint(){
     for(const t of trains)if(t.state==="waiting"&&Math.hypot(player.x-railC(t.k,t.z),player.z-t.z)<16){txt="Train waiting — press F to board!";showF=true;}
     for(const p of planes)if(p.state==="parked"&&Math.hypot(player.x-p.x,player.z-p.z)<16){txt="Plane parked — press F to board!";showF=true;}
     for(const b of buses){const bp=busPos(b);if(b.state==="waiting"&&Math.hypot(player.x-bp.x,player.z-bp.z)<12){txt="Bus waiting — press F to board!";showF=true;}}
+    if(!txt&&player.onFoot){
+      const tr2=nearTransit();
+      if(tr2){txt=tr2.kind==="tram"?"\u{1F68B} The TRAM is at the stop — press F to hop on!":"\u{1F687} The METRO is at the platform — press F to hop on!";showF=true;}
+    }
+    if(!txt&&player.onFoot){
+      const hb2=nearHarborDock(50);
+      if(hb2)txt="\u{2693} THE HARBOR — press F at the \u{1F6A2} cargo boat to sail, then T at any harbor dock to LOAD & UNLOAD!";
+    }
     if(!txt&&player.onFoot&&myVehicle&&Math.hypot(player.x-myVehicle.x,player.z-myVehicle.z)<5){txt="Press F to get in your "+(S.selected?S.selected.name:"vehicle");showF=true;}
     if(!txt&&player.onFoot){
       const rr=nearRideableCar();

@@ -12,8 +12,11 @@ function nearBoat(){
 function boardBoat(b){
   player.boat={rec:b,mesh:b.g,x:b.g.position.x,z:b.g.position.z,yaw:b.g.rotation.y,speed:0};
   player.onFoot=false;player.mesh.visible=false;
-  $("vehName").textContent="Speedboat";
-  toast("\u{1F6A4} ANCHORS AWAY! W/S = throttle, A/D = steer — watch out for the shallows, F = go ashore");
+  $("vehName").textContent=b.cargo?"Cargo boat":"Speedboat";
+  if(CARGO.n>0)setBoatCrates(Math.min(CARGO.n,boatCap()));
+  toast(b.cargo
+    ?"\u{2693}\u{1F6A2} ALL ABOARD THE CARGO BOAT! W/S = throttle, A/D = steer — press T at a harbor dock to LOAD & UNLOAD, F = go ashore"
+    :"\u{1F6A4} ANCHORS AWAY! W/S = throttle, A/D = steer — watch out for the shallows, F = go ashore");
 }
 function leaveBoat(){
   const bt=player.boat;
@@ -40,7 +43,7 @@ function updateBoat(dt){
   const b=player.boat;
   if(!b)return 0;
   if(offScene(b.mesh)){player.boat=null;player.onFoot=true;player.mesh.visible=true;return 0;}
-  const maxS=68/3.6;
+  const maxS=(b.rec&&b.rec.cargo?46:68)/3.6;   // the chunky cargo boat is slower
   const thr=thrInput(),st=steerInput();
   if(thr>0)b.speed=Math.min(maxS,b.speed+9*thr*dt);
   else if(thr<0)b.speed=Math.max(-5,b.speed+12*thr*dt);
@@ -317,9 +320,13 @@ function tryEnterLeave(){
     toast("\u{1F681} Lift off! W/S = speed, A/D = turn, SPACE = up, SHIFT = down, F = land");
     return;
   }
+  /* 🚋🚇 tram & metro: hop off anywhere, hop on while it waits at a stop */
+  if(player.transit){leaveTransit();return;}
   /* 🚤 boats: sail away, or step ashore */
   if(player.boat){leaveBoat();return;}
   if(player.onFoot&&S.world==="earth"){
+    const tr=nearTransit();
+    if(tr){boardTransit(tr);return;}
     const bt=nearBoat();
     if(bt){boardBoat(bt);return;}
   }
