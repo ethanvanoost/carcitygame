@@ -4,13 +4,13 @@
 ═══════════════════════════════════════════════════════════════════════════════
 
 Car City Game is a massive open-world multiplayer driving game that runs right
-in your browser — no downloads, no installs, no waiting. One click and you are
-standing in an endless procedurally generated city with roads, highways,
-railways, canals, tram streets, an elevated metro, harbors on the coast,
-islands out at sea, and thousands of other things to discover. Every player on
-the server shares the same living world: you see them drive past, you chat with
-them, you trade with them, you race them, and you can even sleep in the rooms
-they own.
+in your browser — no downloads, no installs, no waiting. Pick a username and
+you are standing in an endless procedurally generated city with roads,
+highways, railways, canals, tram streets, an elevated metro, harbors on the
+coast, islands out at sea, and thousands of other things to discover. Every
+player on the server shares the same living world: you see them drive past,
+you chat with them, you trade with them, you race them, and you can even ride
+along in the passenger seat of their car.
 
 This is not a small game. Car City Game has been updated over 120 times, and
 every update made the world bigger, richer and weirder. Here is everything
@@ -22,16 +22,20 @@ waiting for you inside.
 ───────────────────────────────────────────────────────────────────────────────
 • An ENDLESS city — roads and highways stretch forever in every direction,
   with real intersections, traffic that honks at you, and random events.
-• A whole garage of buyable vehicles, from a humble $20,000 starter car all
-  the way up to a $300,000 speed machine — every car with its own real
-  silhouette, lights, grilles, badges and exhausts.
-• Paint your car any color, refuel at gas stations, repair crash damage, and
-  even resell cars you're done with.
+• 200+ buyable vehicles — cars, boats, campers, big rigs and more — from
+  cheap starters up to $300,000 speed machines, every car with its own real
+  curved silhouette, lights, grilles, badges and exhausts.
+• Car tuning 2.0: paint, tinted glass, rims, spoilers, neon, stripes and
+  license plates mounted on the bumper — plus fuel at gas stations, crash
+  damage and repairs, and reselling cars you're done with.
+• Hop into another player's car with F and ride along in the passenger
+  seat, visible to everyone.
 • Auto-drive with voice guidance, photo mode for the perfect shot, and a
   full-featured live map with search, route planning, teleports and
   "Nearest…" finders for everything in the world.
 • Fires break out in houses — and real fire trucks come spray them down.
-  Accidents summon ambulances. The city lives around you.
+  Accidents summon ambulances. Police chase speeding thieves. The city
+  lives around you, and every Saturday there's a CAR MEET.
 
 ───────────────────────────────────────────────────────────────────────────────
  ⚓🛶🚋🚇  A COMPLETE TRANSPORT NETWORK
@@ -52,6 +56,19 @@ waiting for you inside.
   same metro and the same ferry at the same moment.
 
 ───────────────────────────────────────────────────────────────────────────────
+ ✈🚁🚀  TAKE TO THE SKY — AND BEYOND
+───────────────────────────────────────────────────────────────────────────────
+• Buy a $500,000 HELICOPTER (or rent one for $500 a day) and land it
+  anywhere — other players see you fly.
+• Rent a PLANE for $250 a day and pilot it yourself.
+• SKY RESTAURANTS floating on clouds and perched on mountain peaks, serving
+  exclusive Cloud dumplings.
+• Ride a ROCKET to all 7 planets at $1 per kilometer — planet dumplings and
+  aliens included — and visit erupting VOLCANO ISLANDS with Lava dumplings.
+• On the moon: alien spaceships to rob for $10,000 loot, alien dumplings,
+  moon crystals — and angry aliens that chase you down.
+
+───────────────────────────────────────────────────────────────────────────────
  💰  A REAL PLAYER-DRIVEN ECONOMY
 ───────────────────────────────────────────────────────────────────────────────
 • Claim your own MARKET PLOT and build a real shop: tables, store shelves,
@@ -70,7 +87,7 @@ waiting for you inside.
   computers, dumplings and butter at their real worth — with brand, model
   and color filters.
 • Pay other players directly through the online inbox, send gifts to
-  friends, and win money pots in multiplayer races.
+  friends, and win money pots in multiplayer races and tournaments.
 
 ───────────────────────────────────────────────────────────────────────────────
  🎁  UNBOXING MADNESS
@@ -85,8 +102,11 @@ waiting for you inside.
 • Random colors with rare 🌈 RAINBOW pulls worth 4x, real device values
   (an iMac is $4,000, a MacBook Pro 16″ is $4,500), and a ⭐ All tab that
   shows your entire searchable collection in one list.
-• A 20-piece beach dumpling collection with a free daily mystery dumpling,
-  plus dumpling museums to admire them in.
+• Your unboxed phone actually WORKS: hold it in your hand and use its
+  browser, calculator, timer, alarm, stopwatch and clock.
+• Dumpling collections everywhere — a 20-piece beach set with a free daily
+  mystery dumpling, cloud, pearl, lava, planet and alien dumplings — plus
+  dumpling museums to admire them in.
 
 ───────────────────────────────────────────────────────────────────────────────
  ⚡  CREATE YOUR OWN ITEMS
@@ -103,8 +123,10 @@ waiting for you inside.
 ───────────────────────────────────────────────────────────────────────────────
  🏠  OWN THE CITY
 ───────────────────────────────────────────────────────────────────────────────
-• Buy or rent apartments, family houses, building plots and $2,000,000 MEGA
-  MANSIONS with full furniture and garden editors.
+• Buy or rent apartments, family houses and $2,000,000 MEGA MANSIONS with
+  full furniture and garden editors — and swimmable garden pools.
+• Buy a BUILDING PLOT and construct your own house from scratch: walls,
+  windows, doors and roofs, placed exactly where you want them.
 • One owner per property on the whole server — when you own it, everyone
   sees a golden "Your Name's Room" plaque on the sign, in the walk-up text
   and at the reception.
@@ -112,29 +134,53 @@ waiting for you inside.
   per player, searchable, with teleport and route buttons.
 • Open a dumpling shop inside your mansion, keep a guest book, and let
   visitors wander through.
+• Order FOOD DELIVERY to your home — a courier drives up and rings the
+  doorbell with your McDrive, MEGA MART or dumpling order.
 
 ───────────────────────────────────────────────────────────────────────────────
- ⛏🎮🎹  AND SO MUCH MORE
+ 💼  WORK FOR IT
 ───────────────────────────────────────────────────────────────────────────────
-• MINECRAFT-style caves: mine wood, stone, coal, iron, gold and glowing
-  diamonds — then sell the blocks at your market, rendered as real blocks.
+• Real JOBS: taxi driver, package delivery, tow truck, TRUCKER with a big
+  rig (careful — cargo takes damage), and a full POLICE career with chases,
+  auto-siren speeder calls and working arrests.
+• Do jobs CO-OP with a friend for double pay.
+• A STORY MODE, multiplayer tournaments, daily rewards, scratch cards,
+  achievements, daily treasure hunts and a weekly leaderboard with a
+  golden crown for #1.
+
+───────────────────────────────────────────────────────────────────────────────
+ ⛏🎮🎣  AND SO MUCH MORE
+───────────────────────────────────────────────────────────────────────────────
+• MINECRAFT-style caves and a full Minecraft world: mine wood, stone, coal,
+  iron, gold and glowing diamonds, fight cave bosses, dig $1,000 crystals —
+  then sell the blocks at your market, rendered as real blocks.
 • Six fully playable console MINI-GAMES on a pop-up screen: Parkour Panda,
   Turbo Kart, Football Stars penalties, Zombie Chase, Blocky Builder and
   Space Blasters — with scores and touch + keyboard controls.
-• JOBS: drive a taxi, deliver packages, tow broken cars.
-• Concert halls with REAL playable MIDI pianos and church organs — perform,
-  collect claps and tips in the hat, and lock the piano while you play.
-• A TV in your mansion with live CITY NEWS — and Channel 6 "MY VIDEOS"
-  where you upload your own MP4s.
-• A full WebAudio soundscape: engine hum, horns, wind, birds, sirens,
-  crashes, MP3 radio music.
-• Weather, daily rewards, scratch cards, achievements, daily treasure
-  hunts, pets, festivals and random city events.
-• Accounts with passwords, a full avatar editor (shirt, pants, hair, skin)
-  that every other player sees, public chat, friends and gifting.
+• PUBLIC POOL PARKS every 2 km with real swimming, a waterslide, hot tub
+  and kiddie pool — plus beaches with speedboats.
+• Go FISHING with a rod and a fish log — keep your catch or sell it.
+• Concert halls with REAL playable MIDI pianos (upload your own .MID files
+  and perform them!) — collect claps and tips in the hat, and lock the
+  piano while you play. The walk-in city church has an organ that plays
+  real Sunday music all by itself.
+• A TV in your mansion with real channels: live CITY NEWS, Minecraft
+  videos, World Cup soccer with generated matches, fireplace and aquarium
+  channels — and Channel 6 "MY VIDEOS" where you upload your own MP4s.
+• Player-made LIVE VOICE RADIO stations with an AI DJ, MP3 music, and a
+  "Hey Google" voice assistant in your car.
+• A full WebAudio soundscape: engine hum, horns, wind, birds, crickets,
+  sirens, crashes and distance-based sound.
+• Weather, golden-hour sun, a gradient sky dome, night headlight beams,
+  car interiors, pets with names and tricks (parrot included — dogs dig up
+  bones), festivals, casino, cinema, arcade, race track and time portals.
+• A full avatar editor (shirt, pants, hair, skin — even shoes) that every
+  other player sees, public chat with bubbles above heads, friends and
+  gifting. No passwords needed — just pick a username and play.
 • Three graphics tiers that genuinely differ — Fast, Normal (2K shadows)
   and Beautiful (full pixel density, 4K shadows, deeper view distance) —
-  so it runs on a potato and shines on a gaming rig.
+  plus an ULTRA world pack with waving grass and flying sand. It runs on a
+  potato and shines on a gaming rig.
 • A luxurious gold-and-glass interface with search bars in every menu, a
   rollable Actions menu, and slim golden scrollbars.
 
@@ -145,11 +191,12 @@ Every server is one persistent world. Players see each other live on the road
 and on the map, race each other for money pots, buy from each other's shops,
 visit each other's mansions, chat in public chat, and share one synchronized
 clock so ferries, trams, metros, festivals and events happen at the same
-moment for everyone. Your money, cars, properties, inventions, cargo and
-entire collection are saved online.
+moment for everyone. World owners can run their own city with kick/ban and
+day-time controls. Your money, cars, properties, inventions, cargo and entire
+collection are saved online.
 
 ═══════════════════════════════════════════════════════════════════════════════
-  Car City Game — start with $20,000 and an empty road.
+  Car City Game — start with $100 and a car
   End up with a mansion, a market empire, a cargo ship and a rainbow iMac.
   Play free in your browser. The city is endless. So is the game.
 ═══════════════════════════════════════════════════════════════════════════════
